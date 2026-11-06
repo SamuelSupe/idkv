@@ -1,0 +1,69 @@
+   Compiling tenant-kv v0.1.0 (/Users/livesite/Documents/Codex/2026-11-04/splunk-kv-store-lookup/outputs/tenant-kv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.12s
+     Running unittests src/lib.rs (/tmp/tkv-20261104-target/debug/deps/tenant_kv-67a8e8a3a9290235)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/crash_probe.rs (/tmp/tkv-20261104-target/debug/deps/crash_probe-fc4f941869203310)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/server.rs (/tmp/tkv-20261104-target/debug/deps/tenant_kv-bfd7c1b6213daccf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/engine.rs (/tmp/tkv-20261104-target/debug/deps/engine-a0e1334c24b8f921)
+
+running 19 tests
+test array_projection_preserves_shape_in_covering_indexes ... ok
+test atomic_indexes_unique_conflicts_and_conditional_updates ... ok
+test backup_restore_does_not_change_other_tenants ... ok
+test binary_document_precision_projection_and_types ... ok
+test collection_gc_resumes_and_preserves_recreated_collection_and_old_snapshot ... ok
+test concurrent_group_commits_survive_reopen ... ok
+test covering_ranges_sparse_unique_and_boolean_queries ... ok
+test deleting_another_tenant_preserves_unpublished_restore_preparation ... ok
+test failed_unique_build_can_be_repaired_and_nonunique_lookup_is_bounded ... ok
+test idle_tenant_waits_for_cursor_lease_then_reopens_with_new_runtime ... ok
+test indexed_ranges_match_reference_with_negative_values_and_ties ... ok
+test live_handles_and_snapshots_keep_manager_ownership_after_store_drop ... ok
+test model_comparison_over_flush_compaction_and_recovery ... ok
+test online_index_build_tracks_concurrent_changes ... ok
+test pagination_keeps_snapshot_during_compaction_and_updates ... ok
+test quota_scan_and_expired_cursor_leave_other_tenants_usable ... ok
+test tenant_delete_respects_a_standalone_engine_directory_lock ... ok
+test tenant_files_keys_and_unique_values_are_isolated ... ok
+test write_result_limit_rejects_before_committing_and_multiget_restores_order ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.88s
+
+     Running tests/http.rs (/tmp/tkv-20261104-target/debug/deps/http-9fb1e58f47b585c5)
+
+running 1 test
+test authenticated_http_workflow_and_cross_tenant_cursor_denial ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/recovery.rs (/tmp/tkv-20261104-target/debug/deps/recovery-b6559c2c1e4f5095)
+
+running 5 tests
+test incomplete_tail_is_discarded_but_complete_corruption_is_rejected ... ok
+test missing_or_foreign_sst_never_becomes_an_empty_database ... ok
+test process_crashes_preserve_atomic_documents_and_indexes ... ok
+test restore_journal_survives_both_directory_switch_crashes ... ok
+test unpublished_flush_failure_is_retryable_without_checkpoint_gaps ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.96s
+
+   Doc-tests tenant_kv
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

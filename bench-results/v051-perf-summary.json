@@ -1,0 +1,80 @@
+{
+  "v0.5.0": {
+    "catchup_ms": {
+      "median": 1946.195541,
+      "min": 1831.7250760000002,
+      "max": 1996.864177
+    },
+    "transactions_per_second": {
+      "median": 4209.2378835637255,
+      "min": 4102.43225070385,
+      "max": 4472.28686626333
+    },
+    "replica_io_jobs": {
+      "median": 8319,
+      "min": 8294,
+      "max": 8555
+    },
+    "light_tenant_ms": {
+      "median": 4.990027,
+      "min": 4.1226270000000005,
+      "max": 9.36637
+    },
+    "lookup_p99_us": {
+      "median": 39,
+      "min": 37,
+      "max": 47
+    },
+    "peak_replica_budget_bytes": {
+      "median": 3212930,
+      "min": 2885271,
+      "max": 3237647
+    }
+  },
+  "v0.5.1": {
+    "catchup_ms": {
+      "median": 273.449851,
+      "min": 231.158242,
+      "max": 334.934279
+    },
+    "transactions_per_second": {
+      "median": 29957.961103441958,
+      "min": 24458.529668741372,
+      "max": 35438.92672449032
+    },
+    "replica_io_jobs": {
+      "median": 94,
+      "min": 94,
+      "max": 94
+    },
+    "light_tenant_ms": {
+      "median": 2.550176,
+      "min": 2.400217,
+      "max": 2.776593
+    },
+    "lookup_p99_us": {
+      "median": 275,
+      "min": 64,
+      "max": 546
+    },
+    "peak_replica_budget_bytes": {
+      "median": 5182098,
+      "min": 5153616,
+      "max": 5636389
+    }
+  },
+  "catchup_speedup": 7.117193642208274,
+  "io_job_reduction_percent": 98.87005649717514,
+  "conditions": {
+    "transactions": 8192,
+    "rounds_each": 3,
+    "poll_ms": 50,
+    "keys": 1024,
+    "source_load_threads": 4,
+    "active_tenants": 2,
+    "payload_chars": 256,
+    "vm": "OrbStack Ubuntu, same host; sequential comparison",
+    "concurrent_replica_lookup": true,
+    "no_compilation_or_soak_during_measurement": true
+  }
+}

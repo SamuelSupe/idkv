@@ -1,0 +1,5 @@
+   Compiling reqwest v0.12.28
+   Compiling reqsign v0.16.5
+   Compiling opendal v0.55.0
+   Compiling tenant-kv v0.5.1 (/Users/livesite/Documents/Codex/2026-11-04/splunk-kv-store-lookup/outputs/tenant-kv)
+    Finished `release` profile [optimized] target(s) in 28.83s

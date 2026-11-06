@@ -1,0 +1,112 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 989  of event 'cpu-clock:u'
+# Event count (approx.): 1981963912
+#
+# Overhead  Symbol                                                                                                                                                                                   IPC   [IPC Coverage]
+# ........  .......................................................................................................................................................................................  ....................
+#
+    12.34%  [.] __kernel_clock_gettime                                                                                                                                                               -      -            
+            |
+            ---__GI___clock_gettime (inlined)
+
+     9.61%  [.] _int_malloc                                                                                                                                                                          -      -            
+            |          
+             --8.70%--_int_malloc
+                       |          
+                       |--5.16%--__libc_malloc2
+                       |          |          
+                       |           --4.04%--tenant_kv::storage::sst::decode_records
+                       |                     core::ops::function::FnOnce::call_once{{vtable.shim}}
+                       |                     std::sys::backtrace::__rust_begin_short_backtrace
+                       |                     core::ops::function::FnOnce::call_once{{vtable.shim}}
+                       |                     std::sys::pal::unix::thread::Thread::new::thread_start
+                       |                     start_thread
+                       |                     thread_start
+                       |          
+                        --2.73%--_int_realloc
+                                  __GI___libc_realloc (inlined)
+                                  |          
+                                   --2.12%--alloc::raw_vec::finish_grow
+                                             alloc::raw_vec::RawVec<T,A>::grow_one
+                                             tenant_kv::codec::unescape
+                                             tenant_kv::storage::sst::decode_records
+                                             core::ops::function::FnOnce::call_once{{vtable.shim}}
+                                             std::sys::backtrace::__rust_begin_short_backtrace
+                                             core::ops::function::FnOnce::call_once{{vtable.shim}}
+                                             std::sys::pal::unix::thread::Thread::new::thread_start
+                                             start_thread
+                                             thread_start
+
+     5.97%  [.] malloc_consolidate                                                                                                                                                                   -      -            
+            |          
+             --5.86%--_int_malloc
+                       |          
+                        --5.66%--__libc_calloc2
+                                  lz4_flex::block::decompress_safe::decompress
+                                  tenant_kv::storage::sst::read_frame
+                                  core::ops::function::FnOnce::call_once{{vtable.shim}}
+                                  std::sys::backtrace::__rust_begin_short_backtrace
+                                  core::ops::function::FnOnce::call_once{{vtable.shim}}
+                                  std::sys::pal::unix::thread::Thread::new::thread_start
+                                  start_thread
+                                  thread_start
+
+     4.04%  [.] memcmp                                                                                                                                                                               -      -            
+            |          
+             --2.12%--tenant_kv::codec::locate_parts
+
+     3.94%  [.] __memcpy_generic                                                                                                                                                                     -      -            
+     3.44%  [.] tenant_kv::codec::locate_parts                                                                                                                                                       -      -            
+            |          
+             --3.24%--tenant_kv::codec::FieldPath::scalar
+                       |          
+                        --2.93%--tenant_kv::query::filter::Compiled::matches
+                                  tenant_kv::query::execute::<impl tenant_kv::tenant::TenantHandle>::query::{{closure}}
+                                  tenant_kv::query::execute::<impl tenant_kv::tenant::TenantHandle>::query
+                                  read_perf::main::{{closure}}
+                                  read_perf::main
+                                  std::sys::backtrace::__rust_begin_short_backtrace
+                                  std::rt::lang_start::{{closure}}
+                                  std::rt::lang_start_internal
+                                  main
+                                  __libc_start_call_main
+                                  __libc_start_main_impl (inlined)
+                                  _start
+
+     3.34%  [.] __syscall_cancel_arch                                                                                                                                                                -      -            
+            |
+            ---__internal_syscall_cancel
+               __syscall_cancel
+
+     3.13%  [.] core::str::converts::from_utf8                                                                                                                                                       -      -            
+     2.83%  [.] cfree@GLIBC_2.17                                                                                                                                                                     -      -            
+            |          
+             --2.73%--__GI___libc_free (inlined)
+
+     2.83%  [.] syscall                                                                                                                                                                              -      -            
+     2.73%  [.] lz4_flex::block::decompress_safe::decompress                                                                                                                                         -      -            
+            |
+            ---tenant_kv::storage::sst::read_frame
+               core::ops::function::FnOnce::call_once{{vtable.shim}}
+               std::sys::backtrace::__rust_begin_short_backtrace
+               core::ops::function::FnOnce::call_once{{vtable.shim}}
+               std::sys::pal::unix::thread::Thread::new::thread_start
+               start_thread
+               thread_start
+
+     2.53%  [.] _int_free_chunk                                                                                                                                                                      -      -            
+            |          
+             --2.33%--_int_free_chunk
+
+     2.43%  [.] malloc                                                                                                                                                                               -      -            
+     2.33%  [.] unlink_chunk.isra.0                                                                                                                                                                  -      -            
+     2.22%  [.] realloc                                                                                                                                                                              -      -            
+
+
+#
+# (Cannot load tips.txt file, please install perf!)
+#

@@ -1,0 +1,50 @@
+   Compiling tenant-kv v0.8.0 (/Users/livesite/Documents/Codex/2026-11-04/splunk-kv-store-lookup/outputs/tenant-kv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.32s
+     Running unittests src/lib.rs (/tmp/tkv-20261104-target/debug/deps/tenant_kv-50aa12d96f4143ce)
+
+running 17 tests
+test codec::typed::tests::typed_records_match_json_decoder_and_reject_malformed_nodes ... ok
+test http::body::tests::response_budget_failure_preserves_completed_mutation_status ... ok
+test identity::time::tests::timezone_precision_and_clock_discontinuities ... ok
+test storage::engine::replication::tests::malformed_page_is_rejected_before_mutation_and_valid_replay_survives_restart ... FAILED
+test storage::engine::write::tests::cleanup_can_use_reserved_disk_headroom_when_user_writes_are_backpressured ... ok
+test storage::engine::write::tests::read_only_transaction_waits_for_the_observed_group_commit ... ok
+test storage::sst::point_get_preserves_versions_and_tombstones_across_index_partitions ... ok
+test storage::wal::tests::buffered_replication_preserves_frames_limits_and_pinned_end ... ok
+test tenant::catalog::tests::collection_resolution_preserves_snapshot_generations ... ok
+test tenant::retention::tests::expired_receipts_never_repeat_generated_writes_and_current_documents_survive ... ok
+test tenant::retention::tests::persisted_expiry_watermark_rejects_retry_after_clock_rollback ... FAILED
+test tenant::retention::tests::receipt_metadata_does_not_reduce_the_public_document_batch_limit ... ok
+test tenant::retention::tests::retention_makes_progress_with_small_byte_batches_and_long_receipt_keys ... FAILED
+test tenant::retention::tests::rolling_publications_continue_beyond_the_collection_limit ... ok
+test tenant::retention::tests::shortening_policy_cannot_remove_receipts_while_the_original_token_is_valid ... ok
+test tenant::retention::tests::superseded_publications_preserve_shared_current_collections_and_old_snapshots ... ok
+test tenant::retention::tests::temporal_gc_keeps_predecessor_baselines_including_empty_timelines_and_latest_state ... ok
+
+failures:
+
+---- storage::engine::replication::tests::malformed_page_is_rejected_before_mutation_and_valid_replay_survives_restart stdout ----
+
+thread 'storage::engine::replication::tests::malformed_page_is_rejected_before_mutation_and_valid_replay_survives_restart' panicked at src/storage/engine/replication.rs:385:76:
+called `Result::unwrap()` on an `Err` value: Error { code: "RESOURCE_EXHAUSTED", message: "tenant disk quota/headroom exhausted", location: None }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- tenant::retention::tests::persisted_expiry_watermark_rejects_retry_after_clock_rollback stdout ----
+
+thread 'tenant::retention::tests::persisted_expiry_watermark_rejects_retry_after_clock_rollback' panicked at src/tenant/retention/tests.rs:174:30:
+called `Result::unwrap_err()` on an `Ok` value: ()
+
+---- tenant::retention::tests::retention_makes_progress_with_small_byte_batches_and_long_receipt_keys stdout ----
+
+thread 'tenant::retention::tests::retention_makes_progress_with_small_byte_batches_and_long_receipt_keys' panicked at src/tenant/retention/tests.rs:23:28:
+called `Result::unwrap()` on an `Err` value: Error { code: "RESOURCE_EXHAUSTED", message: "expanded atomic batch exceeds configured limit", location: None }
+
+
+failures:
+    storage::engine::replication::tests::malformed_page_is_rejected_before_mutation_and_valid_replay_survives_restart
+    tenant::retention::tests::persisted_expiry_watermark_rejects_retry_after_clock_rollback
+    tenant::retention::tests::retention_makes_progress_with_small_byte_batches_and_long_receipt_keys
+
+test result: FAILED. 14 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 39.03s
+
+error: test failed, to rerun pass `--lib`

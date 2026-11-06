@@ -1,0 +1,117 @@
+{
+  "versions": {
+    "before": "0.5.1",
+    "after": "0.5.2"
+  },
+  "read": {
+    "get": {
+      "before": {
+        "calls_per_second": 938320.3955136819,
+        "p50_us": 0.959,
+        "p95_us": 1.209,
+        "p99_us": 1.416
+      },
+      "after": {
+        "calls_per_second": 1174835.20381,
+        "p50_us": 0.75,
+        "p95_us": 1.041,
+        "p99_us": 1.209
+      }
+    },
+    "unique_query": {
+      "before": {
+        "calls_per_second": 606178.7337636693,
+        "p50_us": 1.542,
+        "p95_us": 1.792,
+        "p99_us": 2.084
+      },
+      "after": {
+        "calls_per_second": 613035.8393012373,
+        "p50_us": 1.541,
+        "p95_us": 1.791,
+        "p99_us": 2.125
+      }
+    },
+    "in_scan_256": {
+      "before": {
+        "calls_per_second": 79.08539631890038,
+        "p50_us": 12427.128,
+        "p95_us": 13923.8,
+        "p99_us": 14300.676
+      },
+      "after": {
+        "calls_per_second": 76.60992274389254,
+        "p50_us": 12738.0,
+        "p95_us": 17323.14,
+        "p99_us": 20698.819
+      }
+    },
+    "lookup_1000": {
+      "before": {
+        "calls_per_second": 1000.8206009056465,
+        "p50_us": 980.17,
+        "p95_us": 1078.879,
+        "p99_us": 1179.463
+      },
+      "after": {
+        "calls_per_second": 1001.2976450826673,
+        "p50_us": 971.129,
+        "p95_us": 1082.92,
+        "p99_us": 1697.881
+      }
+    },
+    "lookup_duplicate_1000": {
+      "before": {
+        "calls_per_second": 3998.652499440861,
+        "p50_us": 245.959,
+        "p95_us": 271.084,
+        "p99_us": 308.252
+      },
+      "after": {
+        "calls_per_second": 4062.220380587504,
+        "p50_us": 244.418,
+        "p95_us": 263.584,
+        "p99_us": 288.126
+      }
+    }
+  },
+  "replication": {
+    "before": {
+      "catchup_ms": 223.694176,
+      "transactions_per_second": 36621.42728293472,
+      "replica_io_jobs": 96,
+      "light_tenant_ms": 2.8318440000000002,
+      "lookup_p99_us": 189,
+      "peak_replica_budget_bytes": 5182094,
+      "lookup_p99_range_us": [
+        64,
+        206
+      ],
+      "lookup_sample_counts": [
+        65,
+        76,
+        80
+      ]
+    },
+    "after": {
+      "catchup_ms": 212.570325,
+      "transactions_per_second": 38537.83447901301,
+      "replica_io_jobs": 91,
+      "light_tenant_ms": 6.826397,
+      "lookup_p99_us": 747,
+      "peak_replica_budget_bytes": 5178760,
+      "lookup_p99_range_us": [
+        694,
+        1391
+      ],
+      "lookup_sample_counts": [
+        79,
+        99,
+        74
+      ]
+    }
+  },
+  "get_throughput_change_percent": 25.20618857131829,
+  "get_p50_change_percent": -21.79353493222106,
+  "note": "Three runs per version, fresh fixtures; final candidate includes lifecycle status protection. Read modes have 200000 call cap and 3s target. Loopback replication, no concurrent build or soak. Not a cold-cache or production latency guarantee."
+}

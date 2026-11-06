@@ -1,0 +1,1642 @@
+use serde_json::json;
+use std::{
+    path::Path,
+    time::{Duration, Instant},
+};
+use tenant_kv::{
+    http::{self, AuthConfig, Role as HttpRole, Token},
+    replication::{Config, Role, Service},
+    *,
+};
+use uuid::Uuid;
+
+const PEER: &str = "replication-only-test-secret-12345";
+const ADMIN: &str = "replication-admin-test-secret-1234";
+fn options() -> Options {
+    Options {
+        memtable_bytes: 64 << 10,
+        target_sst_bytes: 128 << 10,
+        ..Options::default()
+    }
+}
+fn config(path: &Path, cluster: Uuid, role: Role, peer_url: String) -> Config {
+    let token = path.join("peer-token");
+    std::fs::write(&token, PEER).unwrap();
+    Config {
+        cluster,
+        role,
+        peer_url,
+        token_file: token,
+        poll_ms: 10,
+        log_retention_bytes: 1 << 20,
+    }
+}
+fn auth() -> AuthConfig {
+    AuthConfig {
+        tokens: vec![
+            Token {
+                subject: "test-service".into(),
+                sha256: http::token_hash(PEER),
+                tenant: None,
+                role: HttpRole::Replication,
+            },
+            Token {
+                subject: "test-service".into(),
+                sha256: http::token_hash(ADMIN),
+                tenant: None,
+                role: HttpRole::Admin,
+            },
+        ],
+    }
+}
+struct Pair {
+    a: Store,
+    b: Store,
+    sa: Service,
+    sb: Service,
+    ua: String,
+    ub: String,
+    servers: Vec<tokio::task::JoinHandle<()>>,
+    _dirs: Vec<tempfile::TempDir>,
+}
+impl Drop for Pair {
+    fn drop(&mut self) {
+        for server in &self.servers {
+            server.abort();
+        }
+    }
+}
+impl Pair {
+    async fn new() -> Self {
+        Self::with_options(options()).await
+    }
+    async fn with_options(options: Options) -> Self {
+        Self::with_replica_role(options, Role::Replica).await
+    }
+    async fn with_replica_role(options: Options, replica_role: Role) -> Self {
+        let da = tempfile::tempdir().unwrap();
+        let db = tempfile::tempdir().unwrap();
+        let a = Store::open(da.path(), options.clone()).unwrap();
+        let b = Store::open(db.path(), options).unwrap();
+        let la = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let lb = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let ua = format!("http://{}", la.local_addr().unwrap());
+        let ub = format!("http://{}", lb.local_addr().unwrap());
+        let cluster = Uuid::new_v4();
+        let sa = Service::open(
+            a.clone(),
+            config(da.path(), cluster, Role::Primary, ub.clone()),
+        )
+        .unwrap();
+        let sb = Service::open(
+            b.clone(),
+            config(db.path(), cluster, replica_role, ua.clone()),
+        )
+        .unwrap();
+        let appa = http::app_with_replication(a.clone(), auth(), None, Some(sa.clone())).unwrap();
+        let appb = http::app_with_replication(b.clone(), auth(), None, Some(sb.clone())).unwrap();
+        let servers = vec![
+            tokio::spawn(async move {
+                axum::serve(la, appa).await.unwrap();
+            }),
+            tokio::spawn(async move {
+                axum::serve(lb, appb).await.unwrap();
+            }),
+        ];
+        Self {
+            a,
+            b,
+            sa,
+            sb,
+            ua,
+            ub,
+            servers,
+            _dirs: vec![da, db],
+        }
+    }
+    async fn catch_up(&self, reverse: bool) {
+        let (source, replica, service) = if reverse {
+            (&self.b, &self.a, &self.sa)
+        } else {
+            (&self.a, &self.b, &self.sb)
+        };
+        let deadline = Instant::now() + Duration::from_secs(20);
+        loop {
+            match service.sync_once().await {
+                Ok(()) => {}
+                Err(e) if e.code == "BUSY" || e.code == "REPLICATION_CONFLICT" => {
+                    assert!(Instant::now() < deadline, "{e}");
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                    continue;
+                }
+                Err(e) => panic!("{e}"),
+            }
+            let a = source.replication_positions().unwrap();
+            let b = replica.replication_positions().unwrap();
+            if a.len() == b.len()
+                && a.iter()
+                    .zip(&b)
+                    .all(|(a, b)| a.info.id == b.info.id && a.seq == b.seq)
+            {
+                return;
+            }
+            assert!(Instant::now() < deadline, "replica did not catch up");
+        }
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn streams_atomic_indexes_deletes_and_switches_both_directions() {
+    let pair = Pair::new().await;
+    let id = pair.a.create_tenant("assets").unwrap().id;
+    let tenant = pair.a.tenant(id).unwrap();
+    tenant.create_collection("assets").unwrap();
+    tenant
+        .put(
+            "assets",
+            json!({"_key":"a","ip":"ip-a","owner":"one"}),
+            None,
+        )
+        .unwrap();
+    tenant
+        .create_index(
+            "assets",
+            serde_json::from_value(
+                json!({"name":"ip","fields":[{"field":"/ip"}],"unique":true,"include":["/owner"]}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    tenant
+        .create_lookup(
+            "assets",
+            serde_json::from_value(json!({"name":"owner","index":"ip","select":["/owner"]}))
+                .unwrap(),
+        )
+        .unwrap();
+    pair.catch_up(false).await;
+    let replica = pair.b.tenant(id).unwrap();
+    assert_eq!(
+        replica
+            .put("assets", json!({"_key":"bad"}), None)
+            .unwrap_err()
+            .code,
+        "READ_ONLY"
+    );
+    assert_eq!(pair.b.create_tenant("bad").unwrap_err().code, "READ_ONLY");
+    for round in 0..20 {
+        tenant
+            .write_batch(
+                "assets",
+                vec![
+                    WriteOp::Put {
+                        document: json!({"_key":"a","ip":"ip-a","owner":round}),
+                        if_rev: None,
+                    },
+                    WriteOp::Put {
+                        document: json!({"_key":"b","ip":"ip-b","owner":round}),
+                        if_rev: None,
+                    },
+                ],
+            )
+            .unwrap();
+    }
+    tenant.engine().flush().unwrap();
+    pair.catch_up(false).await;
+    let rows = replica
+        .multi_get("assets", &["a".into(), "b".into()])
+        .unwrap();
+    assert_eq!(
+        rows[0].as_ref().unwrap()["_rev"],
+        rows[1].as_ref().unwrap()["_rev"]
+    );
+    assert_eq!(
+        replica
+            .lookup_many("assets", "owner", &[json!({"ip":"ip-a"})])
+            .unwrap()
+            .matches[0][0]["owner"],
+        19
+    );
+    tenant.delete("assets", "b", None).unwrap();
+    pair.catch_up(false).await;
+    assert!(replica.get("assets", "b").unwrap().is_none());
+    let old_epoch = pair.a.replication_state().epoch;
+    tenant
+        .put(
+            "assets",
+            json!({"_key":"cursor-row","ip":"cursor-ip"}),
+            None,
+        )
+        .unwrap();
+    pair.catch_up(false).await;
+    let old_cursor = replica
+        .query(
+            "assets",
+            serde_json::from_value(json!({"limit":1})).unwrap(),
+        )
+        .unwrap()
+        .cursor
+        .unwrap();
+    pair.sa.switchover().await.unwrap();
+    assert_eq!(
+        replica
+            .query(
+                "assets",
+                serde_json::from_value(json!({"limit":1,"cursor":old_cursor})).unwrap()
+            )
+            .unwrap_err()
+            .code,
+        "CURSOR_EXPIRED"
+    );
+    assert_eq!(pair.a.replication_state().role, Role::Replica);
+    assert_eq!(pair.b.replication_state().role, Role::Primary);
+    assert_ne!(pair.b.replication_state().epoch, old_epoch);
+    assert_eq!(
+        tenant
+            .put("assets", json!({"_key":"bad"}), None)
+            .unwrap_err()
+            .code,
+        "READ_ONLY"
+    );
+    assert_eq!(
+        replica
+            .put("assets", json!({"_key":"c","ip":"ip-a"}), None)
+            .unwrap_err()
+            .code,
+        "UNIQUE_CONFLICT"
+    );
+    replica
+        .put("assets", json!({"_key":"c","ip":"ip-c"}), None)
+        .unwrap();
+    pair.catch_up(true).await;
+    assert!(tenant.get("assets", "c").unwrap().is_some());
+    pair.sb.switchover().await.unwrap();
+    tenant
+        .put("assets", json!({"_key":"d","ip":"ip-d"}), None)
+        .unwrap();
+    pair.catch_up(false).await;
+    assert!(replica.get("assets", "d").unwrap().is_some());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn retained_log_expiry_installs_checkpoint_and_replicates_catalog_deletion() {
+    let pair = Pair::new().await;
+    let id = pair.a.create_tenant("large").unwrap().id;
+    let tenant = pair.a.tenant(id).unwrap();
+    tenant.create_collection("docs").unwrap();
+    pair.catch_up(false).await;
+    for round in 0..16 {
+        tenant
+            .put(
+                "docs",
+                json!({"_key":"hot","value":round,"payload":"x".repeat(128<<10)}),
+                None,
+            )
+            .unwrap();
+        tenant.engine().flush().unwrap();
+        tenant.engine().compact(true).unwrap();
+    }
+    pair.catch_up(false).await;
+    assert_eq!(
+        pair.b
+            .tenant(id)
+            .unwrap()
+            .get("docs", "hot")
+            .unwrap()
+            .unwrap()["value"],
+        15
+    );
+    drop(tenant);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        match pair.a.delete_tenant(id) {
+            Ok(()) => break,
+            Err(e) => {
+                assert!(e.code == "BUSY" && Instant::now() < deadline, "{e}");
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        }
+    }
+    pair.catch_up(false).await;
+    assert!(pair.b.tenants().is_empty());
+    let other = pair.a.create_tenant("large").unwrap();
+    assert_ne!(other.id, id);
+    pair.catch_up(false).await;
+    assert_eq!(pair.b.tenants()[0].id, other.id);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn replication_credentials_and_promotion_proof_are_enforced() {
+    let pair = Pair::new().await;
+    pair.catch_up(false).await;
+    let client = reqwest::Client::new();
+    for (url, token, body, expected) in [
+        (
+            format!("{}/v1/tenants", pair.ua),
+            PEER,
+            json!({"name":"bad"}),
+            403,
+        ),
+        (
+            format!("{}/v1/replication/force-promote", pair.ub),
+            PEER,
+            json!({}),
+            403,
+        ),
+        (
+            format!("{}/v1/replication/promote", pair.ub),
+            PEER,
+            json!({"fence":Uuid::new_v4()}),
+            409,
+        ),
+        (
+            format!("{}/v1/replication/force-promote", pair.ub),
+            ADMIN,
+            json!({"source":pair.b.replication_state().source,"old_primary_fenced":false,"accept_data_loss":true}),
+            409,
+        ),
+    ] {
+        let response = client
+            .post(url)
+            .bearer_auth(token)
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status().as_u16(), expected);
+    }
+    let old_source = pair.b.replication_state().source.unwrap();
+    pair.sa.fence(pair.b.replication_state().node).unwrap();
+    pair.sb.force_promote(old_source, true, true).await.unwrap();
+    assert_eq!(pair.b.replication_state().role, Role::Primary);
+    assert!(pair.b.replication_state().forced);
+    assert!(pair.sa.follow().await.is_err());
+}
+
+#[test]
+fn persisted_fence_survives_restart_and_stale_initial_role_configuration() {
+    let dir = tempfile::tempdir().unwrap();
+    let cluster = Uuid::new_v4();
+    let mut cfg = config(
+        dir.path(),
+        cluster,
+        Role::Primary,
+        "http://127.0.0.1:1".into(),
+    );
+    let target = Uuid::new_v4();
+    let store = Store::open(dir.path(), options()).unwrap();
+    store.configure_replication(&cfg).unwrap();
+    let id = store.create_tenant("one").unwrap().id;
+    let handle = store.tenant(id).unwrap();
+    handle.create_collection("docs").unwrap();
+    let fence = store.fence_primary(target).unwrap();
+    assert_eq!(
+        handle
+            .put("docs", json!({"_key":"bad"}), None)
+            .unwrap_err()
+            .code,
+        "READ_ONLY"
+    );
+    assert_eq!(store.fence_primary(target).unwrap().id, fence.id);
+    drop(handle);
+    drop(store);
+    let store = Store::open(dir.path(), options()).unwrap();
+    cfg.log_retention_bytes = 2 << 20;
+    store.configure_replication(&cfg).unwrap();
+    assert_eq!(store.replication_state().role, Role::Fenced);
+    assert_eq!(store.replication_state().log_retention_bytes, 2 << 20);
+    assert_eq!(store.create_tenant("bad").unwrap_err().code, "READ_ONLY");
+    assert_eq!(store.replication_state().fence.unwrap().id, fence.id);
+}
+
+async fn close(store: &Store, id: Uuid) {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        match store.close_tenant(id) {
+            Ok(()) => return,
+            Err(e) => {
+                assert!(e.code == "BUSY" && Instant::now() < deadline, "{e}");
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        }
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn idle_replication_does_not_reopen_cold_engines_and_read_tokens_wait_for_apply() {
+    let pair = Pair::new().await;
+    let id = pair.a.create_tenant("cold").unwrap().id;
+    pair.a
+        .tenant(id)
+        .unwrap()
+        .create_collection("docs")
+        .unwrap();
+    pair.catch_up(false).await;
+    close(&pair.a, id).await;
+    close(&pair.b, id).await;
+    for _ in 0..3 {
+        pair.sb.sync_once().await.unwrap();
+    }
+    assert_eq!(pair.a.status(id).unwrap()["open"], false);
+    assert_eq!(pair.b.status(id).unwrap()["open"], false);
+    let write = pair
+        .a
+        .tenant(id)
+        .unwrap()
+        .put("docs", json!({"_key":"a"}), None)
+        .unwrap();
+    let replica = pair.b.tenant(id).unwrap();
+    let epoch = pair.a.replication_state().epoch;
+    assert_eq!(
+        replica
+            .wait_replication(epoch, write.rev, 0)
+            .unwrap_err()
+            .code,
+        "REPLICA_LAG"
+    );
+    pair.catch_up(false).await;
+    assert!(replica.wait_replication(epoch, write.rev, 0).unwrap() >= write.rev);
+    assert_eq!(
+        replica
+            .wait_replication(Uuid::new_v4(), write.rev, 0)
+            .unwrap_err()
+            .code,
+        "REPLICATION_CONFLICT"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn one_corrupt_source_tenant_does_not_delete_its_replica_or_stop_healthy_tenants() {
+    let pair = Pair::new().await;
+    let bad = pair.a.create_tenant("bad").unwrap().id;
+    let good = pair.a.create_tenant("good").unwrap().id;
+    for id in [bad, good] {
+        let t = pair.a.tenant(id).unwrap();
+        t.create_collection("docs").unwrap();
+        t.put("docs", json!({"_key":"a","value":1}), None).unwrap();
+    }
+    pair.catch_up(false).await;
+    close(&pair.a, bad).await;
+    std::fs::write(
+        pair.a
+            .root()
+            .join("tenants")
+            .join(bad.to_string())
+            .join("CURRENT"),
+        b"broken",
+    )
+    .unwrap();
+    assert!(pair.a.tenant(bad).is_err());
+    pair.a
+        .tenant(good)
+        .unwrap()
+        .put("docs", json!({"_key":"a","value":2}), None)
+        .unwrap();
+    let error = pair.sb.sync_once().await.unwrap_err();
+    assert_eq!(error.code, "UNAVAILABLE");
+    assert_eq!(
+        pair.b
+            .tenant(good)
+            .unwrap()
+            .get("docs", "a")
+            .unwrap()
+            .unwrap()["value"],
+        2
+    );
+    assert_eq!(
+        pair.b
+            .tenant(bad)
+            .unwrap()
+            .get("docs", "a")
+            .unwrap()
+            .unwrap()["value"],
+        1
+    );
+    assert_eq!(pair.sa.status().unwrap().unavailable.len(), 1);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn switchover_preserves_every_acknowledged_write_racing_with_the_fence() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    let pair = Pair::new().await;
+    let id = pair.a.create_tenant("racing").unwrap().id;
+    let tenant = pair.a.tenant(id).unwrap();
+    tenant.create_collection("docs").unwrap();
+    pair.catch_up(false).await;
+    let count = Arc::new(AtomicUsize::new(0));
+    let progress = count.clone();
+    let writer = std::thread::spawn(move || {
+        let mut acknowledged = Vec::new();
+        for i in 0..500 {
+            match tenant.put("docs", json!({"_key":format!("k-{i}"),"value":i}), None) {
+                Ok(result) => {
+                    acknowledged.push(result);
+                    progress.fetch_add(1, Ordering::Release);
+                }
+                Err(error) => {
+                    assert_eq!(error.code, "READ_ONLY");
+                    break;
+                }
+            }
+        }
+        acknowledged
+    });
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while count.load(Ordering::Acquire) < 10 {
+        assert!(Instant::now() < deadline);
+        tokio::time::sleep(Duration::from_millis(2)).await;
+    }
+    pair.sa.switchover().await.unwrap();
+    let acknowledged = writer.join().unwrap();
+    assert!(acknowledged.len() >= 10);
+    let promoted = pair.b.tenant(id).unwrap();
+    for write in acknowledged {
+        assert_eq!(
+            promoted.get("docs", &write.key).unwrap().unwrap()["_rev"],
+            write.rev
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn small_memory_budget_supports_replication_and_switchover() {
+    let pair = Pair::with_options(Options {
+        global_memory_bytes: 64 << 20,
+        tenant_memory_bytes: 32 << 20,
+        cache_bytes: 4 << 20,
+        max_batch_bytes: 1 << 20,
+        max_response_bytes: 2 << 20,
+        ..options()
+    })
+    .await;
+    let id = pair.a.create_tenant("small").unwrap().id;
+    let tenant = pair.a.tenant(id).unwrap();
+    tenant.create_collection("docs").unwrap();
+    tenant
+        .put("docs", json!({"_key":"a", "value":1}), None)
+        .unwrap();
+    pair.catch_up(false).await;
+    tenant
+        .put("docs", json!({"_key":"a", "value":2}), None)
+        .unwrap();
+    pair.catch_up(false).await;
+    pair.sa.switchover().await.unwrap();
+    assert_eq!(
+        pair.b
+            .tenant(id)
+            .unwrap()
+            .get("docs", "a")
+            .unwrap()
+            .unwrap()["value"],
+        2
+    );
+    assert_eq!(pair.a.replication_state().role, Role::Replica);
+    assert!(pair.a.memory_bytes() < 64 << 20);
+    assert!(pair.b.memory_bytes() < 64 << 20);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn busy_catalog_tenant_does_not_stall_healthy_replication() {
+    let pair = Pair::new().await;
+    let busy = pair.a.create_tenant("busy").unwrap().id;
+    let good = pair.a.create_tenant("good").unwrap().id;
+    for id in [busy, good] {
+        let tenant = pair.a.tenant(id).unwrap();
+        tenant.create_collection("docs").unwrap();
+        tenant
+            .put("docs", json!({"_key":"a", "value":1}), None)
+            .unwrap();
+    }
+    pair.catch_up(false).await;
+    let held = pair.b.tenant(busy).unwrap();
+    pair.a.delete_tenant(busy).unwrap();
+    pair.a
+        .tenant(good)
+        .unwrap()
+        .put("docs", json!({"_key":"a", "value":2}), None)
+        .unwrap();
+    assert_eq!(pair.sb.sync_once().await.unwrap_err().code, "BUSY");
+    assert_eq!(
+        pair.b
+            .tenant(good)
+            .unwrap()
+            .get("docs", "a")
+            .unwrap()
+            .unwrap()["value"],
+        2
+    );
+    assert_eq!(held.get("docs", "a").unwrap().unwrap()["value"], 1);
+    drop(held);
+    pair.catch_up(false).await;
+    assert!(pair.b.tenants().iter().all(|t| t.id != busy));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn incompatible_successor_is_rejected_before_fencing_primary() {
+    let pair = Pair::with_replica_role(options(), Role::Primary).await;
+    assert!(pair.sa.switchover().await.is_err());
+    assert_eq!(pair.a.replication_state().role, Role::Primary);
+    assert!(pair.a.replication_state().fence.is_none());
+    pair.a.create_tenant("still-writable").unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn temporal_history_receipts_and_effective_time_survive_replication_and_switchover() {
+    use tenant_kv::identity::*;
+    let pair = Pair::new().await;
+    let id = pair.a.create_tenant("temporal").unwrap().id;
+    let primary = pair.a.tenant(id).unwrap();
+    let context = IdentityContext {
+        source: "connector".into(),
+        actor: "replication-test".into(),
+        can_correct: true,
+    };
+    primary
+        .identity_initialize(&context, IdentityConfig::default())
+        .unwrap();
+    let create: IdentityWrite = serde_json::from_value(
+        json!({"action":"create_entity","operation_id":"entity","attributes":{}}),
+    )
+    .unwrap();
+    let entity = primary
+        .identity_write(&context, create)
+        .unwrap()
+        .entity
+        .unwrap()
+        .entity_id;
+    let identifier = Identifier {
+        kind: "user".into(),
+        namespace: "crm".into(),
+        value: "alice".into(),
+    };
+    let request:IdentityWrite=serde_json::from_value(json!({"action":"bindings","operation_id":"bind","changes":[{"identifier":identifier,"expected_revision":"absent","effective":{"mode":"manual","from":"2026-01-01T00:00:00Z"},"change":{"action":"bind","entity_id":entity,"reason":"source initialization"}}]})).unwrap();
+    let first = primary.identity_write(&context, request.clone()).unwrap();
+    pair.catch_up(false).await;
+    let replica = pair.b.tenant(id).unwrap();
+    assert_eq!(
+        replica
+            .identity_write(&context, request.clone())
+            .unwrap_err()
+            .code,
+        "READ_ONLY"
+    );
+    let correction:IdentityWrite=serde_json::from_value(json!({"action":"bindings","operation_id":"unbind","changes":[{"identifier":identifier,"expected_revision":first.timelines[0].revision,"effective":{"mode":"manual","from":"2026-02-01T00:00:00Z"},"change":{"action":"unbind","reason":"late cancellation"}}]})).unwrap();
+    let corrected = primary
+        .identity_write(&context, correction.clone())
+        .unwrap();
+    let mut query = ResolveRequest {
+        identifier: identifier.clone(),
+        valid_at: "2026-03-01T00:00:00Z".into(),
+        known_at: Some(corrected.knowledge.version.to_string()),
+    };
+    assert_eq!(
+        replica.identity_resolve(&query).unwrap_err().code,
+        "KNOWLEDGE_UNAVAILABLE"
+    );
+    pair.catch_up(false).await;
+    assert!(replica.identity_resolve(&query).unwrap().binding.is_none());
+    query.known_at = Some(first.knowledge.version.to_string());
+    assert_eq!(
+        replica
+            .identity_resolve(&query)
+            .unwrap()
+            .binding
+            .unwrap()
+            .entity_id,
+        entity
+    );
+    pair.sa.switchover().await.unwrap();
+    let retry = replica.identity_write(&context, correction).unwrap();
+    assert_eq!(
+        serde_json::to_value(retry).unwrap(),
+        serde_json::to_value(corrected).unwrap()
+    );
+    let next:IdentityWrite=serde_json::from_value(json!({"action":"bindings","operation_id":"resume","changes":[{"identifier":identifier,"expected_revision":replica.identity_timeline(&identifier).unwrap().unwrap().revision,"change":{"action":"bind","entity_id":entity}}]})).unwrap();
+    let resumed = replica.identity_write(&context, next).unwrap();
+    pair.catch_up(true).await;
+    assert_eq!(
+        primary
+            .identity_operation("resume")
+            .unwrap()
+            .effective_time_us,
+        resumed.effective_time_us
+    );
+    assert_eq!(
+        primary
+            .identity_resolve(&query)
+            .unwrap()
+            .binding
+            .unwrap()
+            .entity_id,
+        entity
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn catchup_keeps_progress_while_source_head_and_other_tenants_advance() {
+    let pair = Pair::with_options(Options {
+        memtable_bytes: 4 << 20,
+        ..options()
+    })
+    .await;
+    let hot = pair.a.create_tenant("hot-head").unwrap().id;
+    let light = pair.a.create_tenant("light-head").unwrap().id;
+    for id in [hot, light] {
+        pair.a
+            .tenant(id)
+            .unwrap()
+            .create_collection("docs")
+            .unwrap();
+    }
+    pair.catch_up(false).await;
+    let source = pair.a.tenant(hot).unwrap();
+    for i in 0..768 {
+        source
+            .put("docs", json!({"_key": format!("{i:04}"), "round": 0}), None)
+            .unwrap();
+    }
+    let writers: Vec<_> = (0..4)
+        .map(|worker| {
+            let store = pair.a.clone();
+            tokio::task::spawn_blocking(move || {
+                for i in 0..192 {
+                    store
+                        .tenant(hot)
+                        .unwrap()
+                        .put(
+                            "docs",
+                            json!({"_key": format!("{:04}", i*4+worker), "round": 1}),
+                            None,
+                        )
+                        .unwrap();
+                    if i == 0 {
+                        store
+                            .tenant(light)
+                            .unwrap()
+                            .put("docs", json!({"_key": format!("{worker}")}), None)
+                            .unwrap();
+                    }
+                }
+            })
+        })
+        .collect();
+    // A newly observed log head may be ahead of the preceding catalog response.
+    // Continuing from that page must not report a false divergent-history error.
+    loop {
+        pair.sb.sync_once().await.unwrap();
+        if writers.iter().all(|writer| writer.is_finished()) {
+            break;
+        }
+    }
+    for writer in writers {
+        writer.await.unwrap();
+    }
+    pair.catch_up(false).await;
+    let replica = pair.b.tenant(hot).unwrap();
+    for i in 0..768 {
+        assert_eq!(
+            replica.get("docs", &format!("{i:04}")).unwrap(),
+            source.get("docs", &format!("{i:04}")).unwrap()
+        );
+    }
+    for i in 0..4 {
+        assert!(
+            pair.b
+                .tenant(light)
+                .unwrap()
+                .get("docs", &format!("{i}"))
+                .unwrap()
+                .is_some()
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn middleware_client_retries_receipts_across_switch_and_requires_read_history() {
+    let pair = Pair::new().await;
+    let id = pair.a.create_tenant("client").unwrap().id;
+    pair.a
+        .tenant(id)
+        .unwrap()
+        .create_collection("docs")
+        .unwrap();
+    pair.catch_up(false).await;
+    let client =
+        tenant_kv::client::Client::new(&[pair.ua.clone(), pair.ub.clone()], ADMIN.into(), id)
+            .unwrap();
+    let context = client.write_context().await.unwrap();
+    let options = WriteOptions {
+        retry_token: None,
+        expected_history: Some(context.history),
+        operation_id: Some("durable-client-retry".into()),
+    };
+    let operations = vec![WriteOp::Put {
+        document: json!({"value":"receipt"}),
+        if_rev: None,
+    }];
+    let write = client
+        .write_batch("docs", operations.clone(), options.clone())
+        .await
+        .unwrap();
+    pair.catch_up(false).await;
+    assert_eq!(
+        client
+            .get("docs", &write[0].key, Some(&write[0]))
+            .await
+            .unwrap()
+            .unwrap()["value"],
+        "receipt"
+    );
+    pair.sa.switchover().await.unwrap();
+    let retry = client
+        .write_batch("docs", operations, options)
+        .await
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(&retry).unwrap(),
+        serde_json::to_value(&write).unwrap()
+    );
+    assert_eq!(
+        client
+            .get("docs", &write[0].key, Some(&write[0]))
+            .await
+            .unwrap_err()
+            .code,
+        "HISTORY_CONFLICT"
+    );
+    let options = WriteOptions {
+        retry_token: None,
+        expected_history: Some(client.write_context().await.unwrap().history),
+        operation_id: Some("new-history".into()),
+    };
+    let write = client
+        .write_batch(
+            "docs",
+            vec![WriteOp::Put {
+                document: json!({"_key":"new","value":2}),
+                if_rev: Some(0),
+            }],
+            options,
+        )
+        .await
+        .unwrap();
+    pair.catch_up(true).await;
+    assert_eq!(
+        client
+            .get("docs", "new", Some(&write[0]))
+            .await
+            .unwrap()
+            .unwrap()["value"],
+        2
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn legacy_replication_protocol_is_rejected_before_data_or_fencing() {
+    let pair = Pair::new().await;
+    let id = pair.a.create_tenant("protocol").unwrap().id;
+    let context = pair.a.replication_state();
+    let http = reqwest::Client::new();
+    for path in ["log", "snapshot"] {
+        let mut body = json!({"cluster":context.cluster,"epoch":context.epoch,"tenant":id});
+        if path == "log" {
+            body["generation"] = json!(pair.a.tenant(id).unwrap().info().generation);
+            body["after"] = json!(0);
+        }
+        let response = http
+            .post(format!("{}/v1/replication/{path}", pair.ua))
+            .bearer_auth(PEER)
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 409);
+        assert_eq!(
+            response.json::<serde_json::Value>().await.unwrap()["error"]["code"],
+            "INCOMPATIBLE_VERSION"
+        );
+    }
+    let mut legacy = pair.sa.status().unwrap();
+    legacy.node.protocol = 1;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    let fake = axum::Router::new().route(
+        "/v1/replication/status",
+        axum::routing::get(move || {
+            let legacy = legacy.clone();
+            async move { axum::Json(legacy) }
+        }),
+    );
+    let server = tokio::spawn(async move {
+        axum::serve(listener, fake).await.unwrap();
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(dir.path(), options()).unwrap();
+    let service = Service::open(
+        store.clone(),
+        config(dir.path(), context.cluster, Role::Replica, endpoint),
+    )
+    .unwrap();
+    assert_eq!(
+        service.sync_once().await.unwrap_err().code,
+        "INCOMPATIBLE_VERSION"
+    );
+    assert!(store.tenants().is_empty());
+    assert!(pair.a.writable());
+    server.abort();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn retention_replicates_expiry_and_current_state_across_switchover() {
+    let pair = Pair::new().await;
+    let id = pair.a.create_tenant("retention").unwrap().id;
+    let primary = pair.a.tenant(id).unwrap();
+    primary.create_collection("items").unwrap();
+    primary.set_retention(1).unwrap();
+    let c = primary.retry_context("worker").unwrap();
+    let opts = WriteOptions {
+        expected_history: Some(c.history),
+        operation_id: Some("once".into()),
+        retry_token: Some(c.retry_token),
+    };
+    let ops = vec![WriteOp::Put {
+        document: json!({"value":1}),
+        if_rev: None,
+    }];
+    let first = primary
+        .write_batch_with("items", ops.clone(), &opts, "worker")
+        .unwrap();
+    pair.catch_up(false).await;
+    let replica = pair.b.tenant(id).unwrap();
+    assert_eq!(
+        replica.retention_status().unwrap()["policy"]["retention_seconds"],
+        1
+    );
+    let old_snapshot = replica.engine().snapshot().unwrap();
+    tokio::time::sleep(Duration::from_millis(1300)).await;
+    pair.catch_up(false).await;
+    assert!(replica.get("items", &first[0].key).unwrap().is_some());
+    pair.sa.switchover().await.unwrap();
+    pair.catch_up(true).await;
+    assert!(replica.get("items", &first[0].key).unwrap().is_some());
+    let error = replica
+        .write_batch_with("items", ops, &opts, "worker")
+        .unwrap_err();
+    assert!(matches!(
+        error.code.as_str(),
+        "IDEMPOTENCY_EXPIRED" | "HISTORY_CONFLICT"
+    ));
+    drop(old_snapshot);
+    assert_eq!(
+        replica
+            .query("items", Query::default())
+            .unwrap()
+            .documents
+            .len(),
+        1
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn checked_batches_and_generic_publications_survive_replication_and_switch() {
+    let pair = Pair::new().await;
+    let id = pair.a.create_tenant("generic-kv").unwrap().id;
+    let primary = pair.a.tenant(id).unwrap();
+    primary.create_collection("data").unwrap();
+    let config = primary
+        .put("data", json!({"_key":"config","value":1}), None)
+        .unwrap();
+    let request = vec![
+        WriteOp::Check {
+            key: "config".into(),
+            if_rev: config.rev,
+        },
+        WriteOp::Put {
+            document: json!({"_key":"row","value":2}),
+            if_rev: Some(0),
+        },
+    ];
+    let opts = WriteOptions {
+        expected_history: Some(config.history),
+        operation_id: Some("checked".into()),
+        ..Default::default()
+    };
+    let committed = primary
+        .write_batch_with("data", request.clone(), &opts, "writer")
+        .unwrap();
+    let publication = primary
+        .publish_dataset(
+            "catalog",
+            Publication {
+                version: Uuid::new_v4(),
+                collection: "data".into(),
+                lookup: String::new(),
+                expected_version: None,
+                retry_token: None,
+            },
+        )
+        .unwrap();
+    pair.catch_up(false).await;
+    let replica = pair.b.tenant(id).unwrap();
+    let read = replica
+        .read_published(
+            "catalog",
+            Some(publication.version),
+            &[ReadRequest::Get { key: "row".into() }],
+        )
+        .unwrap();
+    let ReadResult::Get {
+        document: Some(row),
+    } = &read.result.results[0]
+    else {
+        panic!()
+    };
+    assert_eq!(row["value"], 2);
+    pair.sa.switchover().await.unwrap();
+    pair.catch_up(true).await;
+    let retry = replica
+        .write_batch_with("data", request, &opts, "writer")
+        .unwrap();
+    assert_eq!(retry[0].rev, committed[0].rev);
+    assert_eq!(
+        replica
+            .query_published("catalog", None, Query::default())
+            .unwrap()
+            .result
+            .documents
+            .len(),
+        2
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn client_read_apis_preserve_positions_and_pin_all_cursor_forms() {
+    use tenant_kv::client::{Client, ClientReadOptions, ReadPosition};
+    let pair = Pair::new().await;
+    let id = pair.a.create_tenant("client-reads").unwrap().id;
+    let t = pair.a.tenant(id).unwrap();
+    for collection in ["data", "versioned"] {
+        t.create_collection(collection).unwrap();
+        for key in ["a", "b", "c"] {
+            t.put(collection, json!({"_key":key,"ip":key,"owner":key}), None)
+                .unwrap();
+        }
+        t.create_index(
+            collection,
+            IndexSpec {
+                name: "ip".into(),
+                fields: vec![IndexField {
+                    field: "/ip".into(),
+                    order: Order::Asc,
+                }],
+                unique: true,
+                include: vec!["/owner".into()],
+            },
+        )
+        .unwrap();
+        t.create_lookup(
+            collection,
+            LookupDefinition {
+                name: "owners".into(),
+                index: "ip".into(),
+                select: vec!["/owner".into()],
+                mode: MatchMode::All,
+                max_matches: 100,
+            },
+        )
+        .unwrap();
+    }
+    let published = t
+        .publish_dataset(
+            "assets",
+            Publication {
+                version: Uuid::new_v4(),
+                collection: "versioned".into(),
+                lookup: "owners".into(),
+                expected_version: None,
+                retry_token: None,
+            },
+        )
+        .unwrap();
+    pair.catch_up(false).await;
+    let client = Client::new(&[pair.ua.clone(), pair.ub.clone()], ADMIN.into(), id).unwrap();
+    let opts = ClientReadOptions::default();
+    assert_eq!(
+        client
+            .multi_get("data", &["a".into(), "absent".into(), "a".into()], &opts)
+            .await
+            .unwrap()
+            .iter()
+            .map(Option::is_some)
+            .collect::<Vec<_>>(),
+        vec![true, false, true]
+    );
+    assert_eq!(
+        client
+            .lookup_many("data", "owners", &[json!({"ip":"a"})], &opts)
+            .await
+            .unwrap()
+            .matches,
+        vec![vec![json!({"owner":"a"})]]
+    );
+    assert_eq!(
+        client
+            .published_dataset("assets", &opts)
+            .await
+            .unwrap()
+            .version,
+        published.version
+    );
+    assert_eq!(
+        client
+            .lookup_published(
+                "assets",
+                Some(published.version),
+                &[json!({"ip":"b"})],
+                &opts
+            )
+            .await
+            .unwrap()
+            .result
+            .matches,
+        vec![vec![json!({"owner":"b"})]]
+    );
+    let page = Query {
+        limit: 1,
+        ..Default::default()
+    };
+    let first = client.query("data", page.clone(), &opts).await.unwrap();
+    assert_eq!(first.documents[0]["_key"], "a");
+    assert!(client.explain("data", &page, &opts).await.unwrap().scan);
+    let batch = client
+        .read_batch(
+            &[ReadOperation {
+                collection: "data".into(),
+                request: ReadRequest::Query {
+                    query: page.clone(),
+                },
+            }],
+            &opts,
+        )
+        .await
+        .unwrap();
+    let ReadResult::Query {
+        result: batch_query,
+    } = &batch.results[0]
+    else {
+        panic!("query response")
+    };
+    let published_batch = client
+        .read_published(
+            "assets",
+            Some(published.version),
+            &[ReadRequest::Query {
+                query: page.clone(),
+            }],
+            &opts,
+        )
+        .await
+        .unwrap();
+    let ReadResult::Query {
+        result: published_query,
+    } = &published_batch.result.results[0]
+    else {
+        panic!("query response")
+    };
+    for cursor in [
+        first.cursor.as_ref(),
+        batch_query.cursor.as_ref(),
+        published_query.cursor.as_ref(),
+    ] {
+        assert!(cursor.unwrap().starts_with("tkv1."));
+    }
+    let wrong_tenant = Client::new(
+        &[pair.ua.clone(), pair.ub.clone()],
+        ADMIN.into(),
+        Uuid::new_v4(),
+    )
+    .unwrap();
+    assert_eq!(
+        wrong_tenant
+            .release_cursor(first.cursor.as_ref().unwrap())
+            .await
+            .unwrap_err()
+            .code,
+        "CURSOR_EXPIRED"
+    );
+    // A fresh read with a write position skips the lagging replica, without waiting five seconds.
+    let write = t.put("data", json!({"_key":"fresh"}), None).unwrap();
+    let fresh = ClientReadOptions {
+        minimum: Some(ReadPosition::from(&write)),
+        read: ReadOptions {
+            timeout_ms: Some(500),
+            ..Default::default()
+        },
+    };
+    assert!(
+        client
+            .multi_get("data", &["fresh".into()], &fresh)
+            .await
+            .unwrap()[0]
+            .is_some()
+    );
+    pair.catch_up(false).await;
+    assert_eq!(
+        client
+            .query(
+                "data",
+                Query {
+                    cursor: first.cursor.clone(),
+                    ..page.clone()
+                },
+                &fresh
+            )
+            .await
+            .unwrap_err()
+            .code,
+        "SNAPSHOT_TOO_OLD"
+    );
+    let wrong = ClientReadOptions {
+        minimum: Some(ReadPosition {
+            history: "other".into(),
+            seq: 0,
+        }),
+        ..Default::default()
+    };
+    assert_eq!(
+        client
+            .query("data", page.clone(), &wrong)
+            .await
+            .unwrap_err()
+            .code,
+        "HISTORY_CONFLICT"
+    );
+    let strict = ClientReadOptions {
+        read: ReadOptions {
+            allow_full_scan: false,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    assert_eq!(
+        client
+            .query("data", page.clone(), &strict)
+            .await
+            .unwrap_err()
+            .code,
+        "SCAN_NOT_ALLOWED"
+    );
+    assert_eq!(
+        client
+            .query_published("assets", Some(published.version), page.clone(), &strict)
+            .await
+            .unwrap_err()
+            .code,
+        "SCAN_NOT_ALLOWED"
+    );
+    assert_eq!(
+        client
+            .read_published(
+                "assets",
+                Some(published.version),
+                &[ReadRequest::Query {
+                    query: page.clone()
+                }],
+                &strict
+            )
+            .await
+            .unwrap_err()
+            .code,
+        "SCAN_NOT_ALLOWED"
+    );
+    // Removing the other node cannot affect continuations or release on the issuing replica.
+    pair.servers[0].abort();
+    let short = ClientReadOptions {
+        read: ReadOptions {
+            timeout_ms: Some(500),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    for cursor in [first.cursor, batch_query.cursor.clone()] {
+        let next = client
+            .query(
+                "data",
+                Query {
+                    cursor,
+                    ..page.clone()
+                },
+                &short,
+            )
+            .await
+            .unwrap();
+        assert_eq!(next.documents[0]["_key"], "b");
+        assert_eq!(next.snapshot_seq, first.snapshot_seq);
+        client
+            .release_cursor(next.cursor.as_ref().unwrap())
+            .await
+            .unwrap();
+        assert_eq!(
+            client
+                .query(
+                    "data",
+                    Query {
+                        cursor: next.cursor,
+                        ..page.clone()
+                    },
+                    &short
+                )
+                .await
+                .unwrap_err()
+                .code,
+            "CURSOR_EXPIRED"
+        );
+    }
+    let next = client
+        .query_published(
+            "assets",
+            Some(published.version),
+            Query {
+                cursor: published_query.cursor.clone(),
+                ..page
+            },
+            &short,
+        )
+        .await
+        .unwrap();
+    assert_eq!(next.result.documents[0]["_key"], "b");
+    client
+        .release_cursor(next.result.cursor.as_ref().unwrap())
+        .await
+        .unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn client_fallback_never_bypasses_budgets_or_cursor_affinity_and_checks_capabilities() {
+    use axum::{
+        body::Body,
+        http::{Request, Response, StatusCode},
+        routing::any,
+    };
+    use std::sync::{Arc, Mutex};
+    use tenant_kv::client::{Client, ClientReadOptions};
+    let tenant = Uuid::new_v4();
+    let mode = Arc::new(Mutex::new("budget"));
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let cursor = Uuid::new_v4();
+    let mut nodes = Vec::new();
+    let mut servers = Vec::new();
+    for writable in [true, false] {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        nodes.push(format!("http://{}", listener.local_addr().unwrap()));
+        let mode = mode.clone();
+        let calls = calls.clone();
+        let router = axum::Router::new().fallback(any(move |request: Request<Body>| {
+            let mode = mode.clone(); let calls = calls.clone();
+            async move {
+                let mode = *mode.lock().unwrap();
+                let context = request.uri().path().ends_with("/context");
+                calls.lock().unwrap().push((writable, context));
+                if mode == "cache" && context { tokio::time::sleep(Duration::from_millis(20)).await; }
+                if (mode == "slow" && !context) || (mode == "slow_primary" && writable && context) { tokio::time::sleep(Duration::from_secs(2)).await; }
+                let (status, value) = if context {
+                    (StatusCode::OK,json!({"tenant":tenant,"history":"history","applied_seq":5,"writable":writable || mode == "dual"}))
+                } else if !writable && matches!(mode, "budget" | "unavailable") {
+                    let code = if mode == "budget" {"RESOURCE_EXHAUSTED"} else {"UNAVAILABLE"};
+                    (StatusCode::SERVICE_UNAVAILABLE,json!({"error":{"code":code,"message":"injected read failure"}}))
+                } else {
+                    assert_eq!(request.headers()["x-tkv-max-scan"],"12");
+                    (StatusCode::OK,json!({"documents":[{"_key":"a"}],"cursor":cursor,"snapshot_seq":5,"plan":{"indexes":[],"covering":false,"extra_sort":false,"scan":true},"stats":ReadStats::default()}))
+                };
+                let mut response = Response::builder().status(status).header("content-type","application/json");
+                if mode != "legacy" { response = response.header("x-tkv-read-controls","1"); }
+                response.body(Body::from(serde_json::to_vec(&value).unwrap())).unwrap()
+            }
+        }));
+        servers.push(tokio::spawn(async move {
+            axum::serve(listener, router).await.unwrap();
+        }));
+    }
+    let client = Client::new(&nodes, ADMIN.into(), tenant).unwrap();
+    let options = ClientReadOptions {
+        read: ReadOptions {
+            max_scan: Some(12),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    assert_eq!(
+        client
+            .query("data", Query::default(), &options)
+            .await
+            .unwrap_err()
+            .code,
+        "RESOURCE_EXHAUSTED"
+    );
+    assert_eq!(
+        calls
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(_, context)| !context)
+            .copied()
+            .collect::<Vec<_>>(),
+        vec![(false, false)]
+    );
+    calls.lock().unwrap().clear();
+    *mode.lock().unwrap() = "unavailable";
+    assert!(
+        client
+            .query("data", Query::default(), &options)
+            .await
+            .is_ok()
+    );
+    assert_eq!(
+        calls
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(_, context)| !context)
+            .copied()
+            .collect::<Vec<_>>(),
+        vec![(false, false), (true, false)]
+    );
+    *mode.lock().unwrap() = "ok";
+    let page = client
+        .query("data", Query::default(), &options)
+        .await
+        .unwrap();
+    calls.lock().unwrap().clear();
+    *mode.lock().unwrap() = "unavailable";
+    assert_eq!(
+        client
+            .query(
+                "data",
+                Query {
+                    cursor: page.cursor,
+                    ..Default::default()
+                },
+                &options
+            )
+            .await
+            .unwrap_err()
+            .code,
+        "UNAVAILABLE"
+    );
+    assert_eq!(
+        *calls.lock().unwrap(),
+        vec![(false, false)],
+        "continuation must not discover or fall back"
+    );
+    calls.lock().unwrap().clear();
+    *mode.lock().unwrap() = "legacy";
+    assert_eq!(
+        client
+            .query("data", Query::default(), &options)
+            .await
+            .unwrap_err()
+            .code,
+        "INCOMPATIBLE_VERSION"
+    );
+    assert_eq!(
+        *calls.lock().unwrap(),
+        vec![(false, false)],
+        "a warm route still checks each data response capability"
+    );
+    calls.lock().unwrap().clear();
+    let cold = Client::new(&nodes, ADMIN.into(), tenant).unwrap();
+    assert_eq!(
+        cold.query("data", Query::default(), &options)
+            .await
+            .unwrap_err()
+            .code,
+        "INCOMPATIBLE_VERSION"
+    );
+    assert!(calls.lock().unwrap().iter().all(|(_, context)| *context));
+    *mode.lock().unwrap() = "cache";
+    calls.lock().unwrap().clear();
+    let cached = Client::new(&nodes, ADMIN.into(), tenant).unwrap();
+    let barrier = Arc::new(tokio::sync::Barrier::new(16));
+    let mut tasks = Vec::new();
+    for _ in 0..16 {
+        let client = cached.clone();
+        let options = options.clone();
+        let barrier = barrier.clone();
+        tasks.push(tokio::spawn(async move {
+            barrier.wait().await;
+            client
+                .query("data", Query::default(), &options)
+                .await
+                .unwrap()
+        }));
+    }
+    for task in tasks {
+        task.await.unwrap();
+    }
+    assert_eq!(
+        calls
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(_, context)| *context)
+            .count(),
+        2,
+        "one discovery shared by all clones"
+    );
+    cached
+        .query("data", Query::default(), &options)
+        .await
+        .unwrap();
+    assert_eq!(
+        calls
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(_, context)| *context)
+            .count(),
+        2
+    );
+    tokio::time::sleep(Duration::from_millis(1050)).await;
+    cached
+        .query("data", Query::default(), &options)
+        .await
+        .unwrap();
+    assert_eq!(
+        calls
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(_, context)| *context)
+            .count(),
+        4
+    );
+    *mode.lock().unwrap() = "dual";
+    assert_eq!(
+        client.write_context().await.unwrap_err().code,
+        "REPLICATION_CONFLICT"
+    );
+    *mode.lock().unwrap() = "slow_primary";
+    let bounded_discovery = ClientReadOptions {
+        read: ReadOptions {
+            timeout_ms: Some(200),
+            max_scan: Some(12),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    assert!(
+        client
+            .query("data", Query::default(), &bounded_discovery)
+            .await
+            .is_ok(),
+        "a slow peer must leave time to read a healthy node"
+    );
+    *mode.lock().unwrap() = "slow";
+    let start = Instant::now();
+    let short = ClientReadOptions {
+        read: ReadOptions {
+            timeout_ms: Some(30),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    assert_eq!(
+        client
+            .query("data", Query::default(), &short)
+            .await
+            .unwrap_err()
+            .code,
+        "DEADLINE_EXCEEDED"
+    );
+    assert!(start.elapsed() < Duration::from_secs(1));
+    let cancel = ReadCancellation::default();
+    let token = cancel.clone();
+    let cancel_task = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        token.cancel();
+    });
+    let start = Instant::now();
+    let cancellable = ClientReadOptions {
+        read: ReadOptions {
+            cancellation: Some(cancel),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    assert_eq!(
+        client
+            .query("data", Query::default(), &cancellable)
+            .await
+            .unwrap_err()
+            .code,
+        "CANCELLED"
+    );
+    assert!(start.elapsed() < Duration::from_secs(1));
+    cancel_task.await.unwrap();
+    for server in servers {
+        server.abort();
+    }
+}

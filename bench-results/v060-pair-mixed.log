@@ -1,0 +1,25 @@
+{
+  "result": "passed",
+  "version": "0.6.0",
+  "node_versions": [
+    "0.5.2",
+    "0.6.0"
+  ],
+  "phases": [
+    "checkpoint initialization, isolation, indexes and replica read-only",
+    "4000 document updates streamed with atomic batch and covering lookup verification",
+    "replica SIGKILL, restart and WAL resume",
+    "planned A-to-B switchover and read-your-writes token",
+    "both nodes restart with stale initial configs; B-to-A switch",
+    "explicit emergency promotion after stopping old primary; no automatic failback"
+  ],
+  "tenants": 2,
+  "documents": 200,
+  "batch_requests": 48,
+  "batch_http_p50_ms": 6.685672007733956,
+  "batch_http_p99_ms": 79.92197197745554,
+  "planned_switchover_ms": 8.725838997634128,
+  "final_primary": 1,
+  "faultpoints": false,
+  "note": "Loopback functional validation in one OS; not independent hardware failure or a throughput benchmark."
+}

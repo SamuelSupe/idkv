@@ -1,0 +1,74 @@
+{
+  "version": "61137754-11b9-4d7e-bae3-149ed8d96fa4",
+  "result": {
+    "results": [
+      {
+        "op": "get",
+        "document": {
+          "_key": "record-1",
+          "_rev": 5,
+          "value": "ready"
+        }
+      },
+      {
+        "op": "multi_get",
+        "documents": [
+          {
+            "_key": "progress",
+            "_rev": 5,
+            "offset": 1
+          },
+          null
+        ]
+      },
+      {
+        "op": "query",
+        "result": {
+          "documents": [
+            {
+              "_key": "progress",
+              "_rev": 5,
+              "offset": 1
+            },
+            {
+              "_key": "record-1",
+              "_rev": 5,
+              "value": "ready"
+            },
+            {
+              "_key": "rules",
+              "_rev": 3,
+              "enabled": true
+            }
+          ],
+          "cursor": null,
+          "snapshot_seq": 6,
+          "plan": {
+            "indexes": [],
+            "covering": false,
+            "extra_sort": false,
+            "scan": true
+          },
+          "stats": {
+            "candidate_files": 0,
+            "scanned_entries": 3,
+            "blocks_read": 0,
+            "decompressed_bytes": 0,
+            "cache_hits": 0,
+            "document_reads": 3
+          }
+        }
+      }
+    ],
+    "history": "c9c6204e-4050-4bef-afb8-aafeb958e187:97c014b1-f993-4a64-a13d-9eb2b1f5c8d7:00000000-0000-0000-0000-000000000000",
+    "snapshot_seq": 6,
+    "stats": {
+      "candidate_files": 0,
+      "scanned_entries": 3,
+      "blocks_read": 0,
+      "decompressed_bytes": 0,
+      "cache_hits": 0,
+      "document_reads": 6
+    }
+  }
+}

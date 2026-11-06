@@ -1,0 +1,9 @@
+seed 0/80000
+seed 10000/80000
+seed 20000/80000
+seed 30000/80000
+seed 40000/80000
+seed 50000/80000
+seed 60000/80000
+seed 70000/80000
+{"engine_memory_bytes":8533316,"metrics":{"commits":808,"compaction_read_bytes":342014276,"compaction_write_bytes":342129191,"document_bytes":343040000,"flush_bytes":336726714,"fsyncs":945,"scheduler":{"completed_jobs":21550,"queue_wait_ns":552015835,"queued_jobs":0},"wal_bytes":384744708,"write_lock_wait_ns":19489607},"mode":"seed","payload_bytes":327680000,"rows":80000}

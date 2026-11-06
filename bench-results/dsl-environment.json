@@ -1,0 +1,39 @@
+{
+  "measured_at_utc": "2026-11-05T01:26:56.760955+00:00",
+  "platform": "Linux-7.2.12-orbstack-00394-gbecdd6130068-aarch64-with-glibc2.42",
+  "machine": "aarch64",
+  "logical_cpus": 18,
+  "affinity_for_benchmarks": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "meminfo": [
+    "MemTotal:       32880040 kB",
+    "MemFree:        17598228 kB",
+    "MemAvailable:   20882952 kB"
+  ],
+  "filesystem": "SOURCE                                                        FSTYPE TARGET\n/dev/vdb1[/scon/containers/01KPWWT86VG04KB7RJYY3D99QE/rootfs] btrfs  /",
+  "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)",
+  "cargo": "cargo 1.90.0 (840b83a10 2025-07-30)",
+  "version": "0.3.0",
+  "rows": 10000,
+  "payload_bytes": 512,
+  "indexes": 1,
+  "global_memory_budget_bytes": 4294967296,
+  "tenant_memory_budget_bytes": 536870912,
+  "cgroup_memory_limit_applied": false,
+  "before_binary_sha256": "8fbded3f21cec30264f5293e3f93a3f60131ef90475ae0070a70d1b3e467dae4",
+  "after_binary_sha256": "a42fc4ea8dfa1ebb9cb2484191c19946f4ef292a5b262e528d711bd8808dca13",
+  "dsl_benchmark_binary_sha256": "c1c6d25255568b6181f7ca9439f50f7bb4959deb1ad0ab31b6c0ba1447153d65",
+  "identical_native_harness": true,
+  "native_harness_sha256": "c712bdd7316cfd885c863f2bcf6ece5ed9857673916411be442bc0a5d34ed241",
+  "server_sha256": "7b42464b2afb6c5f55d8efe87ae2841293a7e5251eb618454fbd9b1717f5e505",
+  "cache": "Point/lookup block cache warmed; scan OS page cache warm, engine scan admission bypassed; no cache eviction",
+  "runtime_note": "OrbStack Linux VM on Apple host; no bare-metal or host-device durability qualification"
+}

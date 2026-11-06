@@ -1,0 +1,102 @@
+{
+  "before": {
+    "scan": {
+      "p50_us": 12002.111,
+      "p95_us": 13930.367,
+      "p99_us": 20256.256,
+      "calls_per_second": 82.4007556196094,
+      "io_jobs_per_call": 500.12,
+      "queue_wait_us_per_call": 3773.3703330000003,
+      "p99_runs_us": [
+        20189.173,
+        20256.256,
+        20594.299
+      ]
+    },
+    "replica": {
+      "lookup_p50_us": 3.042,
+      "lookup_p95_us": 5.667,
+      "lookup_p99_us": 27.875,
+      "lookup_max_us": 2207.116,
+      "catchup_ms": 185.628608,
+      "transactions_per_second": 44131.12875360246,
+      "light_tenant_ms": 7.5220590000000005,
+      "peak_replica_budget_bytes": 5220251,
+      "p99_runs_us": [
+        27.875,
+        30.0,
+        26.667
+      ],
+      "catchup_runs_ms": [
+        171.995576,
+        185.628608,
+        207.172947
+      ],
+      "sample_counts": [
+        165437,
+        176768,
+        225022
+      ]
+    }
+  },
+  "after": {
+    "scan": {
+      "p50_us": 6513.641,
+      "p95_us": 7083.056,
+      "p99_us": 7857.144,
+      "calls_per_second": 154.13038162809957,
+      "io_jobs_per_call": 126.064,
+      "queue_wait_us_per_call": 1076.9530300000001,
+      "p99_runs_us": [
+        7857.144,
+        10074.816,
+        7451.427
+      ]
+    },
+    "replica": {
+      "lookup_p50_us": 2.375,
+      "lookup_p95_us": 5.875,
+      "lookup_p99_us": 25.876,
+      "lookup_max_us": 1983.171,
+      "catchup_ms": 240.04102999999998,
+      "transactions_per_second": 34127.4989529915,
+      "light_tenant_ms": 10.702193000000001,
+      "peak_replica_budget_bytes": 5978086,
+      "p99_runs_us": [
+        27.875,
+        25.876,
+        23.501
+      ],
+      "catchup_runs_ms": [
+        233.06134600000001,
+        240.04102999999998,
+        269.209388
+      ],
+      "sample_counts": [
+        256231,
+        258902,
+        316130
+      ]
+    }
+  },
+  "change_percent": {
+    "scan": {
+      "p50_us": -45.729205470604306,
+      "p95_us": -49.15384497766642,
+      "p99_us": -61.21127221140965,
+      "calls_per_second": 87.0497187424095,
+      "io_jobs_per_call": -74.79324962009117,
+      "queue_wait_us_per_call": -71.45912182057748
+    },
+    "replica": {
+      "lookup_p50_us": -21.92636423405654,
+      "lookup_p95_us": 3.670372331039351,
+      "lookup_p99_us": -7.171300448430484,
+      "lookup_max_us": -10.146498870018606,
+      "catchup_ms": 29.31251954440124,
+      "transactions_per_second": -22.66796722210365,
+      "light_tenant_ms": 42.27744025937579,
+      "peak_replica_budget_bytes": 14.51721382745772
+    }
+  }
+}

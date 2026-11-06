@@ -1,0 +1,7 @@
+{
+  "version": "0.2.0",
+  "paths": 32,
+  "schemas": 29,
+  "validator": "openapi-spec-validator 0.9.0",
+  "result": "passed"
+}

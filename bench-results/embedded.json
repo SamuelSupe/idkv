@@ -1,0 +1,30 @@
+{
+  "lookup": {
+    "matches": [
+      [
+        {
+          "ip": "10.0.0.1",
+          "owner": "platform",
+          "service": "edge"
+        }
+      ],
+      [],
+      []
+    ],
+    "snapshot_seq": 5,
+    "stats": {
+      "blocks_read": 0,
+      "cache_hits": 0,
+      "candidate_files": 0,
+      "decompressed_bytes": 0,
+      "document_reads": 0,
+      "scanned_entries": 1
+    }
+  },
+  "tenant": "90dd77cd-d87e-4ee2-9b75-5411768a17cd",
+  "write": {
+    "deleted": false,
+    "key": "gateway",
+    "rev": 5
+  }
+}

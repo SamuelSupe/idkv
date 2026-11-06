@@ -1,0 +1,410 @@
+{
+  "hot_million": [
+    {
+      "disk_bytes": 1181718351,
+      "engine_memory_bytes": 95074804,
+      "io": {
+        "commits": 751,
+        "compaction_read_bytes": 138046826,
+        "compaction_write_bytes": 138181364,
+        "document_bytes": 18316100,
+        "flush_bytes": 17366495,
+        "fsyncs": 753,
+        "scheduler": {
+          "completed_jobs": 110055,
+          "queue_wait_ns": 1449119558,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 27413248,
+        "write_lock_wait_ns": 76904549
+      },
+      "mode": "get",
+      "operations": 16300910,
+      "p50_us": 3,
+      "p95_us": 71,
+      "p99_us": 169,
+      "payload_bytes": 1024,
+      "phase": "measure",
+      "qps": 1085630.190613551,
+      "readers": 16,
+      "rows": 1000000,
+      "rss": "VmRSS:\t  276272 kB",
+      "seconds": 15.015159067,
+      "write_rate": 1000.3224030447095,
+      "writer_drain_s": 0.004663817999999154,
+      "writes": 15020,
+      "writes_total": 15020
+    },
+    {
+      "disk_bytes": 1183566975,
+      "engine_memory_bytes": 117159975,
+      "io": {
+        "commits": 1502,
+        "compaction_read_bytes": 170249932,
+        "compaction_write_bytes": 154498842,
+        "document_bytes": 36632200,
+        "flush_bytes": 34732745,
+        "fsyncs": 1506,
+        "scheduler": {
+          "completed_jobs": 971488,
+          "queue_wait_ns": 42463058473,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 54826496,
+        "write_lock_wait_ns": 80394148
+      },
+      "mode": "indexed_query",
+      "operations": 155537,
+      "p50_us": 1496,
+      "p95_us": 2359,
+      "p99_us": 2934,
+      "payload_bytes": 1024,
+      "phase": "measure",
+      "qps": 10365.569966183324,
+      "readers": 16,
+      "rows": 1000000,
+      "rss": "VmRSS:\t  177324 kB",
+      "seconds": 15.005156543,
+      "write_rate": 1000.9892237350183,
+      "writer_drain_s": 0.01581307100000018,
+      "writes": 15020,
+      "writes_total": 15020
+    },
+    {
+      "disk_bytes": 1198859732,
+      "engine_memory_bytes": 194894029,
+      "io": {
+        "commits": 2253,
+        "compaction_read_bytes": 251004387,
+        "compaction_write_bytes": 232813467,
+        "document_bytes": 54948300,
+        "flush_bytes": 52122228,
+        "fsyncs": 2259,
+        "scheduler": {
+          "completed_jobs": 1057225,
+          "queue_wait_ns": 45060406230,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 82239744,
+        "write_lock_wait_ns": 97060713
+      },
+      "mode": "lookup_1000",
+      "operations": 31349,
+      "p50_us": 7219,
+      "p95_us": 13810,
+      "p99_us": 18472,
+      "payload_bytes": 1024,
+      "phase": "measure",
+      "qps": 2088.943911594964,
+      "readers": 16,
+      "rows": 1000000,
+      "rss": "VmRSS:\t  287104 kB",
+      "seconds": 15.007104703,
+      "write_rate": 1000.8592794716374,
+      "writer_drain_s": 0.012441750000000695,
+      "writes": 15020,
+      "writes_total": 15020
+    }
+  ],
+  "hot_ten_million": [
+    {
+      "disk_bytes": 11669026008,
+      "engine_memory_bytes": 91759845,
+      "io": {
+        "commits": 751,
+        "compaction_read_bytes": 0,
+        "compaction_write_bytes": 0,
+        "document_bytes": 18316100,
+        "flush_bytes": 17409072,
+        "fsyncs": 753,
+        "scheduler": {
+          "completed_jobs": 6742,
+          "queue_wait_ns": 80695184,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 27413248,
+        "write_lock_wait_ns": 154741841
+      },
+      "mode": "get",
+      "operations": 16537878,
+      "p50_us": 3,
+      "p95_us": 70,
+      "p99_us": 167,
+      "payload_bytes": 1024,
+      "phase": "measure",
+      "qps": 1101451.24164222,
+      "readers": 16,
+      "rows": 10000000,
+      "rss": "VmRSS:\t  289556 kB",
+      "seconds": 15.014625591,
+      "write_rate": 1000.3579449229304,
+      "writer_drain_s": 0.004522287000000347,
+      "writes": 15020,
+      "writes_total": 15020
+    },
+    {
+      "disk_bytes": 11754057561,
+      "engine_memory_bytes": 151225562,
+      "io": {
+        "commits": 1502,
+        "compaction_read_bytes": 41201291,
+        "compaction_write_bytes": 41212545,
+        "document_bytes": 36632200,
+        "flush_bytes": 27841716,
+        "fsyncs": 1505,
+        "scheduler": {
+          "completed_jobs": 944845,
+          "queue_wait_ns": 52649201371,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 54826496,
+        "write_lock_wait_ns": 236149553
+      },
+      "mode": "indexed_query",
+      "operations": 139835,
+      "p50_us": 1656,
+      "p95_us": 2628,
+      "p99_us": 3273,
+      "payload_bytes": 1024,
+      "phase": "measure",
+      "qps": 9320.375085246424,
+      "readers": 16,
+      "rows": 10000000,
+      "rss": "VmRSS:\t  202572 kB",
+      "seconds": 15.00315156,
+      "write_rate": 999.7899401344181,
+      "writer_drain_s": 0.017710066000001135,
+      "writes": 15000,
+      "writes_total": 15020
+    },
+    {
+      "disk_bytes": 12144117924,
+      "engine_memory_bytes": 250158514,
+      "io": {
+        "commits": 2253,
+        "compaction_read_bytes": 83308545,
+        "compaction_write_bytes": 83337149,
+        "document_bytes": 54948300,
+        "flush_bytes": 36747521,
+        "fsyncs": 2257,
+        "scheduler": {
+          "completed_jobs": 1064386,
+          "queue_wait_ns": 57584809262,
+          "queued_jobs": 1
+        },
+        "wal_bytes": 82239744,
+        "write_lock_wait_ns": 257750660
+      },
+      "mode": "lookup_1000",
+      "operations": 26220,
+      "p50_us": 8681,
+      "p95_us": 15957,
+      "p99_us": 20455,
+      "payload_bytes": 1024,
+      "phase": "measure",
+      "qps": 1746.9687530480112,
+      "readers": 16,
+      "rows": 10000000,
+      "rss": "VmRSS:\t  304788 kB",
+      "seconds": 15.008854597,
+      "write_rate": 1000.7425885118661,
+      "writer_drain_s": 0.01039573900000157,
+      "writes": 15020,
+      "writes_total": 15020
+    }
+  ],
+  "constrained_disk": {
+    "disk_bytes": 11643230586,
+    "engine_memory_bytes": 278522475,
+    "phase": "verified",
+    "rows": 10000000,
+    "rss": "VmRSS:\t  267452 kB",
+    "seconds": 74.46692444,
+    "stats": {
+      "blocks_read": 843059,
+      "cache_hits": 4958,
+      "candidate_files": 1372,
+      "decompressed_bytes": 12630809037,
+      "document_reads": 0,
+      "scanned_entries": 10015520
+    }
+  },
+  "cold_start_probes": [
+    {
+      "engine_memory_bytes": 138163683,
+      "levels": {
+        "0": 1,
+        "1": 7,
+        "2": 147,
+        "3": 1312
+      },
+      "mode": "random_get",
+      "operations": 5000,
+      "p50_us": 76,
+      "p95_us": 101,
+      "p99_us": 195,
+      "phase": "probe",
+      "rows": 10000000,
+      "seconds": 0.408849292,
+      "stats": null
+    },
+    {
+      "engine_memory_bytes": 138163683,
+      "levels": {
+        "0": 1,
+        "1": 7,
+        "2": 147,
+        "3": 1312
+      },
+      "mode": "missing_get",
+      "operations": 5000,
+      "p50_us": 0,
+      "p95_us": 1,
+      "p99_us": 1,
+      "phase": "probe",
+      "rows": 10000000,
+      "seconds": 0.004249408,
+      "stats": null
+    },
+    {
+      "engine_memory_bytes": 278556364,
+      "levels": {
+        "0": 1,
+        "1": 7,
+        "2": 147,
+        "3": 1312
+      },
+      "mode": "random_lookup_1000",
+      "operations": 20,
+      "p50_us": 37762,
+      "p95_us": 67660,
+      "p99_us": 67660,
+      "phase": "probe",
+      "rows": 10000000,
+      "seconds": 0.8554285,
+      "stats": {
+        "blocks_read": 22244,
+        "cache_hits": 15307,
+        "candidate_files": 497,
+        "decompressed_bytes": 200500761,
+        "document_reads": 0,
+        "scanned_entries": 19999
+      }
+    },
+    {
+      "engine_memory_bytes": 278517994,
+      "levels": {
+        "0": 1,
+        "1": 7,
+        "2": 147,
+        "3": 1312
+      },
+      "mode": "body_lookup_1000",
+      "operations": 20,
+      "p50_us": 120104,
+      "p95_us": 136351,
+      "p99_us": 136351,
+      "phase": "probe",
+      "rows": 10000000,
+      "seconds": 2.404337706,
+      "stats": {
+        "blocks_read": 53009,
+        "cache_hits": 23898,
+        "candidate_files": 14545,
+        "decompressed_bytes": 560973612,
+        "document_reads": 20000,
+        "scanned_entries": 20000
+      }
+    },
+    {
+      "engine_memory_bytes": 278517994,
+      "levels": {
+        "0": 1,
+        "1": 7,
+        "2": 147,
+        "3": 1312
+      },
+      "mode": "missing_lookup_1000",
+      "operations": 20,
+      "p50_us": 744,
+      "p95_us": 794,
+      "p99_us": 794,
+      "phase": "probe",
+      "rows": 10000000,
+      "seconds": 0.015718497,
+      "stats": {
+        "blocks_read": 0,
+        "cache_hits": 0,
+        "candidate_files": 0,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 0
+      }
+    }
+  ],
+  "http": {
+    "mode": "http_keepalive_get",
+    "readers": 16,
+    "operations": 320000,
+    "seconds": 13.763493022997864,
+    "qps": 23249.911883945573,
+    "p50_us": 523.999,
+    "p95_us": 1800.289,
+    "p99_us": 2673.329,
+    "notes": "loopback Python standard-library client; 1 hot 1KiB payload; no concurrent writes"
+  },
+  "multi_tenant": {
+    "active_tenants": 8,
+    "cold_closed": 32,
+    "cold_create_open_p99_us": 36263,
+    "cold_reopen_p99_us": 101,
+    "cold_tenants": 32,
+    "duration_s": 120,
+    "kind": "summary",
+    "memory_limit": 536870912,
+    "peak_engine_memory": 34438582
+  },
+  "ten_million_measured_write_amplification": 3.6820868707494134,
+  "tenant_io_job_shares": [
+    {
+      "name": "active-0",
+      "jobs": 172845,
+      "share": 0.48601660124396856
+    },
+    {
+      "name": "active-1",
+      "jobs": 173542,
+      "share": 0.48797647032358926
+    },
+    {
+      "name": "active-2",
+      "jobs": 1546,
+      "share": 0.004347141459244846
+    },
+    {
+      "name": "active-3",
+      "jobs": 1543,
+      "share": 0.004338705867797411
+    },
+    {
+      "name": "active-4",
+      "jobs": 1541,
+      "share": 0.004333082140165787
+    },
+    {
+      "name": "active-5",
+      "jobs": 1541,
+      "share": 0.004333082140165787
+    },
+    {
+      "name": "active-6",
+      "jobs": 1539,
+      "share": 0.004327458412534164
+    },
+    {
+      "name": "active-7",
+      "jobs": 1539,
+      "share": 0.004327458412534164
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "label": "before-paced",
+  "mode": "mixed_paced",
+  "exit": 0,
+  "seconds": 121.96085179699003,
+  "peak_rss_bytes": 41570304,
+  "peak_fds": 490
+}

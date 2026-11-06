@@ -1,0 +1,142 @@
+{
+  "0": {
+    "before": {
+      "catchup_ms": 182.096068,
+      "transactions_per_second": 44987.24266797458,
+      "lookup_p50_us": 2.875,
+      "lookup_p95_us": 5.459,
+      "lookup_p99_us": 28.208,
+      "lookup_max_us": 1940.129,
+      "reads_per_second": 975643.1329367553,
+      "light_tenant_ms": 2.5192140000000003,
+      "peak_replica_budget_bytes": 5208981,
+      "runs": [
+        {
+          "catchup_ms": 182.096068,
+          "lookup_p99_us": 26.084,
+          "lookup_samples": 197183,
+          "readers": 4,
+          "read_interval_us": 0
+        },
+        {
+          "catchup_ms": 186.42984700000002,
+          "lookup_p99_us": 28.208,
+          "lookup_samples": 181889,
+          "readers": 4,
+          "read_interval_us": 0
+        },
+        {
+          "catchup_ms": 141.41582599999998,
+          "lookup_p99_us": 28.458,
+          "lookup_samples": 131979,
+          "readers": 4,
+          "read_interval_us": 0
+        }
+      ]
+    },
+    "after": {
+      "catchup_ms": 222.975783,
+      "transactions_per_second": 36739.41577772147,
+      "lookup_p50_us": 2.25,
+      "lookup_p95_us": 5.583,
+      "lookup_p99_us": 23.334,
+      "lookup_max_us": 2439.714,
+      "reads_per_second": 1218091.921668462,
+      "light_tenant_ms": 3.9887170000000003,
+      "peak_replica_budget_bytes": 5195740,
+      "runs": [
+        {
+          "catchup_ms": 222.975783,
+          "lookup_p99_us": 21.334,
+          "lookup_samples": 271605,
+          "readers": 4,
+          "read_interval_us": 0
+        },
+        {
+          "catchup_ms": 161.89156599999998,
+          "lookup_p99_us": 25.459,
+          "lookup_samples": 188064,
+          "readers": 4,
+          "read_interval_us": 0
+        },
+        {
+          "catchup_ms": 295.74047399999995,
+          "lookup_p99_us": 23.334,
+          "lookup_samples": 378483,
+          "readers": 4,
+          "read_interval_us": 0
+        }
+      ]
+    }
+  },
+  "paced": {
+    "before": {
+      "catchup_ms": 361.844144,
+      "transactions_per_second": 45279.16306419484,
+      "lookup_p50_us": 3.958,
+      "lookup_p95_us": 8.958,
+      "lookup_p99_us": 28.542,
+      "lookup_max_us": 311.503,
+      "reads_per_second": 9960.08933614247,
+      "light_tenant_ms": 6.044684,
+      "peak_replica_budget_bytes": 5295271,
+      "runs": [
+        {
+          "catchup_ms": 262.691002,
+          "lookup_p99_us": 49.0,
+          "lookup_samples": 2613,
+          "readers": 16,
+          "read_interval_us": 1600
+        },
+        {
+          "catchup_ms": 476.845441,
+          "lookup_p99_us": 23.167,
+          "lookup_samples": 4754,
+          "readers": 16,
+          "read_interval_us": 1600
+        },
+        {
+          "catchup_ms": 361.844144,
+          "lookup_p99_us": 28.542,
+          "lookup_samples": 3604,
+          "readers": 16,
+          "read_interval_us": 1600
+        }
+      ]
+    },
+    "after": {
+      "catchup_ms": 372.33899599999995,
+      "transactions_per_second": 44002.91179815074,
+      "lookup_p50_us": 3.708,
+      "lookup_p95_us": 9.083,
+      "lookup_p99_us": 24.709,
+      "lookup_max_us": 864.215,
+      "reads_per_second": 9972.095428865581,
+      "light_tenant_ms": 6.968717,
+      "peak_replica_budget_bytes": 5303613,
+      "runs": [
+        {
+          "catchup_ms": 426.110404,
+          "lookup_p99_us": 20.583,
+          "lookup_samples": 4253,
+          "readers": 16,
+          "read_interval_us": 1600
+        },
+        {
+          "catchup_ms": 289.291613,
+          "lookup_p99_us": 35.125,
+          "lookup_samples": 2884,
+          "readers": 16,
+          "read_interval_us": 1600
+        },
+        {
+          "catchup_ms": 372.33899599999995,
+          "lookup_p99_us": 24.709,
+          "lookup_samples": 3713,
+          "readers": 16,
+          "read_interval_us": 1600
+        }
+      ]
+    }
+  }
+}

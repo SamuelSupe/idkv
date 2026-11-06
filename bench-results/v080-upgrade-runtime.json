@@ -1,0 +1,33 @@
+{
+  "legacy_v070_receipt_replayed": true,
+  "legacy_identity_receipt_replayed": true,
+  "legacy_publication_readable": true,
+  "legacy_grace_expiry_rejected": true,
+  "current_states_retained": true,
+  "old_binary_rejected_registry_v4": true,
+  "retention_http": {
+    "generated_write_not_repeated": true,
+    "current_document_retained": true,
+    "current_publication_retained": true,
+    "old_publication_reclaimed": true,
+    "retention": {
+      "expiration_lag_ms": 0,
+      "gc": {
+        "completed_rounds": 8,
+        "history_sweep_active": false,
+        "knowledge_floor": 0,
+        "migration_complete": true,
+        "reclaimed_records": 7,
+        "watermark_ms": 1793882106675
+      },
+      "next_expiration_ms": null,
+      "physical_reclamation": "as snapshots release and compaction completes",
+      "policy": {
+        "activated_seq": 1,
+        "legacy_expires_at_ms": 1793882105400,
+        "retention_seconds": 1
+      }
+    }
+  },
+  "openapi_version": "0.8.0"
+}

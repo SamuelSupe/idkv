@@ -1,0 +1,2 @@
+Running as unit: tkv-disk-verify-20261105.scope; invocation ID: 7b21783a11084a82a75ddfffe4f4f0ee
+{"disk_bytes":11643230586,"engine_memory_bytes":278522475,"phase":"verified","rows":10000000,"rss":"VmRSS:\t  267452 kB","seconds":74.46692444,"stats":{"blocks_read":843059,"cache_hits":4958,"candidate_files":1372,"decompressed_bytes":12630809037,"document_reads":0,"scanned_entries":10015520}}

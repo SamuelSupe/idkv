@@ -1,0 +1,12 @@
+   Compiling tenant-kv v0.6.0 (/Users/livesite/Documents/Codex/2026-11-04/splunk-kv-store-lookup/outputs/tenant-kv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.94s
+     Running tests/identity.rs (/tmp/tkv-20261104-target/debug/deps/identity-413cc602e7e85c48)
+
+running 4 tests
+test automatic_time_preserves_expiration_future_plans_and_concurrent_receipts ... ok
+test constraints_and_expanded_limits_roll_back_every_record ... ok
+test history_boundaries_noops_replace_and_recovery ... ok
+test randomized_interval_corrections_match_a_discrete_reference ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.71s
+

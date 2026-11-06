@@ -1,0 +1,3 @@
+embedded plan: Explain { indexes: ["_key"], covering: false, extra_sort: false, scan: false }
+embedded: [{"_key":"asset-0","owner":"platform"},{"_key":"asset-1","owner":"platform"}]
+HTTP next page: [{"_key":"asset-2","owner":"platform"},{"_key":"asset-3","owner":"platform"}]

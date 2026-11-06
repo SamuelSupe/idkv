@@ -1,0 +1,548 @@
+{
+  "receipts_no_gc": {
+    "maintenance_backpressure_samples": 1,
+    "updates": 390280,
+    "reads": 412440,
+    "writer_backpressure": 2452,
+    "readers": [
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 29,
+        "p99_us": 82,
+        "reads": 26479,
+        "tenant": "44ba2afe-2c6b-4884-8f1a-de6ba5af48f9"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 32,
+        "p99_us": 85,
+        "reads": 26144,
+        "tenant": "44ba2afe-2c6b-4884-8f1a-de6ba5af48f9"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 30,
+        "p99_us": 85,
+        "reads": 26682,
+        "tenant": "a3526e89-88a0-48d4-b75a-e63fb0012c7f"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 32,
+        "p99_us": 82,
+        "reads": 26103,
+        "tenant": "a3526e89-88a0-48d4-b75a-e63fb0012c7f"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 5,
+        "p99_us": 11,
+        "reads": 25791,
+        "tenant": "32553426-397a-4852-a89f-92acaeef5de4"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 5,
+        "p99_us": 12,
+        "reads": 25512,
+        "tenant": "32553426-397a-4852-a89f-92acaeef5de4"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 5,
+        "p99_us": 11,
+        "reads": 25550,
+        "tenant": "177a907a-3873-46da-a578-5cced8f274bc"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 5,
+        "p99_us": 12,
+        "reads": 25824,
+        "tenant": "177a907a-3873-46da-a578-5cced8f274bc"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 5,
+        "p99_us": 12,
+        "reads": 25664,
+        "tenant": "ce3bcb77-89d4-45f9-9f18-061fbf69d990"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 5,
+        "p99_us": 11,
+        "reads": 25572,
+        "tenant": "ce3bcb77-89d4-45f9-9f18-061fbf69d990"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 5,
+        "p99_us": 12,
+        "reads": 25689,
+        "tenant": "32ddbff4-594f-4d7d-849e-e7c62f1499c4"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 5,
+        "p99_us": 11,
+        "reads": 25405,
+        "tenant": "32ddbff4-594f-4d7d-849e-e7c62f1499c4"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 5,
+        "p99_us": 12,
+        "reads": 25631,
+        "tenant": "54993bcf-8580-4cd2-9494-da001740a40d"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 5,
+        "p99_us": 11,
+        "reads": 25318,
+        "tenant": "54993bcf-8580-4cd2-9494-da001740a40d"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 5,
+        "p99_us": 11,
+        "reads": 25590,
+        "tenant": "8a66f6a4-eb79-454d-a4f3-8ac0229b3f79"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 5,
+        "p99_us": 11,
+        "reads": 25486,
+        "tenant": "8a66f6a4-eb79-454d-a4f3-8ac0229b3f79"
+      }
+    ],
+    "max_engine_memory_bytes": 31698187,
+    "retention": [
+      {
+        "kind": "retention",
+        "status": {
+          "gc": null,
+          "physical_reclamation": "as snapshots release and compaction completes",
+          "policy": null
+        },
+        "tenant": "44ba2afe-2c6b-4884-8f1a-de6ba5af48f9"
+      },
+      {
+        "kind": "retention",
+        "status": {
+          "gc": null,
+          "physical_reclamation": "as snapshots release and compaction completes",
+          "policy": null
+        },
+        "tenant": "a3526e89-88a0-48d4-b75a-e63fb0012c7f"
+      },
+      {
+        "kind": "retention",
+        "status": {
+          "gc": null,
+          "physical_reclamation": "as snapshots release and compaction completes",
+          "policy": null
+        },
+        "tenant": "32553426-397a-4852-a89f-92acaeef5de4"
+      },
+      {
+        "kind": "retention",
+        "status": {
+          "gc": null,
+          "physical_reclamation": "as snapshots release and compaction completes",
+          "policy": null
+        },
+        "tenant": "177a907a-3873-46da-a578-5cced8f274bc"
+      },
+      {
+        "kind": "retention",
+        "status": {
+          "gc": null,
+          "physical_reclamation": "as snapshots release and compaction completes",
+          "policy": null
+        },
+        "tenant": "ce3bcb77-89d4-45f9-9f18-061fbf69d990"
+      },
+      {
+        "kind": "retention",
+        "status": {
+          "gc": null,
+          "physical_reclamation": "as snapshots release and compaction completes",
+          "policy": null
+        },
+        "tenant": "32ddbff4-594f-4d7d-849e-e7c62f1499c4"
+      },
+      {
+        "kind": "retention",
+        "status": {
+          "gc": null,
+          "physical_reclamation": "as snapshots release and compaction completes",
+          "policy": null
+        },
+        "tenant": "54993bcf-8580-4cd2-9494-da001740a40d"
+      },
+      {
+        "kind": "retention",
+        "status": {
+          "gc": null,
+          "physical_reclamation": "as snapshots release and compaction completes",
+          "policy": null
+        },
+        "tenant": "8a66f6a4-eb79-454d-a4f3-8ac0229b3f79"
+      }
+    ],
+    "hot_tenants": [
+      "44ba2afe-2c6b-4884-8f1a-de6ba5af48f9",
+      "a3526e89-88a0-48d4-b75a-e63fb0012c7f"
+    ],
+    "verified_reopen": {
+      "active_tenants": 8,
+      "batch_atomicity_checked": true,
+      "cold_closed": 32,
+      "cold_create_open_p99_us": 179526,
+      "cold_reopen_p99_us": 132,
+      "cold_tenants": 32,
+      "duration_s": 60,
+      "kind": "summary",
+      "memory_limit": 536870912,
+      "peak_engine_memory": 36972186,
+      "reopened_verified_documents": 8000,
+      "reopened_verified_tenants": 8
+    }
+  },
+  "retention_3s": {
+    "maintenance_backpressure_samples": 0,
+    "updates": 506400,
+    "reads": 404243,
+    "writer_backpressure": 0,
+    "readers": [
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 23,
+        "p99_us": 87,
+        "reads": 25796,
+        "tenant": "314f0889-c9ba-401c-b823-158016d0718d"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 28,
+        "p99_us": 93,
+        "reads": 25860,
+        "tenant": "314f0889-c9ba-401c-b823-158016d0718d"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 21,
+        "p99_us": 89,
+        "reads": 25676,
+        "tenant": "ac66c859-1b2e-43bf-9a7f-6543bbcd22b1"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 22,
+        "p99_us": 90,
+        "reads": 25660,
+        "tenant": "ac66c859-1b2e-43bf-9a7f-6543bbcd22b1"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 6,
+        "p99_us": 12,
+        "reads": 25341,
+        "tenant": "bfc64216-457f-4c75-935b-522791eec5fb"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 6,
+        "p99_us": 13,
+        "reads": 25105,
+        "tenant": "bfc64216-457f-4c75-935b-522791eec5fb"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 7,
+        "p99_us": 14,
+        "reads": 25220,
+        "tenant": "f898f253-c7a3-4107-9717-5f75c55efe19"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 6,
+        "p99_us": 12,
+        "reads": 25158,
+        "tenant": "f898f253-c7a3-4107-9717-5f75c55efe19"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 7,
+        "p99_us": 12,
+        "reads": 25043,
+        "tenant": "3355dffe-14d8-4260-a3b0-ba137cc174c9"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 7,
+        "p99_us": 13,
+        "reads": 24757,
+        "tenant": "3355dffe-14d8-4260-a3b0-ba137cc174c9"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 6,
+        "p99_us": 13,
+        "reads": 25149,
+        "tenant": "f5dd527a-991c-48a8-b515-566e7af344ce"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 7,
+        "p99_us": 12,
+        "reads": 25174,
+        "tenant": "f5dd527a-991c-48a8-b515-566e7af344ce"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 7,
+        "p99_us": 14,
+        "reads": 24932,
+        "tenant": "4a2c0272-7e5d-4dad-b884-aff6a8c30553"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 7,
+        "p99_us": 12,
+        "reads": 25178,
+        "tenant": "4a2c0272-7e5d-4dad-b884-aff6a8c30553"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 7,
+        "p99_us": 13,
+        "reads": 24919,
+        "tenant": "c3c2041e-8b1d-459c-9f8d-84f945ff6d78"
+      },
+      {
+        "backpressure": 0,
+        "kind": "reader",
+        "p95_us": 7,
+        "p99_us": 13,
+        "reads": 25275,
+        "tenant": "c3c2041e-8b1d-459c-9f8d-84f945ff6d78"
+      }
+    ],
+    "max_engine_memory_bytes": 35506418,
+    "retention": [
+      {
+        "kind": "retention",
+        "status": {
+          "gc": {
+            "completed_rounds": 557,
+            "history_sweep_active": false,
+            "knowledge_floor": 0,
+            "migration_complete": true,
+            "reclaimed_records": 8832,
+            "watermark_ms": 1793881744794
+          },
+          "physical_reclamation": "as snapshots release and compaction completes",
+          "policy": {
+            "activated_seq": 18,
+            "legacy_expires_at_ms": 1793881682353,
+            "retention_seconds": 3
+          }
+        },
+        "tenant": "314f0889-c9ba-401c-b823-158016d0718d"
+      },
+      {
+        "kind": "retention",
+        "status": {
+          "gc": {
+            "completed_rounds": 557,
+            "history_sweep_active": false,
+            "knowledge_floor": 0,
+            "migration_complete": true,
+            "reclaimed_records": 8832,
+            "watermark_ms": 1793881744896
+          },
+          "physical_reclamation": "as snapshots release and compaction completes",
+          "policy": {
+            "activated_seq": 18,
+            "legacy_expires_at_ms": 1793881682515,
+            "retention_seconds": 3
+          }
+        },
+        "tenant": "ac66c859-1b2e-43bf-9a7f-6543bbcd22b1"
+      },
+      {
+        "kind": "retention",
+        "status": {
+          "gc": {
+            "completed_rounds": 5,
+            "history_sweep_active": false,
+            "knowledge_floor": 0,
+            "migration_complete": true,
+            "reclaimed_records": 0,
+            "watermark_ms": 0
+          },
+          "physical_reclamation": "as snapshots release and compaction completes",
+          "policy": {
+            "activated_seq": 18,
+            "legacy_expires_at_ms": 1793881682666,
+            "retention_seconds": 3
+          }
+        },
+        "tenant": "bfc64216-457f-4c75-935b-522791eec5fb"
+      },
+      {
+        "kind": "retention",
+        "status": {
+          "gc": {
+            "completed_rounds": 5,
+            "history_sweep_active": false,
+            "knowledge_floor": 0,
+            "migration_complete": true,
+            "reclaimed_records": 0,
+            "watermark_ms": 0
+          },
+          "physical_reclamation": "as snapshots release and compaction completes",
+          "policy": {
+            "activated_seq": 18,
+            "legacy_expires_at_ms": 1793881682817,
+            "retention_seconds": 3
+          }
+        },
+        "tenant": "f898f253-c7a3-4107-9717-5f75c55efe19"
+      },
+      {
+        "kind": "retention",
+        "status": {
+          "gc": {
+            "completed_rounds": 5,
+            "history_sweep_active": false,
+            "knowledge_floor": 0,
+            "migration_complete": true,
+            "reclaimed_records": 0,
+            "watermark_ms": 0
+          },
+          "physical_reclamation": "as snapshots release and compaction completes",
+          "policy": {
+            "activated_seq": 18,
+            "legacy_expires_at_ms": 1793881682979,
+            "retention_seconds": 3
+          }
+        },
+        "tenant": "3355dffe-14d8-4260-a3b0-ba137cc174c9"
+      },
+      {
+        "kind": "retention",
+        "status": {
+          "gc": {
+            "completed_rounds": 5,
+            "history_sweep_active": false,
+            "knowledge_floor": 0,
+            "migration_complete": true,
+            "reclaimed_records": 0,
+            "watermark_ms": 0
+          },
+          "physical_reclamation": "as snapshots release and compaction completes",
+          "policy": {
+            "activated_seq": 18,
+            "legacy_expires_at_ms": 1793881683118,
+            "retention_seconds": 3
+          }
+        },
+        "tenant": "f5dd527a-991c-48a8-b515-566e7af344ce"
+      },
+      {
+        "kind": "retention",
+        "status": {
+          "gc": {
+            "completed_rounds": 5,
+            "history_sweep_active": false,
+            "knowledge_floor": 0,
+            "migration_complete": true,
+            "reclaimed_records": 0,
+            "watermark_ms": 0
+          },
+          "physical_reclamation": "as snapshots release and compaction completes",
+          "policy": {
+            "activated_seq": 18,
+            "legacy_expires_at_ms": 1793881683270,
+            "retention_seconds": 3
+          }
+        },
+        "tenant": "4a2c0272-7e5d-4dad-b884-aff6a8c30553"
+      },
+      {
+        "kind": "retention",
+        "status": {
+          "gc": {
+            "completed_rounds": 5,
+            "history_sweep_active": false,
+            "knowledge_floor": 0,
+            "migration_complete": true,
+            "reclaimed_records": 0,
+            "watermark_ms": 0
+          },
+          "physical_reclamation": "as snapshots release and compaction completes",
+          "policy": {
+            "activated_seq": 18,
+            "legacy_expires_at_ms": 1793881683400,
+            "retention_seconds": 3
+          }
+        },
+        "tenant": "c3c2041e-8b1d-459c-9f8d-84f945ff6d78"
+      }
+    ],
+    "hot_tenants": [
+      "314f0889-c9ba-401c-b823-158016d0718d",
+      "ac66c859-1b2e-43bf-9a7f-6543bbcd22b1"
+    ],
+    "verified_reopen": {
+      "active_tenants": 8,
+      "batch_atomicity_checked": true,
+      "cold_closed": 32,
+      "cold_create_open_p99_us": 27599,
+      "cold_reopen_p99_us": 144,
+      "cold_tenants": 32,
+      "duration_s": 60,
+      "kind": "summary",
+      "memory_limit": 536870912,
+      "peak_engine_memory": 36616734,
+      "reopened_verified_documents": 8000,
+      "reopened_verified_tenants": 8
+    }
+  }
+}

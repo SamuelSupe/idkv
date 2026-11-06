@@ -1,0 +1,12 @@
+{
+  "result": "passed",
+  "metrics_disabled": true,
+  "otlp_signals": [
+    "/v1/logs",
+    "/v1/traces"
+  ],
+  "trace_parent_and_log_span_correlated": true,
+  "sensitive_payload_absent": true,
+  "sigterm_exit": 0,
+  "collector": "local HTTP/JSON test receiver, not a production backend"
+}

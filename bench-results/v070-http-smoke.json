@@ -1,0 +1,1 @@
+{"result": "passed", "tenant": "516ae18f-e8d1-4e02-9a39-98fa6906581c", "checks": ["put/CAS", "get/mget", "covering lookup", "explain", "sort/projection", "snapshot pagination", "single-statement rejection", "delete"]}

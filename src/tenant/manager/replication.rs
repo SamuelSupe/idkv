@@ -1,0 +1,414 @@
+use super::*;
+use crate::replication::{
+    Config, Fence, LogPage, LogRequest, NodeState, Role, Source, TenantPosition,
+};
+
+impl Store {
+    pub fn replication_state(&self) -> NodeState {
+        self.owner.inner.node.state.read().clone()
+    }
+
+    /// Configuration initializes the durable role once. Restarting with an old
+    /// config never reverses a promotion or clears a persisted fence.
+    pub fn configure_replication(&self, config: &Config) -> Result<NodeState> {
+        let node = &self.owner.inner.node;
+        let _barrier = node.barrier.write();
+        let mut state = self.replication_state();
+        if config.role == Role::Fenced
+            || !(10..=60_000).contains(&config.poll_ms)
+            || !(1 << 20..=1u64 << 40).contains(&config.log_retention_bytes)
+        {
+            return Err(Error::invalid("replication configuration bounds"));
+        }
+        if state.enabled {
+            if state.cluster != config.cluster {
+                return Err(Error::new(
+                    "REPLICATION_CONFLICT",
+                    "cluster identity changed",
+                ));
+            }
+            if state.log_retention_bytes != config.log_retention_bytes {
+                state.log_retention_bytes = config.log_retention_bytes;
+                node.save(state.clone())?;
+            }
+            return Ok(state);
+        }
+        if config.role == Role::Replica && !self.owner.inner.registry.read().tenants.is_empty() {
+            return Err(Error::new(
+                "CONFLICT",
+                "initialize replica in an empty Store",
+            ));
+        }
+        state.enabled = true;
+        // Older Store implementations must not ignore a persisted replica/fence
+        // and open this root as a writable standalone database.
+        {
+            let mut registry = self.owner.inner.registry.write();
+            let mut next = registry.clone();
+            next.version = 4;
+            next.replication_enabled = true;
+            atomic_json(&self.root().join("control/tenants.json"), &next)?;
+            *registry = next;
+        }
+        state.cluster = config.cluster;
+        state.role = config.role;
+        state.log_retention_bytes = config.log_retention_bytes;
+        node.save(state.clone())?;
+        Ok(state)
+    }
+
+    pub(crate) fn require_local_restore(&self) -> Result<()> {
+        if self.replication_state().enabled {
+            return Err(Error::new(
+                "REPLICATION_CONFLICT",
+                "restore/import requires a new unconfigured Store, then replica reinitialization",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn replication_positions(&self) -> Result<Vec<TenantPosition>> {
+        if !self.pending_lifecycle_tenants().is_empty() {
+            return Err(Error::new(
+                "UNAVAILABLE",
+                "tenant lifecycle recovery is pending; restart Store before role changes",
+            ));
+        }
+        self.tenants()
+            .into_iter()
+            .map(|info| {
+                let seq = self.replication_position(info.id)?;
+                Ok(TenantPosition { info, seq })
+            })
+            .collect()
+    }
+
+    pub(crate) fn pending_lifecycle_tenants(&self) -> Vec<TenantInfo> {
+        self.owner
+            .inner
+            .registry
+            .read()
+            .tenants
+            .values()
+            .filter(|entry| !matches!(entry.lifecycle, Lifecycle::Active | Lifecycle::Deleted))
+            .map(|entry| entry.info.clone())
+            .collect()
+    }
+
+    pub(crate) fn replication_position(&self, id: Uuid) -> Result<u64> {
+        let slot = self.slot(id);
+        {
+            let guard = slot.lock();
+            if let Some(error) = &guard.failure {
+                return Err(error.clone());
+            }
+            if let Some(core) = &guard.core {
+                return Ok(core.engine.seq());
+            }
+            if let Some(seq) = guard.last_seq {
+                return Ok(seq);
+            }
+        }
+        let handle = self.tenant(id)?;
+        let seq = handle.engine().seq();
+        slot.lock().last_seq = Some(seq);
+        Ok(seq)
+    }
+
+    /// Durably stop all business writes, including existing embedded handles.
+    /// This is restart-safe and idempotent for the same intended successor.
+    pub fn fence_primary(&self, target: Uuid) -> Result<Fence> {
+        let node = &self.owner.inner.node;
+        let _barrier = node.barrier.write();
+        let mut state = self.replication_state();
+        if !state.enabled || target == state.node {
+            return Err(Error::invalid("configured distinct successor required"));
+        }
+        if let Some(fence) = &state.fence {
+            if fence.target == target {
+                return Ok(fence.clone());
+            }
+            return Err(Error::new(
+                "CONFLICT",
+                "already fenced for another successor",
+            ));
+        }
+        if state.role != Role::Primary {
+            return Err(Error::new("READ_ONLY", "only a primary can be fenced"));
+        }
+        let fence = Fence {
+            id: Uuid::new_v4(),
+            cluster: state.cluster,
+            source: Source {
+                node: state.node,
+                epoch: state.epoch,
+            },
+            target,
+            tenants: self.replication_positions()?,
+        };
+        state.role = Role::Fenced;
+        state.fence = Some(fence.clone());
+        node.save(state)?;
+        crate::storage::failpoint("replication_fenced");
+        Ok(fence)
+    }
+
+    pub(crate) fn bind_source(&self, upstream: &NodeState) -> Result<Source> {
+        crate::replication::compatible(upstream.protocol)?;
+        let node = &self.owner.inner.node;
+        let _barrier = node.barrier.write();
+        let mut state = self.replication_state();
+        if !state.enabled
+            || state.role != Role::Replica
+            || state.cluster != upstream.cluster
+            || upstream.node == state.node
+            || !matches!(upstream.role, Role::Primary | Role::Fenced)
+        {
+            return Err(Error::new(
+                "REPLICATION_CONFLICT",
+                "incompatible source identity or role",
+            ));
+        }
+        let source = Source {
+            node: upstream.node,
+            epoch: upstream.epoch,
+        };
+        if state.source.as_ref().is_some_and(|s| *s != source) {
+            return Err(Error::new(
+                "REPLICATION_CONFLICT",
+                "source changed; explicit follow is required",
+            ));
+        }
+        if state.source.is_none() {
+            state.epoch = source.epoch;
+            state.source = Some(source.clone());
+            node.save(state)?;
+        }
+        Ok(source)
+    }
+
+    /// Promote only after the caller has authenticated the old primary's durable
+    /// fence. Network callers use Service::promote, which fetches that proof itself.
+    pub(crate) fn promote_verified(&self, fence: &Fence) -> Result<NodeState> {
+        let node = &self.owner.inner.node;
+        let _barrier = node.barrier.write();
+        let mut state = self.replication_state();
+        if state.role == Role::Primary && state.parent.as_ref().is_some_and(|p| p.id == fence.id) {
+            return Ok(state);
+        }
+        if state.role != Role::Replica
+            || state.node != fence.target
+            || state.cluster != fence.cluster
+            || state.source.as_ref() != Some(&fence.source)
+        {
+            return Err(Error::new(
+                "REPLICATION_CONFLICT",
+                "fence does not authorize this successor",
+            ));
+        }
+        self.check_positions(&fence.tenants)?;
+        state.role = Role::Primary;
+        state.epoch = Uuid::new_v4();
+        state.source = None;
+        state.parent = Some(fence.clone());
+        state.forced = false;
+        node.save(state.clone())?;
+        crate::storage::failpoint("replication_promoted");
+        Ok(state)
+    }
+
+    fn check_positions(&self, expected: &[TenantPosition]) -> Result<()> {
+        let actual = self.replication_positions()?;
+        if actual.len() != expected.len()
+            || actual.iter().zip(expected).any(|(a, b)| {
+                a.info.id != b.info.id
+                    || a.info.generation != b.info.generation
+                    || a.info.history != b.info.history
+                    || a.seq != b.seq
+                    || a.info.name != b.info.name
+                    || a.info.memory_bytes != b.info.memory_bytes
+                    || a.info.disk_bytes != b.info.disk_bytes
+            })
+        {
+            return Err(Error::new(
+                "REPLICA_LAG",
+                "replica has not applied the complete fenced tenant catalog and positions",
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn follow_verified(&self, upstream: &NodeState) -> Result<NodeState> {
+        let node = &self.owner.inner.node;
+        let _barrier = node.barrier.write();
+        let mut state = self.replication_state();
+        let source = Source {
+            node: upstream.node,
+            epoch: upstream.epoch,
+        };
+        if state.role == Role::Replica && state.source.as_ref() == Some(&source) {
+            return Ok(state);
+        }
+        let fence = state
+            .fence
+            .as_ref()
+            .ok_or_else(|| Error::new("CONFLICT", "old primary must be durably fenced"))?;
+        if upstream.role != Role::Primary
+            || upstream.cluster != state.cluster
+            || upstream.node != fence.target
+            || upstream.parent.as_ref().is_none_or(|p| p.id != fence.id)
+            || upstream.forced
+        {
+            return Err(Error::new(
+                "REPLICATION_CONFLICT",
+                "successor is not the authorized planned promotion",
+            ));
+        }
+        self.check_positions(&fence.tenants)?;
+        state.role = Role::Replica;
+        state.epoch = source.epoch;
+        state.source = Some(source);
+        state.fence = None;
+        state.parent = None;
+        node.save(state.clone())?;
+        Ok(state)
+    }
+
+    pub(crate) fn force_promote(
+        &self,
+        expected: &Source,
+        old_primary_fenced: bool,
+        accept_data_loss: bool,
+    ) -> Result<NodeState> {
+        let node = &self.owner.inner.node;
+        let _barrier = node.barrier.write();
+        let mut state = self.replication_state();
+        if !old_primary_fenced
+            || !accept_data_loss
+            || state.role != Role::Replica
+            || state.source.as_ref() != Some(expected)
+        {
+            return Err(Error::new(
+                "CONFLICT",
+                "force promotion requires matching source, external fencing and explicit acceptance of data loss",
+            ));
+        }
+        state.role = Role::Primary;
+        state.source = None;
+        state.epoch = Uuid::new_v4();
+        state.forced = true;
+        state.parent = None;
+        node.save(state.clone())?;
+        Ok(state)
+    }
+
+    pub(crate) fn export_logs(&self, request: &LogRequest) -> Result<LogPage> {
+        crate::replication::compatible(request.protocol)?;
+        let node = &self.owner.inner.node;
+        let _barrier = node.barrier.read();
+        let state = self.replication_state();
+        if !state.enabled
+            || state.cluster != request.cluster
+            || state.epoch != request.epoch
+            || !matches!(state.role, Role::Primary | Role::Fenced)
+        {
+            return Err(Error::new(
+                "REPLICATION_CONFLICT",
+                "source role or history changed",
+            ));
+        }
+        self.tenant(request.tenant)?.engine().log_page(request)
+    }
+
+    pub(crate) fn install_replica(
+        &self,
+        source: &Source,
+        path: &Path,
+        info: TenantInfo,
+    ) -> Result<()> {
+        let _permission = self.owner.inner.node.replica_write(source)?;
+        if self.contains_tenant(info.id) {
+            self.restore_checkpoint_inner(info.id, path)
+        } else {
+            self.import_checkpoint_inner(path, info)
+        }
+    }
+
+    pub(crate) fn replica_catalog(
+        &self,
+        source: &Source,
+        expected: &[TenantPosition],
+    ) -> Result<HashMap<Uuid, Error>> {
+        let _permission = self.owner.inner.node.replica_write(source)?;
+        if expected.len() > 16_384 {
+            return Err(Error::limit("replication tenant limit"));
+        }
+        let unique: HashSet<_> = expected.iter().map(|p| p.info.id).collect();
+        if unique.len() != expected.len() {
+            return Err(Error::corrupt("duplicate replicated tenant"));
+        }
+        let mut blocked = HashMap::new();
+        for info in self.tenants() {
+            if !unique.contains(&info.id)
+                && let Err(error) = self.delete_tenant_inner(info.id)
+            {
+                blocked.insert(info.id, error);
+            }
+        }
+        for entry in expected {
+            let info = &entry.info;
+            if !self.contains_tenant(info.id) {
+                continue;
+            }
+            if let Err(error) = self.update_replica_quota(info) {
+                blocked.insert(info.id, error);
+            }
+        }
+        Ok(blocked)
+    }
+
+    fn update_replica_quota(&self, info: &TenantInfo) -> Result<()> {
+        if info.memory_bytes < self.options().memtable_bytes * 4
+            || info.memory_bytes > self.options().global_memory_bytes
+            || info.disk_bytes < 1 << 20
+        {
+            return Err(Error::limit(
+                "replicated quota is incompatible with this node",
+            ));
+        }
+        let slot = self.slot(info.id);
+        let mut slot = slot.lock();
+        let mut registry = self.owner.inner.registry.write();
+        let current = registry.tenants.get(&info.id).unwrap();
+        if current.info.generation != info.generation
+            || current.info.history != info.history
+            || current.info.name != info.name
+            || !matches!(current.lifecycle, Lifecycle::Active)
+        {
+            return Err(Error::new(
+                "REPLICATION_CONFLICT",
+                "replicated tenant identity changed",
+            ));
+        }
+        if current.info.memory_bytes == info.memory_bytes
+            && current.info.disk_bytes == info.disk_bytes
+        {
+            return Ok(());
+        }
+        self.close_slot(&mut slot)?;
+        slot.memory.set_limit(info.memory_bytes)?;
+        let mut next = registry.clone();
+        next.tenants.get_mut(&info.id).unwrap().info = info.clone();
+        atomic_json(&self.root().join("control/tenants.json"), &next)?;
+        *registry = next;
+        atomic_json(
+            &self
+                .root()
+                .join("tenants")
+                .join(info.id.to_string())
+                .join("TENANT.meta"),
+            info,
+        )?;
+        Ok(())
+    }
+}

@@ -1,0 +1,17 @@
+{
+  "service": "s3",
+  "options": {
+    "bucket": "replace-with-your-backup-bucket",
+    "region": "ap-southeast-1",
+    "root": "tenant-kv/"
+  },
+  "concurrency": 2,
+  "max_jobs": 256,
+  "max_backup_bytes": 107374182400,
+  "max_staging_bytes": 214748364800,
+  "reserve_free_bytes": 1073741824,
+  "bytes_per_second": 52428800,
+  "timeout_seconds": 30,
+  "job_timeout_seconds": 86400,
+  "gc_grace_seconds": 3600
+}

@@ -1,0 +1,6 @@
+{
+  "pid": 283098,
+  "samples": 183,
+  "observed_vm_hwm_bytes": 62533632,
+  "note": "Linux VmHWM sampled every second; separate from engine budget accounting."
+}

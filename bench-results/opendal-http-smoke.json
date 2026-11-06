@@ -1,0 +1,75 @@
+{
+  "result": "passed",
+  "tenant": "e35b67c9-1184-43f9-a254-67cae9e22e1d",
+  "backup": "7beb0cdb-009b-4a25-99c0-22fe88551ed5",
+  "remote_backup": {
+    "first": {
+      "backup": "ee41295a-1ea2-4c68-b0c1-f9ce9c499f4b",
+      "checkpoint_seq": 6,
+      "created_ms": 1793831813698,
+      "error": null,
+      "id": "c2d25800-53a8-4716-9710-a5b2ec796c61",
+      "operation": {
+        "operation": "create"
+      },
+      "processed_files": 9,
+      "result": {
+        "backup": "ee41295a-1ea2-4c68-b0c1-f9ce9c499f4b",
+        "checkpoint_ms": 1793831813714,
+        "checkpoint_seq": 6,
+        "files": 9,
+        "generation": "f2d8835e-5975-4831-bdbf-56dcdcee80f0",
+        "tenant": "e35b67c9-1184-43f9-a254-67cae9e22e1d",
+        "total_bytes": 3964
+      },
+      "reused_bytes": 0,
+      "state": "completed",
+      "tenant": "e35b67c9-1184-43f9-a254-67cae9e22e1d",
+      "updated_ms": 1793831813794,
+      "uploaded_bytes": 3964
+    },
+    "second": {
+      "backup": "c4602b31-5d49-4861-96cf-ab1b3e5dbef8",
+      "checkpoint_seq": 6,
+      "created_ms": 1793831813808,
+      "error": null,
+      "id": "f669c716-8230-4b5b-949e-ed2b42a10828",
+      "operation": {
+        "operation": "create"
+      },
+      "processed_files": 9,
+      "result": {
+        "backup": "c4602b31-5d49-4861-96cf-ab1b3e5dbef8",
+        "checkpoint_ms": 1793831813829,
+        "checkpoint_seq": 6,
+        "files": 9,
+        "generation": "f2d8835e-5975-4831-bdbf-56dcdcee80f0",
+        "tenant": "e35b67c9-1184-43f9-a254-67cae9e22e1d",
+        "total_bytes": 3964
+      },
+      "reused_bytes": 2255,
+      "state": "completed",
+      "tenant": "e35b67c9-1184-43f9-a254-67cae9e22e1d",
+      "updated_ms": 1793831813892,
+      "uploaded_bytes": 1709
+    },
+    "verified": true,
+    "restored_lookup": true,
+    "prune": {
+      "deleted_backups": 1,
+      "deleted_objects": 3,
+      "retained_backups": 1
+    },
+    "jobs_forgotten": true
+  },
+  "checks": [
+    "CRUD/CAS",
+    "unique covering index",
+    "lookup",
+    "query",
+    "backup/restore",
+    "integrity",
+    "delete",
+    "OpenAPI"
+  ]
+}

@@ -1,0 +1,642 @@
+[
+  {
+    "trial": 0,
+    "mode": "after",
+    "result": {
+      "after": {
+        "commits": 8192,
+        "compaction_read_bytes": 0,
+        "compaction_write_bytes": 0,
+        "document_bytes": 3194192,
+        "flush_bytes": 323883,
+        "fsyncs": 36,
+        "scheduler": {
+          "completed_jobs": 98,
+          "queue_wait_ns": 1304254,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 5052400,
+        "write_lock_wait_ns": 0
+      },
+      "before": {
+        "commits": 0,
+        "compaction_read_bytes": 0,
+        "compaction_write_bytes": 0,
+        "document_bytes": 0,
+        "flush_bytes": 0,
+        "fsyncs": 0,
+        "scheduler": {
+          "completed_jobs": 6,
+          "queue_wait_ns": 34958,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 0,
+        "write_lock_wait_ns": 0
+      },
+      "catchup_ms": 208.092564,
+      "keys": 1024,
+      "light_tenant_ms": 2.679046,
+      "load_ms": 9347.031194,
+      "lookup_max_us": 358.334,
+      "lookup_p50_us": 1.959,
+      "lookup_p95_us": 6.333,
+      "lookup_p99_us": 11.917,
+      "lookup_samples": 8320,
+      "note": "Loopback catch-up with concurrent replica lookups, 4 source loading threads; not client write throughput or a hardware HA qualification.",
+      "offered_reads_per_second": 40000.0,
+      "peak_replica_budget_bytes": 5184480,
+      "poll_ms": 50,
+      "read_interval_us": 100,
+      "reader_samples": [
+        1622,
+        2429,
+        2673,
+        1596
+      ],
+      "readers": 4,
+      "reads_per_second": 39982.20714893012,
+      "replica_io_jobs": 92,
+      "source_log_requests": 33,
+      "source_status_requests": 11,
+      "transactions": 8192,
+      "transactions_per_second": 39367.09626971582,
+      "version": "0.8.1"
+    }
+  },
+  {
+    "trial": 0,
+    "mode": "before",
+    "result": {
+      "after": {
+        "commits": 8192,
+        "compaction_read_bytes": 0,
+        "compaction_write_bytes": 0,
+        "document_bytes": 3194192,
+        "flush_bytes": 406942,
+        "fsyncs": 36,
+        "scheduler": {
+          "completed_jobs": 135,
+          "queue_wait_ns": 1739709,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 5052400,
+        "write_lock_wait_ns": 0
+      },
+      "before": {
+        "commits": 0,
+        "compaction_read_bytes": 0,
+        "compaction_write_bytes": 0,
+        "document_bytes": 0,
+        "flush_bytes": 0,
+        "fsyncs": 0,
+        "scheduler": {
+          "completed_jobs": 6,
+          "queue_wait_ns": 55832,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 0,
+        "write_lock_wait_ns": 0
+      },
+      "catchup_ms": 203.072932,
+      "keys": 1024,
+      "light_tenant_ms": 1.908128,
+      "load_ms": 9129.271406999998,
+      "lookup_max_us": 1068.418,
+      "lookup_p50_us": 1.375,
+      "lookup_p95_us": 5.166,
+      "lookup_p99_us": 9.459,
+      "lookup_samples": 8119,
+      "note": "Loopback catch-up with concurrent replica lookups, 4 source loading threads; not client write throughput or a hardware HA qualification.",
+      "offered_reads_per_second": 40000.0,
+      "peak_replica_budget_bytes": 5967299,
+      "poll_ms": 50,
+      "read_interval_us": 100,
+      "reader_samples": [
+        2173,
+        2010,
+        2168,
+        1768
+      ],
+      "readers": 4,
+      "reads_per_second": 39980.7099845291,
+      "replica_io_jobs": 129,
+      "source_log_requests": 33,
+      "source_status_requests": 13,
+      "transactions": 8192,
+      "transactions_per_second": 40340.18674630649,
+      "version": "0.8.0"
+    }
+  },
+  {
+    "trial": 1,
+    "mode": "before",
+    "result": {
+      "after": {
+        "commits": 8192,
+        "compaction_read_bytes": 0,
+        "compaction_write_bytes": 0,
+        "document_bytes": 3194192,
+        "flush_bytes": 395271,
+        "fsyncs": 36,
+        "scheduler": {
+          "completed_jobs": 127,
+          "queue_wait_ns": 1283956,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 5052400,
+        "write_lock_wait_ns": 0
+      },
+      "before": {
+        "commits": 0,
+        "compaction_read_bytes": 0,
+        "compaction_write_bytes": 0,
+        "document_bytes": 0,
+        "flush_bytes": 0,
+        "fsyncs": 0,
+        "scheduler": {
+          "completed_jobs": 6,
+          "queue_wait_ns": 70958,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 0,
+        "write_lock_wait_ns": 0
+      },
+      "catchup_ms": 271.288201,
+      "keys": 1024,
+      "light_tenant_ms": 7.740178,
+      "load_ms": 9091.119266,
+      "lookup_max_us": 2133.754,
+      "lookup_p50_us": 0.958,
+      "lookup_p95_us": 3.875,
+      "lookup_p99_us": 7.125,
+      "lookup_samples": 10848,
+      "note": "Loopback catch-up with concurrent replica lookups, 4 source loading threads; not client write throughput or a hardware HA qualification.",
+      "offered_reads_per_second": 40000.0,
+      "peak_replica_budget_bytes": 5207225,
+      "poll_ms": 50,
+      "read_interval_us": 100,
+      "reader_samples": [
+        2513,
+        1866,
+        2845,
+        3624
+      ],
+      "readers": 4,
+      "reads_per_second": 39986.99523242443,
+      "replica_io_jobs": 121,
+      "source_log_requests": 33,
+      "source_status_requests": 11,
+      "transactions": 8192,
+      "transactions_per_second": 30196.668966078625,
+      "version": "0.8.0"
+    }
+  },
+  {
+    "trial": 1,
+    "mode": "after",
+    "result": {
+      "after": {
+        "commits": 8192,
+        "compaction_read_bytes": 0,
+        "compaction_write_bytes": 0,
+        "document_bytes": 3194192,
+        "flush_bytes": 323353,
+        "fsyncs": 36,
+        "scheduler": {
+          "completed_jobs": 99,
+          "queue_wait_ns": 1016086,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 5052400,
+        "write_lock_wait_ns": 0
+      },
+      "before": {
+        "commits": 0,
+        "compaction_read_bytes": 0,
+        "compaction_write_bytes": 0,
+        "document_bytes": 0,
+        "flush_bytes": 0,
+        "fsyncs": 0,
+        "scheduler": {
+          "completed_jobs": 6,
+          "queue_wait_ns": 83206,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 0,
+        "write_lock_wait_ns": 0
+      },
+      "catchup_ms": 253.06733999999997,
+      "keys": 1024,
+      "light_tenant_ms": 9.03018,
+      "load_ms": 9197.258218,
+      "lookup_max_us": 629.085,
+      "lookup_p50_us": 1.167,
+      "lookup_p95_us": 4.709,
+      "lookup_p99_us": 9.0,
+      "lookup_samples": 10072,
+      "note": "Loopback catch-up with concurrent replica lookups, 4 source loading threads; not client write throughput or a hardware HA qualification.",
+      "offered_reads_per_second": 40000.0,
+      "peak_replica_budget_bytes": 5180328,
+      "poll_ms": 50,
+      "read_interval_us": 100,
+      "reader_samples": [
+        2421,
+        2766,
+        2247,
+        2638
+      ],
+      "readers": 4,
+      "reads_per_second": 39799.68335700688,
+      "replica_io_jobs": 93,
+      "source_log_requests": 33,
+      "source_status_requests": 10,
+      "transactions": 8192,
+      "transactions_per_second": 32370.83062555603,
+      "version": "0.8.1"
+    }
+  },
+  {
+    "trial": 2,
+    "mode": "after",
+    "result": {
+      "after": {
+        "commits": 8192,
+        "compaction_read_bytes": 0,
+        "compaction_write_bytes": 0,
+        "document_bytes": 3194192,
+        "flush_bytes": 369374,
+        "fsyncs": 37,
+        "scheduler": {
+          "completed_jobs": 104,
+          "queue_wait_ns": 1071086,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 5052400,
+        "write_lock_wait_ns": 0
+      },
+      "before": {
+        "commits": 0,
+        "compaction_read_bytes": 0,
+        "compaction_write_bytes": 0,
+        "document_bytes": 0,
+        "flush_bytes": 0,
+        "fsyncs": 0,
+        "scheduler": {
+          "completed_jobs": 6,
+          "queue_wait_ns": 57709,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 0,
+        "write_lock_wait_ns": 0
+      },
+      "catchup_ms": 230.454931,
+      "keys": 1024,
+      "light_tenant_ms": 2.766296,
+      "load_ms": 8790.999173999999,
+      "lookup_max_us": 786.46,
+      "lookup_p50_us": 0.875,
+      "lookup_p95_us": 3.75,
+      "lookup_p99_us": 5.5,
+      "lookup_samples": 9193,
+      "note": "Loopback catch-up with concurrent replica lookups, 4 source loading threads; not client write throughput or a hardware HA qualification.",
+      "offered_reads_per_second": 40000.0,
+      "peak_replica_budget_bytes": 5181428,
+      "poll_ms": 50,
+      "read_interval_us": 100,
+      "reader_samples": [
+        1696,
+        2722,
+        3145,
+        1630
+      ],
+      "readers": 4,
+      "reads_per_second": 39890.66304682368,
+      "replica_io_jobs": 98,
+      "source_log_requests": 33,
+      "source_status_requests": 10,
+      "transactions": 8192,
+      "transactions_per_second": 35547.08056995318,
+      "version": "0.8.1"
+    }
+  },
+  {
+    "trial": 2,
+    "mode": "before",
+    "result": {
+      "after": {
+        "commits": 8192,
+        "compaction_read_bytes": 0,
+        "compaction_write_bytes": 0,
+        "document_bytes": 3194192,
+        "flush_bytes": 357921,
+        "fsyncs": 36,
+        "scheduler": {
+          "completed_jobs": 102,
+          "queue_wait_ns": 907252,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 5052400,
+        "write_lock_wait_ns": 0
+      },
+      "before": {
+        "commits": 0,
+        "compaction_read_bytes": 0,
+        "compaction_write_bytes": 0,
+        "document_bytes": 0,
+        "flush_bytes": 0,
+        "fsyncs": 0,
+        "scheduler": {
+          "completed_jobs": 6,
+          "queue_wait_ns": 70542,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 0,
+        "write_lock_wait_ns": 0
+      },
+      "catchup_ms": 214.358948,
+      "keys": 1024,
+      "light_tenant_ms": 9.861932,
+      "load_ms": 9130.404228,
+      "lookup_max_us": 51.709,
+      "lookup_p50_us": 1.166,
+      "lookup_p95_us": 4.75,
+      "lookup_p99_us": 9.5,
+      "lookup_samples": 8536,
+      "note": "Loopback catch-up with concurrent replica lookups, 4 source loading threads; not client write throughput or a hardware HA qualification.",
+      "offered_reads_per_second": 40000.0,
+      "peak_replica_budget_bytes": 5969187,
+      "poll_ms": 50,
+      "read_interval_us": 100,
+      "reader_samples": [
+        2612,
+        2252,
+        2178,
+        1494
+      ],
+      "readers": 4,
+      "reads_per_second": 39821.0575282353,
+      "replica_io_jobs": 96,
+      "source_log_requests": 33,
+      "source_status_requests": 10,
+      "transactions": 8192,
+      "transactions_per_second": 38216.2726419053,
+      "version": "0.8.0"
+    }
+  },
+  {
+    "trial": 3,
+    "mode": "before",
+    "result": {
+      "after": {
+        "commits": 8192,
+        "compaction_read_bytes": 0,
+        "compaction_write_bytes": 0,
+        "document_bytes": 3194192,
+        "flush_bytes": 323063,
+        "fsyncs": 36,
+        "scheduler": {
+          "completed_jobs": 99,
+          "queue_wait_ns": 1613461,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 5052400,
+        "write_lock_wait_ns": 0
+      },
+      "before": {
+        "commits": 0,
+        "compaction_read_bytes": 0,
+        "compaction_write_bytes": 0,
+        "document_bytes": 0,
+        "flush_bytes": 0,
+        "fsyncs": 0,
+        "scheduler": {
+          "completed_jobs": 6,
+          "queue_wait_ns": 60291,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 0,
+        "write_lock_wait_ns": 0
+      },
+      "catchup_ms": 234.69593799999998,
+      "keys": 1024,
+      "light_tenant_ms": 11.891352000000001,
+      "load_ms": 9237.660390000001,
+      "lookup_max_us": 1491.628,
+      "lookup_p50_us": 1.334,
+      "lookup_p95_us": 4.709,
+      "lookup_p99_us": 10.0,
+      "lookup_samples": 9363,
+      "note": "Loopback catch-up with concurrent replica lookups, 4 source loading threads; not client write throughput or a hardware HA qualification.",
+      "offered_reads_per_second": 40000.0,
+      "peak_replica_budget_bytes": 5180313,
+      "poll_ms": 50,
+      "read_interval_us": 100,
+      "reader_samples": [
+        2463,
+        1452,
+        2539,
+        2909
+      ],
+      "readers": 4,
+      "reads_per_second": 39894.17149605717,
+      "replica_io_jobs": 93,
+      "source_log_requests": 33,
+      "source_status_requests": 12,
+      "transactions": 8192,
+      "transactions_per_second": 34904.73703895122,
+      "version": "0.8.0"
+    }
+  },
+  {
+    "trial": 3,
+    "mode": "after",
+    "result": {
+      "after": {
+        "commits": 8192,
+        "compaction_read_bytes": 0,
+        "compaction_write_bytes": 0,
+        "document_bytes": 3194192,
+        "flush_bytes": 325756,
+        "fsyncs": 36,
+        "scheduler": {
+          "completed_jobs": 103,
+          "queue_wait_ns": 1487708,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 5052400,
+        "write_lock_wait_ns": 0
+      },
+      "before": {
+        "commits": 0,
+        "compaction_read_bytes": 0,
+        "compaction_write_bytes": 0,
+        "document_bytes": 0,
+        "flush_bytes": 0,
+        "fsyncs": 0,
+        "scheduler": {
+          "completed_jobs": 6,
+          "queue_wait_ns": 62499,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 0,
+        "write_lock_wait_ns": 0
+      },
+      "catchup_ms": 221.32,
+      "keys": 1024,
+      "light_tenant_ms": 7.773803,
+      "load_ms": 9477.735501,
+      "lookup_max_us": 240.334,
+      "lookup_p50_us": 1.584,
+      "lookup_p95_us": 5.083,
+      "lookup_p99_us": 11.042,
+      "lookup_samples": 8808,
+      "note": "Loopback catch-up with concurrent replica lookups, 4 source loading threads; not client write throughput or a hardware HA qualification.",
+      "offered_reads_per_second": 40000.0,
+      "peak_replica_budget_bytes": 5208381,
+      "poll_ms": 50,
+      "read_interval_us": 100,
+      "reader_samples": [
+        2474,
+        1728,
+        2270,
+        2336
+      ],
+      "readers": 4,
+      "reads_per_second": 39797.57816735948,
+      "replica_io_jobs": 97,
+      "source_log_requests": 33,
+      "source_status_requests": 13,
+      "transactions": 8192,
+      "transactions_per_second": 37014.27796855233,
+      "version": "0.8.1"
+    }
+  },
+  {
+    "trial": 4,
+    "mode": "after",
+    "result": {
+      "after": {
+        "commits": 8192,
+        "compaction_read_bytes": 0,
+        "compaction_write_bytes": 0,
+        "document_bytes": 3194192,
+        "flush_bytes": 323307,
+        "fsyncs": 35,
+        "scheduler": {
+          "completed_jobs": 101,
+          "queue_wait_ns": 1049376,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 5052400,
+        "write_lock_wait_ns": 0
+      },
+      "before": {
+        "commits": 0,
+        "compaction_read_bytes": 0,
+        "compaction_write_bytes": 0,
+        "document_bytes": 0,
+        "flush_bytes": 0,
+        "fsyncs": 0,
+        "scheduler": {
+          "completed_jobs": 6,
+          "queue_wait_ns": 75377,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 0,
+        "write_lock_wait_ns": 0
+      },
+      "catchup_ms": 283.135969,
+      "keys": 1024,
+      "light_tenant_ms": 10.214182000000001,
+      "load_ms": 9544.520644,
+      "lookup_max_us": 103.292,
+      "lookup_p50_us": 1.125,
+      "lookup_p95_us": 4.084,
+      "lookup_p99_us": 10.583,
+      "lookup_samples": 11322,
+      "note": "Loopback catch-up with concurrent replica lookups, 4 source loading threads; not client write throughput or a hardware HA qualification.",
+      "offered_reads_per_second": 40000.0,
+      "peak_replica_budget_bytes": 5180331,
+      "poll_ms": 50,
+      "read_interval_us": 100,
+      "reader_samples": [
+        4095,
+        1895,
+        3111,
+        2221
+      ],
+      "readers": 4,
+      "reads_per_second": 39987.85473985469,
+      "replica_io_jobs": 95,
+      "source_log_requests": 33,
+      "source_status_requests": 11,
+      "transactions": 8192,
+      "transactions_per_second": 28933.09539205879,
+      "version": "0.8.1"
+    }
+  },
+  {
+    "trial": 4,
+    "mode": "before",
+    "result": {
+      "after": {
+        "commits": 8192,
+        "compaction_read_bytes": 0,
+        "compaction_write_bytes": 0,
+        "document_bytes": 3194192,
+        "flush_bytes": 326130,
+        "fsyncs": 35,
+        "scheduler": {
+          "completed_jobs": 98,
+          "queue_wait_ns": 1188919,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 5052400,
+        "write_lock_wait_ns": 0
+      },
+      "before": {
+        "commits": 0,
+        "compaction_read_bytes": 0,
+        "compaction_write_bytes": 0,
+        "document_bytes": 0,
+        "flush_bytes": 0,
+        "fsyncs": 0,
+        "scheduler": {
+          "completed_jobs": 6,
+          "queue_wait_ns": 44875,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 0,
+        "write_lock_wait_ns": 0
+      },
+      "catchup_ms": 223.912546,
+      "keys": 1024,
+      "light_tenant_ms": 3.169005,
+      "load_ms": 9500.284536000001,
+      "lookup_max_us": 286.626,
+      "lookup_p50_us": 1.041,
+      "lookup_p95_us": 4.666,
+      "lookup_p99_us": 9.834,
+      "lookup_samples": 8900,
+      "note": "Loopback catch-up with concurrent replica lookups, 4 source loading threads; not client write throughput or a hardware HA qualification.",
+      "offered_reads_per_second": 40000.0,
+      "peak_replica_budget_bytes": 5180346,
+      "poll_ms": 50,
+      "read_interval_us": 100,
+      "reader_samples": [
+        3040,
+        1688,
+        2535,
+        1637
+      ],
+      "readers": 4,
+      "reads_per_second": 39747.66112480361,
+      "replica_io_jobs": 92,
+      "source_log_requests": 33,
+      "source_status_requests": 10,
+      "transactions": 8192,
+      "transactions_per_second": 36585.71235217879,
+      "version": "0.8.0"
+    }
+  }
+]

@@ -1,0 +1,18 @@
+{
+  "kernel": "Linux 7.2.12-orbstack-00394-gbecdd6130068 aarch64 GNU/Linux",
+  "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)",
+  "filesystem": "/dev/vdb1[/scon/containers/01KPWWT86VG04KB7RJYY3D99QE/rootfs] btrfs",
+  "virtual_disk": "vdb  1.8T 1",
+  "memory": "total        used        free      shared  buff/cache   available\nMem:     33669160960  5648019456 24391024640  2223329280  6250110976 28021141504\nSwap:    34742894592           0 34742894592",
+  "runtime": "OrbStack Ubuntu aarch64 on Apple host",
+  "binary": "ELF64 Linux AArch64, release, no failpoints",
+  "measurement_cpu_affinity": "0-7",
+  "measurement_cpu_quota": "800%",
+  "hot_memory_max_bytes": 17179869184,
+  "hot_engine_budget_bytes": 4294967296,
+  "disk_verify_memory_max_bytes": 3221225472,
+  "disk_verify_engine_budget_bytes": 536870912,
+  "physical_NVMe_verified": false,
+  "date": "2026-11-05",
+  "note": "MemoryMax limits process charged memory; VM/host caches and virtual storage remain present."
+}

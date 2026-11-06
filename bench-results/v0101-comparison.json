@@ -1,0 +1,151 @@
+{
+  "client-zero": {
+    "before": {
+      "p50_ms": 0.573108,
+      "p95_ms": 0.848401,
+      "p99_ms": 1.0836105,
+      "reads_per_second": 26950.214060727463,
+      "context_requests": 320000.0,
+      "cold_read_ms": 0.2795015
+    },
+    "after": {
+      "p50_ms": 0.198063,
+      "p95_ms": 0.313189,
+      "p99_ms": 0.39939800000000003,
+      "reads_per_second": 78265.54146535238,
+      "context_requests": 4.0,
+      "cold_read_ms": 0.354523
+    }
+  },
+  "client-delay": {
+    "before": {
+      "p50_ms": 28.973537,
+      "p95_ms": 32.209027500000005,
+      "p99_ms": 33.161031,
+      "reads_per_second": 547.6891040193011,
+      "context_requests": 16000.0,
+      "cold_read_ms": 27.8567835
+    },
+    "after": {
+      "p50_ms": 0.2223135,
+      "p95_ms": 0.41679299999999997,
+      "p99_ms": 0.61794,
+      "reads_per_second": 65607.51183698475,
+      "context_requests": 0.0,
+      "cold_read_ms": 28.167986499999998
+    }
+  },
+  "replication": {
+    "before": {
+      "catchup_ms": 280.45899899999995,
+      "lookup_p50_us": 4.271,
+      "lookup_p95_us": 31.75,
+      "lookup_p99_us": 107.56299999999999,
+      "lookup_samples": 1120.0,
+      "light_tenant_ms": 4.2605835,
+      "replica_io_jobs": 1523.0,
+      "peak_replica_budget_bytes": 7700317.0
+    },
+    "after": {
+      "catchup_ms": 269.6397855,
+      "lookup_p50_us": 4.917,
+      "lookup_p95_us": 16.749499999999998,
+      "lookup_p99_us": 83.917,
+      "lookup_samples": 1075.0,
+      "light_tenant_ms": 2.916498,
+      "replica_io_jobs": 1403.5,
+      "peak_replica_budget_bytes": 8146447.0
+    }
+  },
+  "mixed": {
+    "before": {
+      "primary_tail": {
+        "p50_us": 597.6705,
+        "p95_us": 1001.8405,
+        "p99_us": 1297.8580000000002,
+        "calls_per_second": 1564.8682392863034
+      },
+      "unique_range": {
+        "p50_us": 212.377,
+        "p95_us": 341.0235,
+        "p99_us": 572.8995,
+        "calls_per_second": 4450.093852607375
+      },
+      "secondary_in": {
+        "p50_us": 98.4795,
+        "p95_us": 200.6255,
+        "p99_us": 386.336,
+        "calls_per_second": 9114.869099254493
+      },
+      "lookup_256": {
+        "p50_us": 1112.1495,
+        "p95_us": 1461.656,
+        "p99_us": 1770.5475000000001,
+        "calls_per_second": 877.1935636328569
+      },
+      "writer": [
+        {
+          "backpressure": 0,
+          "mode": "writer",
+          "seconds": 20.020248929,
+          "updates": 20020
+        },
+        {
+          "backpressure": 0,
+          "mode": "writer",
+          "seconds": 20.021789917,
+          "updates": 20020
+        }
+      ],
+      "write_lock_wait_ms": 2.2787059999999997,
+      "engine_memory_bytes": 8535435.5,
+      "write_amplification": 8.391826422178568
+    },
+    "after": {
+      "primary_tail": {
+        "p50_us": 590.9414999999999,
+        "p95_us": 997.007,
+        "p99_us": 1305.4254999999998,
+        "calls_per_second": 1581.1806395512804
+      },
+      "unique_range": {
+        "p50_us": 213.62650000000002,
+        "p95_us": 344.73199999999997,
+        "p99_us": 584.421,
+        "calls_per_second": 4424.518552816921
+      },
+      "secondary_in": {
+        "p50_us": 98.7715,
+        "p95_us": 203.4395,
+        "p99_us": 396.10699999999997,
+        "calls_per_second": 9051.461481234688
+      },
+      "lookup_256": {
+        "p50_us": 1115.112,
+        "p95_us": 1482.9270000000001,
+        "p99_us": 1820.242,
+        "calls_per_second": 873.8748574783847
+      },
+      "writer": [
+        {
+          "backpressure": 0,
+          "mode": "writer",
+          "seconds": 20.022832287,
+          "updates": 20020
+        },
+        {
+          "backpressure": 0,
+          "mode": "writer",
+          "seconds": 20.020112906,
+          "updates": 20020
+        }
+      ],
+      "write_lock_wait_ms": 0.39155700000000004,
+      "engine_memory_bytes": 8513904.0,
+      "write_amplification": 8.479614287298523
+    }
+  },
+  "method": "Medians of two per-run measurements; P99 is not pooled. Order before/after then after/before. Client zero: 160000 reads/run, delayed: 8000 reads/run. Earlier 16384-transaction pilot rejected for <1000 tail samples; final replicas use 65536.",
+  "baseline_source_sha256": "6601a168a4d98a10c73efef8a5666f6af2ccf05d4aa062709c680d91773061d2",
+  "candidate_source_sha256": "3f2d095b169edf0e4c39fb7991629e1864e0ba422ae03ed2550aba51b14256ea"
+}

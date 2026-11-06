@@ -1,0 +1,167 @@
+{
+  "active_tenants": 8,
+  "batch_atomicity_checked": true,
+  "cold_closed": 32,
+  "cold_create_open_p99_us": 312776,
+  "cold_reopen_p99_us": 129,
+  "cold_tenants": 32,
+  "duration_s": 180,
+  "kind": "summary",
+  "memory_limit": 536870912,
+  "peak_engine_memory": 37128264,
+  "reopened_verified_documents": 8000,
+  "reopened_verified_tenants": 8,
+  "rss": {
+    "pid": 182302,
+    "samples": 154,
+    "observed_vm_hwm_bytes": 62717952,
+    "monitor_seconds": 154.27563290399848,
+    "note": "Linux process VmHWM sampled during the soak run; separate from engine budget accounting."
+  },
+  "writers": [
+    {
+      "backpressure": 0,
+      "kind": "writer",
+      "tenant": "e11f529a-62f0-406f-810d-f73a1652349c",
+      "updates": 668740
+    },
+    {
+      "backpressure": 0,
+      "kind": "writer",
+      "tenant": "6d9d603a-8527-4323-ba6b-8af58e3de55a",
+      "updates": 669280
+    }
+  ],
+  "total_updates": 1338020,
+  "readers": [
+    {
+      "backpressure": 0,
+      "kind": "reader",
+      "p95_us": 25,
+      "p99_us": 76,
+      "reads": 77009,
+      "tenant": "e11f529a-62f0-406f-810d-f73a1652349c"
+    },
+    {
+      "backpressure": 0,
+      "kind": "reader",
+      "p95_us": 24,
+      "p99_us": 77,
+      "reads": 77208,
+      "tenant": "e11f529a-62f0-406f-810d-f73a1652349c"
+    },
+    {
+      "backpressure": 0,
+      "kind": "reader",
+      "p95_us": 27,
+      "p99_us": 77,
+      "reads": 76962,
+      "tenant": "6d9d603a-8527-4323-ba6b-8af58e3de55a"
+    },
+    {
+      "backpressure": 0,
+      "kind": "reader",
+      "p95_us": 25,
+      "p99_us": 74,
+      "reads": 76577,
+      "tenant": "6d9d603a-8527-4323-ba6b-8af58e3de55a"
+    },
+    {
+      "backpressure": 0,
+      "kind": "reader",
+      "p95_us": 8,
+      "p99_us": 14,
+      "reads": 74758,
+      "tenant": "ea148d8a-1498-4290-97e0-e0d01b17dc80"
+    },
+    {
+      "backpressure": 0,
+      "kind": "reader",
+      "p95_us": 8,
+      "p99_us": 14,
+      "reads": 74621,
+      "tenant": "ea148d8a-1498-4290-97e0-e0d01b17dc80"
+    },
+    {
+      "backpressure": 0,
+      "kind": "reader",
+      "p95_us": 8,
+      "p99_us": 15,
+      "reads": 74382,
+      "tenant": "2995a637-3fe2-4365-8db7-cf1ff044ec36"
+    },
+    {
+      "backpressure": 0,
+      "kind": "reader",
+      "p95_us": 8,
+      "p99_us": 15,
+      "reads": 74641,
+      "tenant": "2995a637-3fe2-4365-8db7-cf1ff044ec36"
+    },
+    {
+      "backpressure": 0,
+      "kind": "reader",
+      "p95_us": 8,
+      "p99_us": 14,
+      "reads": 74982,
+      "tenant": "51d0704b-fc99-4a33-b568-e96a97fca796"
+    },
+    {
+      "backpressure": 0,
+      "kind": "reader",
+      "p95_us": 8,
+      "p99_us": 15,
+      "reads": 74909,
+      "tenant": "51d0704b-fc99-4a33-b568-e96a97fca796"
+    },
+    {
+      "backpressure": 0,
+      "kind": "reader",
+      "p95_us": 8,
+      "p99_us": 14,
+      "reads": 74827,
+      "tenant": "071f4fdc-27bb-46a2-95da-57f6282c412f"
+    },
+    {
+      "backpressure": 0,
+      "kind": "reader",
+      "p95_us": 8,
+      "p99_us": 14,
+      "reads": 74285,
+      "tenant": "071f4fdc-27bb-46a2-95da-57f6282c412f"
+    },
+    {
+      "backpressure": 0,
+      "kind": "reader",
+      "p95_us": 8,
+      "p99_us": 14,
+      "reads": 74883,
+      "tenant": "24edab15-4121-47de-8b34-bf0d3fb1487c"
+    },
+    {
+      "backpressure": 0,
+      "kind": "reader",
+      "p95_us": 8,
+      "p99_us": 14,
+      "reads": 75191,
+      "tenant": "24edab15-4121-47de-8b34-bf0d3fb1487c"
+    },
+    {
+      "backpressure": 0,
+      "kind": "reader",
+      "p95_us": 8,
+      "p99_us": 14,
+      "reads": 74129,
+      "tenant": "15929047-8310-4402-bc6b-2774089ec444"
+    },
+    {
+      "backpressure": 0,
+      "kind": "reader",
+      "p95_us": 8,
+      "p99_us": 15,
+      "reads": 74862,
+      "tenant": "15929047-8310-4402-bc6b-2774089ec444"
+    }
+  ],
+  "observed_sample_errors": []
+}

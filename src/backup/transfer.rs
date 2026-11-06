@@ -1,0 +1,244 @@
+use super::*;
+use std::{
+    io::{Read, Write},
+    os::unix::fs::FileExt,
+};
+
+pub(super) struct Context<'a> {
+    pub inner: &'a Inner,
+    pub job: BackupJob,
+    pub budget: Budget,
+    pub io: Arc<IoScheduler>,
+    pub started: Instant,
+}
+impl Context<'_> {
+    pub fn check(&self) -> Result<()> {
+        if self.inner.stop.load(Ordering::Acquire) {
+            return Err(Error::new("INTERRUPTED", "backup service is stopping"));
+        }
+        if self.started.elapsed() > Duration::from_secs(self.inner.config.job_timeout_seconds) {
+            return Err(Error::new("DEADLINE_EXCEEDED", "backup job deadline"));
+        }
+        Ok(())
+    }
+    fn throttle(&self, bytes: usize) -> Result<()> {
+        self.check()?;
+        let end = {
+            let mut next = self.inner.bandwidth.lock();
+            *next = (*next).max(Instant::now())
+                + Duration::from_secs_f64(bytes as f64 / self.inner.config.bytes_per_second as f64);
+            *next
+        };
+        while Instant::now() < end {
+            self.check()?;
+            thread::sleep(
+                end.saturating_duration_since(Instant::now())
+                    .min(Duration::from_millis(100)),
+            );
+        }
+        Ok(())
+    }
+    fn chunk(&self, file: Arc<File>, offset: u64, count: usize) -> Result<Vec<u8>> {
+        self.throttle(count)?;
+        self.io.run(self.job.tenant, move || {
+            let mut bytes = vec![0; count];
+            file.read_exact_at(&mut bytes, offset)?;
+            Ok(bytes)
+        })
+    }
+    pub fn local_hash(&self, path: &Path) -> Result<(u64, String)> {
+        reject_symlink(path)?;
+        let file = Arc::new(File::open(path)?);
+        let size = file.metadata()?.len();
+        if size > self.inner.config.max_backup_bytes {
+            return Err(Error::limit("backup file byte limit"));
+        }
+        let mut digest = Sha256::new();
+        let mut offset = 0;
+        while offset < size {
+            let bytes = self.chunk(
+                file.clone(),
+                offset,
+                (size - offset).min(CHUNK as u64) as usize,
+            )?;
+            offset += bytes.len() as u64;
+            digest.update(bytes);
+        }
+        Ok((size, format!("{:x}", digest.finalize())))
+    }
+    pub fn upload(&self, file: &BackupFile, path: &Path, generation: Uuid) -> Result<bool> {
+        self.check()?;
+        let key = object_key(self.job.tenant, generation, &file.sha256);
+        match self.inner.op.stat(&key) {
+            Ok(meta) => {
+                if meta.content_length() != file.size {
+                    return Err(Error::corrupt("existing backup object length mismatch"));
+                }
+                let tagged = meta
+                    .user_metadata()
+                    .and_then(|m| m.get("sha256"))
+                    .is_some_and(|s| s == &file.sha256);
+                // S3 validates CRC32C per transfer; immutable objects carry our
+                // full-file digest. Backends without metadata are read back.
+                if !tagged {
+                    self.download(file, generation, None)?;
+                }
+                return Ok(false);
+            }
+            Err(e) if e.kind() == opendal::ErrorKind::NotFound => {}
+            Err(e) => return Err(remote_error(e)),
+        }
+        let input = Arc::new(File::open(path)?);
+        if input.metadata()?.len() != file.size {
+            return Err(Error::corrupt("checkpoint file changed"));
+        }
+        let metadata = if self
+            .inner
+            .op
+            .info()
+            .full_capability()
+            .write_with_user_metadata
+        {
+            Some(HashMap::from([("sha256".into(), file.sha256.clone())]))
+        } else {
+            None
+        };
+        let options = opendal::options::WriteOptions {
+            if_not_exists: true,
+            chunk: Some(8 << 20),
+            concurrent: 1,
+            user_metadata: metadata,
+            ..Default::default()
+        };
+        let mut writer = self
+            .inner
+            .op
+            .writer_options(&key, options)
+            .map_err(remote_error)?;
+        let mut digest = Sha256::new();
+        let mut offset = 0;
+        while offset < file.size {
+            let bytes = self.chunk(
+                input.clone(),
+                offset,
+                (file.size - offset).min(CHUNK as u64) as usize,
+            )?;
+            offset += bytes.len() as u64;
+            digest.update(&bytes);
+            writer.write(bytes).map_err(remote_error)?;
+        }
+        if format!("{:x}", digest.finalize()) != file.sha256 {
+            return Err(Error::corrupt("checkpoint digest changed"));
+        }
+        writer.close().map_err(remote_error)?;
+        let meta = self.inner.op.stat(&key).map_err(remote_error)?;
+        if meta.content_length() != file.size {
+            return Err(Error::corrupt("uploaded backup object length mismatch"));
+        }
+        Ok(true)
+    }
+    pub fn download(
+        &self,
+        file: &BackupFile,
+        generation: Uuid,
+        destination: Option<&Path>,
+    ) -> Result<()> {
+        self.check()?;
+        let key = object_key(self.job.tenant, generation, &file.sha256);
+        let meta = self.inner.op.stat(&key).map_err(remote_error)?;
+        if meta.content_length() != file.size {
+            return Err(Error::corrupt("backup object length mismatch"));
+        }
+        let mut input = self
+            .inner
+            .op
+            .reader(&key)
+            .map_err(remote_error)?
+            .into_std_read(..file.size)
+            .map_err(remote_error)?;
+        let mut target = if let Some(path) = destination {
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent)?;
+                reject_symlink(parent)?;
+            }
+            Some(OpenOptions::new().write(true).create_new(true).open(path)?)
+        } else {
+            None
+        };
+        let mut digest = Sha256::new();
+        let mut remaining = file.size;
+        while remaining > 0 {
+            let count = remaining.min(CHUNK as u64) as usize;
+            self.throttle(count)?;
+            let mut bytes = vec![0; count];
+            input
+                .read_exact(&mut bytes)
+                .map_err(|_| Error::new("BACKUP_STORAGE_ERROR", "backup stream read failed"))?;
+            digest.update(&bytes);
+            remaining -= count as u64;
+            if let Some(mut output) = target.take() {
+                target = Some(self.io.run(self.job.tenant, move || {
+                    output.write_all(&bytes)?;
+                    Ok(output)
+                })?);
+            }
+        }
+        if format!("{:x}", digest.finalize()) != file.sha256 {
+            return Err(Error::corrupt("backup object SHA-256 mismatch"));
+        }
+        if let Some(output) = target {
+            self.io.run(self.job.tenant, move || {
+                output.sync_all()?;
+                Ok(())
+            })?;
+        }
+        Ok(())
+    }
+}
+pub(super) fn object_key(tenant: Uuid, generation: Uuid, digest: &str) -> String {
+    format!("tenants/{tenant}/objects/{generation}/{digest}")
+}
+
+pub(super) struct Staging<'a> {
+    inner: &'a Inner,
+    reserved: u64,
+}
+impl<'a> Staging<'a> {
+    pub fn reserve(inner: &'a Inner, bytes: u64, own: Uuid) -> Result<Self> {
+        let mut reserved = inner.staging.lock();
+        let mut retained = 0;
+        for entry in fs::read_dir(&inner.work_path)? {
+            let path = entry?.path();
+            if path.file_name().and_then(|s| s.to_str()) != Some(&own.to_string()) {
+                retained += tree_size(&path)?;
+            }
+        }
+        if retained.saturating_add(*reserved).saturating_add(bytes) > inner.config.max_staging_bytes
+        {
+            return Err(Error::limit(
+                "backup staging budget; forget failed jobs or increase max_staging_bytes",
+            ));
+        }
+        *reserved += bytes;
+        Ok(Self {
+            inner,
+            reserved: bytes,
+        })
+    }
+}
+impl Drop for Staging<'_> {
+    fn drop(&mut self) {
+        *self.inner.staging.lock() -= self.reserved;
+    }
+}
+pub(super) fn tree_size(path: &Path) -> Result<u64> {
+    reject_symlink(path)?;
+    if path.is_file() {
+        return Ok(fs::metadata(path)?.len());
+    }
+    let mut size = 0u64;
+    for entry in fs::read_dir(path)? {
+        size = size.saturating_add(tree_size(&entry?.path())?);
+    }
+    Ok(size)
+}

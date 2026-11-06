@@ -1,0 +1,12 @@
+{
+  "platform": "Linux-7.2.12-orbstack-00394-gbecdd6130068-aarch64-with-glibc2.42",
+  "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)",
+  "memory": [
+    "MemTotal:       32880040 kB",
+    "MemFree:        23830424 kB",
+    "MemAvailable:   27673008 kB"
+  ],
+  "cpus": 18,
+  "data_directory": "/var/tmp",
+  "validation": "OrbStack ubuntu; sequential checks and separate benchmark windows"
+}

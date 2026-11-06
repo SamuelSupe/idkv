@@ -1,0 +1,854 @@
+{
+  "v052-read-before-1": [
+    {
+      "calls": 200000,
+      "calls_per_second": 938320.3955136819,
+      "elapsed_seconds": 0.213146811,
+      "engine_memory_bytes": 249613,
+      "last_stats": {
+        "blocks_read": 0,
+        "cache_hits": 0,
+        "candidate_files": 0,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 0
+      },
+      "mode": "get",
+      "p50_us": 0.959,
+      "p95_us": 1.209,
+      "p99_us": 1.416,
+      "rows": 10000
+    },
+    {
+      "calls": 200000,
+      "calls_per_second": 606944.5398569691,
+      "elapsed_seconds": 0.329519399,
+      "engine_memory_bytes": 285356,
+      "last_stats": {
+        "blocks_read": 0,
+        "cache_hits": 2,
+        "candidate_files": 1,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 1
+      },
+      "mode": "unique_query",
+      "p50_us": 1.542,
+      "p95_us": 1.792,
+      "p99_us": 2.084,
+      "rows": 10000
+    },
+    {
+      "calls": 238,
+      "calls_per_second": 79.08539631890038,
+      "elapsed_seconds": 3.009405163,
+      "engine_memory_bytes": 359960,
+      "last_stats": {
+        "blocks_read": 499,
+        "cache_hits": 9,
+        "candidate_files": 1,
+        "decompressed_bytes": 7106053,
+        "document_reads": 10000,
+        "scanned_entries": 10000
+      },
+      "mode": "in_scan_256",
+      "p50_us": 12695.713,
+      "p95_us": 13923.8,
+      "p99_us": 14300.676,
+      "rows": 10000
+    },
+    {
+      "calls": 2899,
+      "calls_per_second": 966.1235885463423,
+      "elapsed_seconds": 3.000651298,
+      "engine_memory_bytes": 3514371,
+      "last_stats": {
+        "blocks_read": 0,
+        "cache_hits": 179,
+        "candidate_files": 1,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 1000
+      },
+      "mode": "lookup_1000",
+      "p50_us": 980.17,
+      "p95_us": 1380.504,
+      "p99_us": 2093.133,
+      "rows": 10000
+    },
+    {
+      "calls": 11893,
+      "calls_per_second": 3964.168098878636,
+      "elapsed_seconds": 3.000125046,
+      "engine_memory_bytes": 3514371,
+      "last_stats": {
+        "blocks_read": 0,
+        "cache_hits": 2,
+        "candidate_files": 1,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 1
+      },
+      "mode": "lookup_duplicate_1000",
+      "p50_us": 245.959,
+      "p95_us": 288.793,
+      "p99_us": 371.752,
+      "rows": 10000
+    }
+  ],
+  "v052-replication-before-1": {
+    "after": {
+      "commits": 8192,
+      "compaction_read_bytes": 0,
+      "compaction_write_bytes": 0,
+      "document_bytes": 3194192,
+      "flush_bytes": 370025,
+      "fsyncs": 36,
+      "scheduler": {
+        "completed_jobs": 102,
+        "queue_wait_ns": 1042966,
+        "queued_jobs": 0
+      },
+      "wal_bytes": 5052400,
+      "write_lock_wait_ns": 0
+    },
+    "before": {
+      "commits": 0,
+      "compaction_read_bytes": 0,
+      "compaction_write_bytes": 0,
+      "document_bytes": 0,
+      "flush_bytes": 0,
+      "fsyncs": 0,
+      "scheduler": {
+        "completed_jobs": 6,
+        "queue_wait_ns": 57876,
+        "queued_jobs": 0
+      },
+      "wal_bytes": 0,
+      "write_lock_wait_ns": 0
+    },
+    "catchup_ms": 182.050658,
+    "keys": 1024,
+    "light_tenant_ms": 2.8318440000000002,
+    "load_ms": 8735.714058,
+    "lookup_p99_us": 206,
+    "lookup_samples": 65,
+    "note": "Loopback catch-up with concurrent replica lookups, 4 source loading threads; not client write throughput or a hardware HA qualification.",
+    "peak_replica_budget_bytes": 5182094,
+    "poll_ms": 50,
+    "replica_io_jobs": 96,
+    "transactions": 8192,
+    "transactions_per_second": 44998.464108819644,
+    "version": "0.5.1"
+  },
+  "v052-read-after-1": [
+    {
+      "calls": 200000,
+      "calls_per_second": 1176057.688216934,
+      "elapsed_seconds": 0.170059685,
+      "engine_memory_bytes": 249747,
+      "last_stats": {
+        "blocks_read": 0,
+        "cache_hits": 0,
+        "candidate_files": 0,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 0
+      },
+      "mode": "get",
+      "p50_us": 0.75,
+      "p95_us": 1.041,
+      "p99_us": 1.209,
+      "rows": 10000
+    },
+    {
+      "calls": 200000,
+      "calls_per_second": 613035.8393012373,
+      "elapsed_seconds": 0.3262452,
+      "engine_memory_bytes": 285490,
+      "last_stats": {
+        "blocks_read": 0,
+        "cache_hits": 2,
+        "candidate_files": 1,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 1
+      },
+      "mode": "unique_query",
+      "p50_us": 1.541,
+      "p95_us": 1.791,
+      "p99_us": 2.125,
+      "rows": 10000
+    },
+    {
+      "calls": 226,
+      "calls_per_second": 75.12662360546666,
+      "elapsed_seconds": 3.008254453,
+      "engine_memory_bytes": 360094,
+      "last_stats": {
+        "blocks_read": 499,
+        "cache_hits": 9,
+        "candidate_files": 1,
+        "decompressed_bytes": 7106053,
+        "document_reads": 10000,
+        "scanned_entries": 10000
+      },
+      "mode": "in_scan_256",
+      "p50_us": 12814.459,
+      "p95_us": 18091.393,
+      "p99_us": 21247.529,
+      "rows": 10000
+    },
+    {
+      "calls": 3004,
+      "calls_per_second": 1001.2976450826673,
+      "elapsed_seconds": 3.000106926,
+      "engine_memory_bytes": 3514505,
+      "last_stats": {
+        "blocks_read": 0,
+        "cache_hits": 179,
+        "candidate_files": 1,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 1000
+      },
+      "mode": "lookup_1000",
+      "p50_us": 971.129,
+      "p95_us": 1082.92,
+      "p99_us": 1697.881,
+      "rows": 10000
+    },
+    {
+      "calls": 12497,
+      "calls_per_second": 4165.367902876921,
+      "elapsed_seconds": 3.000215177,
+      "engine_memory_bytes": 3514505,
+      "last_stats": {
+        "blocks_read": 0,
+        "cache_hits": 2,
+        "candidate_files": 1,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 1
+      },
+      "mode": "lookup_duplicate_1000",
+      "p50_us": 236.668,
+      "p95_us": 259.001,
+      "p99_us": 288.126,
+      "rows": 10000
+    }
+  ],
+  "v052-replication-after-1": {
+    "after": {
+      "commits": 8192,
+      "compaction_read_bytes": 0,
+      "compaction_write_bytes": 0,
+      "document_bytes": 3194192,
+      "flush_bytes": 323977,
+      "fsyncs": 35,
+      "scheduler": {
+        "completed_jobs": 97,
+        "queue_wait_ns": 867006,
+        "queued_jobs": 0
+      },
+      "wal_bytes": 5052400,
+      "write_lock_wait_ns": 0
+    },
+    "before": {
+      "commits": 0,
+      "compaction_read_bytes": 0,
+      "compaction_write_bytes": 0,
+      "document_bytes": 0,
+      "flush_bytes": 0,
+      "fsyncs": 0,
+      "scheduler": {
+        "completed_jobs": 6,
+        "queue_wait_ns": 85334,
+        "queued_jobs": 0
+      },
+      "wal_bytes": 0,
+      "write_lock_wait_ns": 0
+    },
+    "catchup_ms": 212.570325,
+    "keys": 1024,
+    "light_tenant_ms": 6.826397,
+    "load_ms": 9409.350628,
+    "lookup_p99_us": 1391,
+    "lookup_samples": 79,
+    "note": "Loopback catch-up with concurrent replica lookups, 4 source loading threads; not client write throughput or a hardware HA qualification.",
+    "peak_replica_budget_bytes": 5178709,
+    "poll_ms": 50,
+    "replica_io_jobs": 91,
+    "transactions": 8192,
+    "transactions_per_second": 38537.83447901301,
+    "version": "0.5.2"
+  },
+  "v052-read-after-2": [
+    {
+      "calls": 200000,
+      "calls_per_second": 1149188.6865775404,
+      "elapsed_seconds": 0.174035824,
+      "engine_memory_bytes": 249747,
+      "last_stats": {
+        "blocks_read": 0,
+        "cache_hits": 0,
+        "candidate_files": 0,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 0
+      },
+      "mode": "get",
+      "p50_us": 0.75,
+      "p95_us": 1.125,
+      "p99_us": 1.292,
+      "rows": 10000
+    },
+    {
+      "calls": 200000,
+      "calls_per_second": 599969.1483864516,
+      "elapsed_seconds": 0.333350474,
+      "engine_memory_bytes": 285490,
+      "last_stats": {
+        "blocks_read": 0,
+        "cache_hits": 2,
+        "candidate_files": 1,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 1
+      },
+      "mode": "unique_query",
+      "p50_us": 1.542,
+      "p95_us": 1.792,
+      "p99_us": 2.333,
+      "rows": 10000
+    },
+    {
+      "calls": 230,
+      "calls_per_second": 76.60992274389254,
+      "elapsed_seconds": 3.002222059,
+      "engine_memory_bytes": 360094,
+      "last_stats": {
+        "blocks_read": 499,
+        "cache_hits": 9,
+        "candidate_files": 1,
+        "decompressed_bytes": 7106053,
+        "document_reads": 10000,
+        "scanned_entries": 10000
+      },
+      "mode": "in_scan_256",
+      "p50_us": 12701.708,
+      "p95_us": 17323.14,
+      "p99_us": 20698.819,
+      "rows": 10000
+    },
+    {
+      "calls": 2816,
+      "calls_per_second": 938.3473792700945,
+      "elapsed_seconds": 3.001020797,
+      "engine_memory_bytes": 3514505,
+      "last_stats": {
+        "blocks_read": 0,
+        "cache_hits": 179,
+        "candidate_files": 1,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 1000
+      },
+      "mode": "lookup_1000",
+      "p50_us": 996.629,
+      "p95_us": 1497.964,
+      "p99_us": 2049.674,
+      "rows": 10000
+    },
+    {
+      "calls": 12113,
+      "calls_per_second": 4037.489632167105,
+      "elapsed_seconds": 3.000131543,
+      "engine_memory_bytes": 3514505,
+      "last_stats": {
+        "blocks_read": 0,
+        "cache_hits": 2,
+        "candidate_files": 1,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 1
+      },
+      "mode": "lookup_duplicate_1000",
+      "p50_us": 244.418,
+      "p95_us": 266.835,
+      "p99_us": 298.709,
+      "rows": 10000
+    }
+  ],
+  "v052-replication-after-2": {
+    "after": {
+      "commits": 8192,
+      "compaction_read_bytes": 0,
+      "compaction_write_bytes": 0,
+      "document_bytes": 3194192,
+      "flush_bytes": 418491,
+      "fsyncs": 36,
+      "scheduler": {
+        "completed_jobs": 153,
+        "queue_wait_ns": 2375140,
+        "queued_jobs": 0
+      },
+      "wal_bytes": 5052400,
+      "write_lock_wait_ns": 0
+    },
+    "before": {
+      "commits": 0,
+      "compaction_read_bytes": 0,
+      "compaction_write_bytes": 0,
+      "document_bytes": 0,
+      "flush_bytes": 0,
+      "fsyncs": 0,
+      "scheduler": {
+        "completed_jobs": 6,
+        "queue_wait_ns": 61918,
+        "queued_jobs": 0
+      },
+      "wal_bytes": 0,
+      "write_lock_wait_ns": 0
+    },
+    "catchup_ms": 297.865102,
+    "keys": 1024,
+    "light_tenant_ms": 9.192614,
+    "load_ms": 8676.584691,
+    "lookup_p99_us": 694,
+    "lookup_samples": 99,
+    "note": "Loopback catch-up with concurrent replica lookups, 4 source loading threads; not client write throughput or a hardware HA qualification.",
+    "peak_replica_budget_bytes": 6001482,
+    "poll_ms": 50,
+    "replica_io_jobs": 147,
+    "transactions": 8192,
+    "transactions_per_second": 27502.382605398332,
+    "version": "0.5.2"
+  },
+  "v052-read-before-2": [
+    {
+      "calls": 200000,
+      "calls_per_second": 944701.2509828436,
+      "elapsed_seconds": 0.21170714,
+      "engine_memory_bytes": 249613,
+      "last_stats": {
+        "blocks_read": 0,
+        "cache_hits": 0,
+        "candidate_files": 0,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 0
+      },
+      "mode": "get",
+      "p50_us": 1.0,
+      "p95_us": 1.208,
+      "p99_us": 1.333,
+      "rows": 10000
+    },
+    {
+      "calls": 200000,
+      "calls_per_second": 606178.7337636693,
+      "elapsed_seconds": 0.329935692,
+      "engine_memory_bytes": 285356,
+      "last_stats": {
+        "blocks_read": 0,
+        "cache_hits": 2,
+        "candidate_files": 1,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 1
+      },
+      "mode": "unique_query",
+      "p50_us": 1.542,
+      "p95_us": 1.792,
+      "p99_us": 2.083,
+      "rows": 10000
+    },
+    {
+      "calls": 234,
+      "calls_per_second": 77.76122131343517,
+      "elapsed_seconds": 3.009211996,
+      "engine_memory_bytes": 359960,
+      "last_stats": {
+        "blocks_read": 499,
+        "cache_hits": 9,
+        "candidate_files": 1,
+        "decompressed_bytes": 7106053,
+        "document_reads": 10000,
+        "scanned_entries": 10000
+      },
+      "mode": "in_scan_256",
+      "p50_us": 12427.128,
+      "p95_us": 17991.023,
+      "p99_us": 21339.202,
+      "rows": 10000
+    },
+    {
+      "calls": 3003,
+      "calls_per_second": 1000.8206009056465,
+      "elapsed_seconds": 3.000537756,
+      "engine_memory_bytes": 3514371,
+      "last_stats": {
+        "blocks_read": 0,
+        "cache_hits": 179,
+        "candidate_files": 1,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 1000
+      },
+      "mode": "lookup_1000",
+      "p50_us": 989.754,
+      "p95_us": 1078.879,
+      "p99_us": 1179.463,
+      "rows": 10000
+    },
+    {
+      "calls": 11996,
+      "calls_per_second": 3998.652499440861,
+      "elapsed_seconds": 3.000010629,
+      "engine_memory_bytes": 3514371,
+      "last_stats": {
+        "blocks_read": 0,
+        "cache_hits": 2,
+        "candidate_files": 1,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 1
+      },
+      "mode": "lookup_duplicate_1000",
+      "p50_us": 246.917,
+      "p95_us": 271.084,
+      "p99_us": 308.252,
+      "rows": 10000
+    }
+  ],
+  "v052-replication-before-2": {
+    "after": {
+      "commits": 8192,
+      "compaction_read_bytes": 0,
+      "compaction_write_bytes": 0,
+      "document_bytes": 3194192,
+      "flush_bytes": 417320,
+      "fsyncs": 37,
+      "scheduler": {
+        "completed_jobs": 154,
+        "queue_wait_ns": 2112167,
+        "queued_jobs": 0
+      },
+      "wal_bytes": 5052400,
+      "write_lock_wait_ns": 0
+    },
+    "before": {
+      "commits": 0,
+      "compaction_read_bytes": 0,
+      "compaction_write_bytes": 0,
+      "document_bytes": 0,
+      "flush_bytes": 0,
+      "fsyncs": 0,
+      "scheduler": {
+        "completed_jobs": 6,
+        "queue_wait_ns": 75750,
+        "queued_jobs": 0
+      },
+      "wal_bytes": 0,
+      "write_lock_wait_ns": 0
+    },
+    "catchup_ms": 223.694176,
+    "keys": 1024,
+    "light_tenant_ms": 6.36023,
+    "load_ms": 9343.571479999999,
+    "lookup_p99_us": 189,
+    "lookup_samples": 76,
+    "note": "Loopback catch-up with concurrent replica lookups, 4 source loading threads; not client write throughput or a hardware HA qualification.",
+    "peak_replica_budget_bytes": 5792340,
+    "poll_ms": 50,
+    "replica_io_jobs": 148,
+    "transactions": 8192,
+    "transactions_per_second": 36621.42728293472,
+    "version": "0.5.1"
+  },
+  "v052-read-before-3": [
+    {
+      "calls": 200000,
+      "calls_per_second": 931727.0266221665,
+      "elapsed_seconds": 0.214655145,
+      "engine_memory_bytes": 249613,
+      "last_stats": {
+        "blocks_read": 0,
+        "cache_hits": 0,
+        "candidate_files": 0,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 0
+      },
+      "mode": "get",
+      "p50_us": 0.959,
+      "p95_us": 1.292,
+      "p99_us": 1.5,
+      "rows": 10000
+    },
+    {
+      "calls": 200000,
+      "calls_per_second": 601707.1128772579,
+      "elapsed_seconds": 0.332387628,
+      "engine_memory_bytes": 285356,
+      "last_stats": {
+        "blocks_read": 0,
+        "cache_hits": 2,
+        "candidate_files": 1,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 1
+      },
+      "mode": "unique_query",
+      "p50_us": 1.583,
+      "p95_us": 1.833,
+      "p99_us": 2.125,
+      "rows": 10000
+    },
+    {
+      "calls": 249,
+      "calls_per_second": 82.72037037799338,
+      "elapsed_seconds": 3.010141261,
+      "engine_memory_bytes": 359960,
+      "last_stats": {
+        "blocks_read": 499,
+        "cache_hits": 9,
+        "candidate_files": 1,
+        "decompressed_bytes": 7106053,
+        "document_reads": 10000,
+        "scanned_entries": 10000
+      },
+      "mode": "in_scan_256",
+      "p50_us": 12172.041,
+      "p95_us": 13217.253,
+      "p99_us": 14120.548,
+      "rows": 10000
+    },
+    {
+      "calls": 3101,
+      "calls_per_second": 1033.466038182231,
+      "elapsed_seconds": 3.000582395,
+      "engine_memory_bytes": 3514371,
+      "last_stats": {
+        "blocks_read": 0,
+        "cache_hits": 179,
+        "candidate_files": 1,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 1000
+      },
+      "mode": "lookup_1000",
+      "p50_us": 961.212,
+      "p95_us": 1014.128,
+      "p99_us": 1046.42,
+      "rows": 10000
+    },
+    {
+      "calls": 12405,
+      "calls_per_second": 4134.867200470123,
+      "elapsed_seconds": 3.000096351,
+      "engine_memory_bytes": 3514371,
+      "last_stats": {
+        "blocks_read": 0,
+        "cache_hits": 2,
+        "candidate_files": 1,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 1
+      },
+      "mode": "lookup_duplicate_1000",
+      "p50_us": 239.835,
+      "p95_us": 263.667,
+      "p99_us": 281.668,
+      "rows": 10000
+    }
+  ],
+  "v052-replication-before-3": {
+    "after": {
+      "commits": 8192,
+      "compaction_read_bytes": 0,
+      "compaction_write_bytes": 0,
+      "document_bytes": 3194192,
+      "flush_bytes": 325696,
+      "fsyncs": 35,
+      "scheduler": {
+        "completed_jobs": 95,
+        "queue_wait_ns": 561961,
+        "queued_jobs": 0
+      },
+      "wal_bytes": 5052400,
+      "write_lock_wait_ns": 0
+    },
+    "before": {
+      "commits": 0,
+      "compaction_read_bytes": 0,
+      "compaction_write_bytes": 0,
+      "document_bytes": 0,
+      "flush_bytes": 0,
+      "fsyncs": 0,
+      "scheduler": {
+        "completed_jobs": 6,
+        "queue_wait_ns": 74960,
+        "queued_jobs": 0
+      },
+      "wal_bytes": 0,
+      "write_lock_wait_ns": 0
+    },
+    "catchup_ms": 223.845969,
+    "keys": 1024,
+    "light_tenant_ms": 1.9827569999999999,
+    "load_ms": 9235.320144,
+    "lookup_p99_us": 64,
+    "lookup_samples": 80,
+    "note": "Loopback catch-up with concurrent replica lookups, 4 source loading threads; not client write throughput or a hardware HA qualification.",
+    "peak_replica_budget_bytes": 5178694,
+    "poll_ms": 50,
+    "replica_io_jobs": 89,
+    "transactions": 8192,
+    "transactions_per_second": 36596.59379436938,
+    "version": "0.5.1"
+  },
+  "v052-read-after-3": [
+    {
+      "calls": 200000,
+      "calls_per_second": 1174835.20381,
+      "elapsed_seconds": 0.170236642,
+      "engine_memory_bytes": 249747,
+      "last_stats": {
+        "blocks_read": 0,
+        "cache_hits": 0,
+        "candidate_files": 0,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 0
+      },
+      "mode": "get",
+      "p50_us": 0.791,
+      "p95_us": 1.0,
+      "p99_us": 1.125,
+      "rows": 10000
+    },
+    {
+      "calls": 200000,
+      "calls_per_second": 619141.0220725508,
+      "elapsed_seconds": 0.323028184,
+      "engine_memory_bytes": 285490,
+      "last_stats": {
+        "blocks_read": 0,
+        "cache_hits": 2,
+        "candidate_files": 1,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 1
+      },
+      "mode": "unique_query",
+      "p50_us": 1.541,
+      "p95_us": 1.75,
+      "p99_us": 2.0,
+      "rows": 10000
+    },
+    {
+      "calls": 238,
+      "calls_per_second": 79.13762314234788,
+      "elapsed_seconds": 3.007419108,
+      "engine_memory_bytes": 360094,
+      "last_stats": {
+        "blocks_read": 499,
+        "cache_hits": 9,
+        "candidate_files": 1,
+        "decompressed_bytes": 7106053,
+        "document_reads": 10000,
+        "scanned_entries": 10000
+      },
+      "mode": "in_scan_256",
+      "p50_us": 12738.0,
+      "p95_us": 13685.336,
+      "p99_us": 13971.963,
+      "rows": 10000
+    },
+    {
+      "calls": 3074,
+      "calls_per_second": 1024.629495499372,
+      "elapsed_seconds": 3.000108833,
+      "engine_memory_bytes": 3514505,
+      "last_stats": {
+        "blocks_read": 0,
+        "cache_hits": 179,
+        "candidate_files": 1,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 1000
+      },
+      "mode": "lookup_1000",
+      "p50_us": 970.462,
+      "p95_us": 1018.837,
+      "p99_us": 1054.587,
+      "rows": 10000
+    },
+    {
+      "calls": 12187,
+      "calls_per_second": 4062.220380587504,
+      "elapsed_seconds": 3.000083417,
+      "engine_memory_bytes": 3514505,
+      "last_stats": {
+        "blocks_read": 0,
+        "cache_hits": 2,
+        "candidate_files": 1,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 1
+      },
+      "mode": "lookup_duplicate_1000",
+      "p50_us": 244.667,
+      "p95_us": 263.584,
+      "p99_us": 281.793,
+      "rows": 10000
+    }
+  ],
+  "v052-replication-after-3": {
+    "after": {
+      "commits": 8192,
+      "compaction_read_bytes": 0,
+      "compaction_write_bytes": 0,
+      "document_bytes": 3194192,
+      "flush_bytes": 325607,
+      "fsyncs": 35,
+      "scheduler": {
+        "completed_jobs": 97,
+        "queue_wait_ns": 1161673,
+        "queued_jobs": 0
+      },
+      "wal_bytes": 5052400,
+      "write_lock_wait_ns": 0
+    },
+    "before": {
+      "commits": 0,
+      "compaction_read_bytes": 0,
+      "compaction_write_bytes": 0,
+      "document_bytes": 0,
+      "flush_bytes": 0,
+      "fsyncs": 0,
+      "scheduler": {
+        "completed_jobs": 6,
+        "queue_wait_ns": 47792,
+        "queued_jobs": 0
+      },
+      "wal_bytes": 0,
+      "write_lock_wait_ns": 0
+    },
+    "catchup_ms": 203.144208,
+    "keys": 1024,
+    "light_tenant_ms": 6.12977,
+    "load_ms": 9190.992043,
+    "lookup_p99_us": 747,
+    "lookup_samples": 74,
+    "note": "Loopback catch-up with concurrent replica lookups, 4 source loading threads; not client write throughput or a hardware HA qualification.",
+    "peak_replica_budget_bytes": 5178760,
+    "poll_ms": 50,
+    "replica_io_jobs": 91,
+    "transactions": 8192,
+    "transactions_per_second": 40326.03282491815,
+    "version": "0.5.2"
+  }
+}

@@ -1,0 +1,130 @@
+{
+  "correction": {
+    "effective_time_us": 1793860158575550,
+    "entity": null,
+    "knowledge": {
+      "actor": "example",
+      "commit_seq": 5,
+      "ordinal": 4,
+      "previous": "2d2732ba-83f4-4d9d-a5a8-213c300dadf2",
+      "recorded_at_us": 1793860158575550,
+      "source": "trusted_embedding",
+      "version": "8cf24657-1ab5-49dc-87d9-4a38e6b45e8f"
+    },
+    "operation_id": "correct-bob",
+    "timelines": [
+      {
+        "changed": true,
+        "effective_from_us": 1793872800000000,
+        "effective_to_us": 1793876400000000,
+        "identifier": {
+          "kind": "account",
+          "namespace": "crm",
+          "value": "10086"
+        },
+        "replaced": [
+          {
+            "assurance": "asserted",
+            "binding_id": "b561c7b1-ca3a-40d8-8785-ae0c05a3b331",
+            "entity_id": "01a1ff2d-4a34-44fb-b74f-c1d049686538",
+            "evidence_id": null,
+            "source": "trusted_embedding",
+            "valid_from_us": 1793869200000000,
+            "valid_to_us": 1793880000000000,
+            "version_id": "101ce474-7b55-47aa-bbbb-5cdf23b3e4c7"
+          }
+        ],
+        "revision": "0251023d-39e9-4a55-aa44-72d1d80bd0a2"
+      }
+    ]
+  },
+  "entities": {
+    "alice": "01a1ff2d-4a34-44fb-b74f-c1d049686538",
+    "bob": "339fe20b-ac7e-41c9-9a1d-a5efbc0ac46d"
+  },
+  "latest": {
+    "binding": {
+      "assurance": "asserted",
+      "binding_id": "8af4fced-66b5-4d46-83b2-5700a78b90ea",
+      "entity_id": "339fe20b-ac7e-41c9-9a1d-a5efbc0ac46d",
+      "evidence_id": null,
+      "source": "trusted_embedding",
+      "valid_from_us": 1793872800000000,
+      "valid_to_us": 1793876400000000,
+      "version_id": "729fa3c3-e63c-4d28-8318-e9e8127f37c1"
+    },
+    "knowledge_version": "8cf24657-1ab5-49dc-87d9-4a38e6b45e8f",
+    "stats": {
+      "blocks_read": 0,
+      "cache_hits": 0,
+      "candidate_files": 0,
+      "decompressed_bytes": 0,
+      "document_reads": 2,
+      "scanned_entries": 0
+    },
+    "timeline_revision": "0251023d-39e9-4a55-aa44-72d1d80bd0a2"
+  },
+  "original_knowledge": {
+    "binding": {
+      "assurance": "asserted",
+      "binding_id": "b561c7b1-ca3a-40d8-8785-ae0c05a3b331",
+      "entity_id": "01a1ff2d-4a34-44fb-b74f-c1d049686538",
+      "evidence_id": null,
+      "source": "trusted_embedding",
+      "valid_from_us": 1793869200000000,
+      "valid_to_us": 1793880000000000,
+      "version_id": "101ce474-7b55-47aa-bbbb-5cdf23b3e4c7"
+    },
+    "knowledge_version": "2d2732ba-83f4-4d9d-a5a8-213c300dadf2",
+    "stats": {
+      "blocks_read": 0,
+      "cache_hits": 0,
+      "candidate_files": 0,
+      "decompressed_bytes": 0,
+      "document_reads": 2,
+      "scanned_entries": 1
+    },
+    "timeline_revision": "32d3054e-9587-408d-88c6-01dd09359984"
+  },
+  "tenant": "5231eef1-f056-48d6-b64f-b1bf09706356",
+  "timeline": {
+    "identifier": {
+      "kind": "account",
+      "namespace": "crm",
+      "value": "10086"
+    },
+    "revision": "0251023d-39e9-4a55-aa44-72d1d80bd0a2",
+    "segments": [
+      {
+        "assurance": "asserted",
+        "binding_id": "b561c7b1-ca3a-40d8-8785-ae0c05a3b331",
+        "entity_id": "01a1ff2d-4a34-44fb-b74f-c1d049686538",
+        "evidence_id": null,
+        "source": "trusted_embedding",
+        "valid_from_us": 1793869200000000,
+        "valid_to_us": 1793872800000000,
+        "version_id": "895120fd-1464-478f-833d-9970d4fa68a4"
+      },
+      {
+        "assurance": "asserted",
+        "binding_id": "8af4fced-66b5-4d46-83b2-5700a78b90ea",
+        "entity_id": "339fe20b-ac7e-41c9-9a1d-a5efbc0ac46d",
+        "evidence_id": null,
+        "source": "trusted_embedding",
+        "valid_from_us": 1793872800000000,
+        "valid_to_us": 1793876400000000,
+        "version_id": "729fa3c3-e63c-4d28-8318-e9e8127f37c1"
+      },
+      {
+        "assurance": "asserted",
+        "binding_id": "b561c7b1-ca3a-40d8-8785-ae0c05a3b331",
+        "entity_id": "01a1ff2d-4a34-44fb-b74f-c1d049686538",
+        "evidence_id": null,
+        "source": "trusted_embedding",
+        "valid_from_us": 1793876400000000,
+        "valid_to_us": 1793880000000000,
+        "version_id": "62255d65-5920-4004-a255-ef517326d6b5"
+      }
+    ]
+  }
+}

@@ -1,0 +1,1 @@
+{"result": "passed", "tenant": "83a39ce4-4e79-496f-b94b-325b951e2108", "backup": "4f2e9ee7-bb97-4e1d-80e4-1e89778fa8a4", "checks": ["CRUD/CAS", "unique covering index", "lookup", "query", "backup/restore", "integrity", "delete", "OpenAPI"]}

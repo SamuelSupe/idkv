@@ -1,0 +1,12 @@
+v052-read-before-1 passed
+v052-replication-before-1 passed
+v052-read-after-1 passed
+v052-replication-after-1 passed
+v052-read-after-2 passed
+v052-replication-after-2 passed
+v052-read-before-2 passed
+v052-replication-before-2 passed
+v052-read-before-3 passed
+v052-replication-before-3 passed
+v052-read-after-3 passed
+v052-replication-after-3 passed

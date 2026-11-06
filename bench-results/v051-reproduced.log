@@ -1,0 +1,33 @@
+   Compiling tenant-kv v0.5.0 (/Users/livesite/Documents/Codex/2026-11-04/splunk-kv-store-lookup/outputs/tenant-kv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.81s
+     Running tests/replication.rs (/tmp/tkv-20261104-target/debug/deps/replication-69ffa5c24bdb02fd)
+
+running 4 tests
+test busy_catalog_tenant_does_not_stall_healthy_replication ... FAILED
+test idle_replication_does_not_reopen_cold_engines_and_read_tokens_wait_for_apply ... ok
+test replication_credentials_and_promotion_proof_are_enforced ... ok
+test small_memory_budget_supports_replication_and_switchover ... FAILED
+
+failures:
+
+---- busy_catalog_tenant_does_not_stall_healthy_replication stdout ----
+
+thread 'busy_catalog_tenant_does_not_stall_healthy_replication' panicked at tests/replication.rs:598:5:
+assertion `left == right` failed
+  left: Number(1)
+ right: 2
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- small_memory_budget_supports_replication_and_switchover stdout ----
+
+thread 'small_memory_budget_supports_replication_and_switchover' panicked at tests/replication.rs:127:27:
+RESOURCE_EXHAUSTED: global memory budget exhausted
+
+
+failures:
+    busy_catalog_tenant_does_not_stall_healthy_replication
+    small_memory_budget_supports_replication_and_switchover
+
+test result: FAILED. 2 passed; 2 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.51s
+
+error: test failed, to rerun pass `--test replication`

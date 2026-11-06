@@ -1,0 +1,13 @@
+{
+  "version": "0.10.1",
+  "environment": "Linux-7.2.12-orbstack-00394-gbecdd6130068-aarch64-with-glibc2.42",
+  "full_regression_tests": 111,
+  "artifacts": {
+    "tenant-kv-linux-aarch64": "d2629b7a01fdf884967f5b5f510abbae29eb7490b81057888a5c8cc6731d0093",
+    "tenant-kv-restore-linux-aarch64": "f95d439a13cb2991bd8f0865693a186df5641c7a1a7506269c21d01d7f468c8d"
+  },
+  "openapi_paths": 62,
+  "openapi_schemas": 83,
+  "result": "passed",
+  "manifest_files": 854
+}

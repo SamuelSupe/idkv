@@ -1,0 +1,12 @@
+/target/
+/data/
+/auth.json
+/token.txt
+/dist/
+/SOURCE-SHA256SUMS
+.DS_Store
+._*
+.env
+.env.*
+*.core
+core

@@ -1,0 +1,24 @@
+   Compiling tenant-kv v0.6.0 (/Users/livesite/Documents/Codex/2026-11-04/splunk-kv-store-lookup/outputs/tenant-kv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.73s
+     Running tests/http.rs (/tmp/tkv-20261104-target/debug/deps/http-4f36c806d0b5e46a)
+
+running 1 test
+errortest identity_http_authentication_managed_writes_and_unforgeable_provenance ... FAILED
+
+failures:
+
+---- identity_http_authentication_managed_writes_and_unforgeable_provenance stdout ----
+
+thread 'identity_http_authentication_managed_writes_and_unforgeable_provenance' panicked at tests/http.rs:601:5:
+assertion `left == right` failed
+  left: 200
+ right: 400
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    identity_http_authentication_managed_writes_and_unforgeable_provenance
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.11s
+
+: test failed, to rerun pass `--test http`

@@ -1,0 +1,30 @@
+   Compiling tenant-kv v0.9.1 (/mnt/mac/Users/livesite/Documents/Codex/2026-11-04/splunk-kv-store-lookup/outputs/tenant-kv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.84s
+     Running tests/engine.rs (/tmp/tkv-20261104-target/debug/deps/engine-9def55853f831738)
+
+running 22 tests
+test array_projection_preserves_shape_in_covering_indexes ... ok
+test atomic_indexes_unique_conflicts_and_conditional_updates ... ok
+test backup_restore_does_not_change_other_tenants ... ok
+test batched_nonunique_ranges_reuse_blocks_and_preserve_limits ... ok
+test binary_document_precision_projection_and_types ... ok
+test bounded_primary_ranges_keep_snapshot_and_encoded_key_boundaries ... ok
+test collection_gc_resumes_and_preserves_recreated_collection_and_old_snapshot ... ok
+test concurrent_group_commits_survive_reopen ... ok
+test covering_ranges_sparse_unique_and_boolean_queries ... ok
+test deleting_another_tenant_preserves_unpublished_restore_preparation ... ok
+test failed_unique_build_can_be_repaired_and_nonunique_lookup_is_bounded ... ok
+test idle_tenant_waits_for_cursor_lease_then_reopens_with_new_runtime ... ok
+test index_multi_ranges_match_scan_with_sparse_and_typed_values ... ok
+test indexed_ranges_match_reference_with_negative_values_and_ties ... ok
+test live_handles_and_snapshots_keep_manager_ownership_after_store_drop ... ok
+test model_comparison_over_flush_compaction_and_recovery ... ok
+test online_index_build_tracks_concurrent_changes ... ok
+test pagination_keeps_snapshot_during_compaction_and_updates ... ok
+test quota_scan_and_expired_cursor_leave_other_tenants_usable ... ok
+test tenant_delete_respects_a_standalone_engine_directory_lock ... ok
+test tenant_files_keys_and_unique_values_are_isolated ... ok
+test write_result_limit_rejects_before_committing_and_multiget_restores_order ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.11s
+

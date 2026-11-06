@@ -1,0 +1,143 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 310  of event 'cpu-clock:u'
+# Event count (approx.): 621242480
+#
+# Overhead  Symbol                                                                                                                                                      IPC   [IPC Coverage]
+# ........  ..........................................................................................................................................................  ....................
+#
+    12.90%  [.] __kernel_clock_gettime                                                                                                                                  -      -            
+            |
+            ---__GI___clock_gettime (inlined)
+               |          
+               |--3.23%--tenant_kv::storage::engine::Engine::pin
+               |          tenant_kv::storage::engine::Engine::snapshot
+               |          tenant_kv::query::lookup::<impl tenant_kv::tenant::TenantHandle>::lookup_many
+               |          std::sys::backtrace::__rust_begin_short_backtrace
+               |          core::ops::function::FnOnce::call_once{{vtable.shim}}
+               |          std::sys::pal::unix::thread::Thread::new::thread_start
+               |          start_thread
+               |          thread_start
+               |          
+               |--2.90%--0xaaaad6e394b7
+               |          0xaaaad6e394b7
+               |          
+                --2.90%--0x17
+
+     4.52%  [.] cfree@GLIBC_2.17                                                                                                                                        -      -            
+     3.23%  [.] __memcpy_generic                                                                                                                                        -      -            
+            |          
+             --1.61%--<tenant_kv::query::LookupPlan as core::clone::Clone>::clone
+                       tenant_kv::query::lookup::<impl tenant_kv::tenant::TenantHandle>::lookup_many
+                       std::sys::backtrace::__rust_begin_short_backtrace
+                       core::ops::function::FnOnce::call_once{{vtable.shim}}
+                       std::sys::pal::unix::thread::Thread::new::thread_start
+                       start_thread
+                       thread_start
+
+     2.90%  [.] __aarch64_ldadd8_rel                                                                                                                                    -      -            
+     2.90%  [.] memcmp                                                                                                                                                  -      -            
+            |          
+             --1.29%--tenant_kv::storage::engine::read::get_one::{{closure}}
+                       tenant_kv::storage::engine::read::get_one
+                       tenant_kv::storage::engine::read::<impl tenant_kv::storage::engine::Snapshot>::get
+                       tenant_kv::tenant::catalog::collection_snapshot
+                       tenant_kv::query::lookup::<impl tenant_kv::tenant::TenantHandle>::lookup_many
+                       std::sys::backtrace::__rust_begin_short_backtrace
+                       core::ops::function::FnOnce::call_once{{vtable.shim}}
+                       std::sys::pal::unix::thread::Thread::new::thread_start
+                       start_thread
+                       thread_start
+
+     1.94%  [.] <core::hash::sip::Hasher<S> as core::hash::Hasher>::write                                                                                               -      -            
+            |
+            ---core::hash::BuildHasher::hash_one
+               tenant_kv::storage::cache::Cache::get
+               tenant_kv::storage::sst::Table::pending_frame
+               tenant_kv::storage::engine::read::get_one::{{closure}}
+               tenant_kv::storage::engine::read::get_one
+               tenant_kv::storage::engine::read::<impl tenant_kv::storage::engine::Snapshot>::get
+               tenant_kv::tenant::catalog::collection_snapshot
+               tenant_kv::query::lookup::<impl tenant_kv::tenant::TenantHandle>::lookup_many
+               std::sys::backtrace::__rust_begin_short_backtrace
+               core::ops::function::FnOnce::call_once{{vtable.shim}}
+               std::sys::pal::unix::thread::Thread::new::thread_start
+               start_thread
+               thread_start
+
+     1.94%  [.] __aarch64_ldadd8_relax                                                                                                                                  -      -            
+            |          
+             --1.29%--tenant_kv::resources::Budget::reserve
+                       tenant_kv::query::lookup::<impl tenant_kv::tenant::TenantHandle>::lookup_many
+                       std::sys::backtrace::__rust_begin_short_backtrace
+                       core::ops::function::FnOnce::call_once{{vtable.shim}}
+                       std::sys::pal::unix::thread::Thread::new::thread_start
+                       start_thread
+                       thread_start
+
+     1.61%  [.] malloc                                                                                                                                                  -      -            
+     1.61%  [.] parking_lot::raw_mutex::RawMutex::lock_slow                                                                                                             -      -            
+            |          
+             --1.29%--tenant_kv::storage::engine::Engine::pin
+                       tenant_kv::storage::engine::Engine::snapshot
+                       tenant_kv::query::lookup::<impl tenant_kv::tenant::TenantHandle>::lookup_many
+                       std::sys::backtrace::__rust_begin_short_backtrace
+                       core::ops::function::FnOnce::call_once{{vtable.shim}}
+                       std::sys::pal::unix::thread::Thread::new::thread_start
+                       start_thread
+                       thread_start
+
+     1.61%  [.] tenant_kv::storage::engine::Engine::pin                                                                                                                 -      -            
+            |
+            ---tenant_kv::storage::engine::Engine::snapshot
+               tenant_kv::query::lookup::<impl tenant_kv::tenant::TenantHandle>::lookup_many
+               std::sys::backtrace::__rust_begin_short_backtrace
+               core::ops::function::FnOnce::call_once{{vtable.shim}}
+               std::sys::pal::unix::thread::Thread::new::thread_start
+               start_thread
+               thread_start
+
+     1.61%  [.] tenant_kv::storage::engine::read::get_sorted                                                                                                            -      -            
+            |
+            ---tenant_kv::storage::engine::read::<impl tenant_kv::storage::engine::Snapshot>::multi_get
+               tenant_kv::query::lookup::<impl tenant_kv::tenant::TenantHandle>::lookup_many
+               std::sys::backtrace::__rust_begin_short_backtrace
+               core::ops::function::FnOnce::call_once{{vtable.shim}}
+               std::sys::pal::unix::thread::Thread::new::thread_start
+               start_thread
+               thread_start
+
+     1.29%  [.] __aarch64_cas8_acq                                                                                                                                      -      -            
+     1.29%  [.] _int_malloc                                                                                                                                             -      -            
+            |
+            ---tcache_put (inlined)
+               _int_malloc
+               __libc_malloc2
+
+     1.29%  [.] alloc::collections::btree::map::BTreeMap<K,V,A>::get_mut                                                                                                -      -            
+            |
+            ---tenant_kv::query::lookup::<impl tenant_kv::tenant::TenantHandle>::lookup_many
+               std::sys::backtrace::__rust_begin_short_backtrace
+               core::ops::function::FnOnce::call_once{{vtable.shim}}
+               std::sys::pal::unix::thread::Thread::new::thread_start
+               start_thread
+               thread_start
+
+     1.29%  [.] alloc::vec::Vec<T,A>::push_mut                                                                                                                          -      -            
+            |
+            ---tenant_kv::query::lookup::<impl tenant_kv::tenant::TenantHandle>::lookup_many
+               std::sys::backtrace::__rust_begin_short_backtrace
+               core::ops::function::FnOnce::call_once{{vtable.shim}}
+               std::sys::pal::unix::thread::Thread::new::thread_start
+               start_thread
+               thread_start
+
+     1.29%  [.] core::str::pattern::StrSearcher::new                                                                                                                    -      -            
+
+
+#
+# (Cannot load tips.txt file, please install perf!)
+#

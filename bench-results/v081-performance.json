@@ -1,0 +1,1108 @@
+{
+  "recovery": [
+    {
+      "files": 1000,
+      "open_us": {
+        "before": [
+          21392,
+          26519,
+          26741,
+          25335,
+          22416
+        ],
+        "after": [
+          3762,
+          3727,
+          5956,
+          3818,
+          3888
+        ]
+      },
+      "median_us": {
+        "before": 25335,
+        "after": 3818
+      },
+      "all_records_and_orphan_cleanup_verified": true,
+      "os_page_cache": "not dropped; alternating process opens over the same files"
+    },
+    {
+      "files": 3000,
+      "open_us": {
+        "before": [
+          177645,
+          190553,
+          185987,
+          189685,
+          186150
+        ],
+        "after": [
+          11582,
+          15291,
+          14229,
+          15206,
+          14723
+        ]
+      },
+      "median_us": {
+        "before": 186150,
+        "after": 14723
+      },
+      "all_records_and_orphan_cleanup_verified": true,
+      "os_page_cache": "not dropped; alternating process opens over the same files"
+    }
+  ],
+  "replication": {
+    "before": [
+      {
+        "result": {
+          "after": {
+            "commits": 8192,
+            "compaction_read_bytes": 0,
+            "compaction_write_bytes": 0,
+            "document_bytes": 3194192,
+            "flush_bytes": 393635,
+            "fsyncs": 36,
+            "scheduler": {
+              "completed_jobs": 122,
+              "queue_wait_ns": 2011878,
+              "queued_jobs": 0
+            },
+            "wal_bytes": 5052400,
+            "write_lock_wait_ns": 0
+          },
+          "before": {
+            "commits": 0,
+            "compaction_read_bytes": 0,
+            "compaction_write_bytes": 0,
+            "document_bytes": 0,
+            "flush_bytes": 0,
+            "fsyncs": 0,
+            "scheduler": {
+              "completed_jobs": 6,
+              "queue_wait_ns": 137918,
+              "queued_jobs": 0
+            },
+            "wal_bytes": 0,
+            "write_lock_wait_ns": 0
+          },
+          "catchup_ms": 271.888454,
+          "keys": 1024,
+          "light_tenant_ms": 7.4830119999999996,
+          "load_ms": 9852.7822,
+          "lookup_max_us": 586.417,
+          "lookup_p50_us": 2.166,
+          "lookup_p95_us": 6.292,
+          "lookup_p99_us": 13.041,
+          "lookup_samples": 10871,
+          "note": "Loopback catch-up with concurrent replica lookups, 4 source loading threads; not client write throughput or a hardware HA qualification.",
+          "offered_reads_per_second": 40000.0,
+          "peak_replica_budget_bytes": 5211384,
+          "poll_ms": 50,
+          "read_interval_us": 100,
+          "reader_samples": [
+            3903,
+            2646,
+            2129,
+            2193
+          ],
+          "readers": 4,
+          "reads_per_second": 39983.30874322453,
+          "replica_io_jobs": 116,
+          "source_log_requests": 33,
+          "source_status_requests": 14,
+          "transactions": 8192,
+          "transactions_per_second": 30130.003240225862,
+          "version": "0.8.0"
+        },
+        "sampled_vm_hwm_bytes": 26468352
+      },
+      {
+        "result": {
+          "after": {
+            "commits": 8192,
+            "compaction_read_bytes": 0,
+            "compaction_write_bytes": 0,
+            "document_bytes": 3194192,
+            "flush_bytes": 324649,
+            "fsyncs": 35,
+            "scheduler": {
+              "completed_jobs": 99,
+              "queue_wait_ns": 1187712,
+              "queued_jobs": 0
+            },
+            "wal_bytes": 5052400,
+            "write_lock_wait_ns": 0
+          },
+          "before": {
+            "commits": 0,
+            "compaction_read_bytes": 0,
+            "compaction_write_bytes": 0,
+            "document_bytes": 0,
+            "flush_bytes": 0,
+            "fsyncs": 0,
+            "scheduler": {
+              "completed_jobs": 6,
+              "queue_wait_ns": 104500,
+              "queued_jobs": 0
+            },
+            "wal_bytes": 0,
+            "write_lock_wait_ns": 0
+          },
+          "catchup_ms": 246.317786,
+          "keys": 1024,
+          "light_tenant_ms": 4.040756,
+          "load_ms": 9598.024608,
+          "lookup_max_us": 379.667,
+          "lookup_p50_us": 1.0,
+          "lookup_p95_us": 3.833,
+          "lookup_p99_us": 7.875,
+          "lookup_samples": 9848,
+          "note": "Loopback catch-up with concurrent replica lookups, 4 source loading threads; not client write throughput or a hardware HA qualification.",
+          "offered_reads_per_second": 40000.0,
+          "peak_replica_budget_bytes": 5180364,
+          "poll_ms": 50,
+          "read_interval_us": 100,
+          "reader_samples": [
+            2370,
+            2388,
+            2106,
+            2984
+          ],
+          "readers": 4,
+          "reads_per_second": 39980.87251401326,
+          "replica_io_jobs": 93,
+          "source_log_requests": 33,
+          "source_status_requests": 9,
+          "transactions": 8192,
+          "transactions_per_second": 33257.850084768135,
+          "version": "0.8.0"
+        },
+        "sampled_vm_hwm_bytes": 25227264
+      },
+      {
+        "result": {
+          "after": {
+            "commits": 8192,
+            "compaction_read_bytes": 0,
+            "compaction_write_bytes": 0,
+            "document_bytes": 3194192,
+            "flush_bytes": 405777,
+            "fsyncs": 36,
+            "scheduler": {
+              "completed_jobs": 137,
+              "queue_wait_ns": 2097332,
+              "queued_jobs": 0
+            },
+            "wal_bytes": 5052400,
+            "write_lock_wait_ns": 0
+          },
+          "before": {
+            "commits": 0,
+            "compaction_read_bytes": 0,
+            "compaction_write_bytes": 0,
+            "document_bytes": 0,
+            "flush_bytes": 0,
+            "fsyncs": 0,
+            "scheduler": {
+              "completed_jobs": 6,
+              "queue_wait_ns": 63041,
+              "queued_jobs": 0
+            },
+            "wal_bytes": 0,
+            "write_lock_wait_ns": 0
+          },
+          "catchup_ms": 206.112178,
+          "keys": 1024,
+          "light_tenant_ms": 12.612396,
+          "load_ms": 9280.517745,
+          "lookup_max_us": 633.168,
+          "lookup_p50_us": 1.5,
+          "lookup_p95_us": 5.25,
+          "lookup_p99_us": 11.125,
+          "lookup_samples": 8227,
+          "note": "Loopback catch-up with concurrent replica lookups, 4 source loading threads; not client write throughput or a hardware HA qualification.",
+          "offered_reads_per_second": 40000.0,
+          "peak_replica_budget_bytes": 5581575,
+          "poll_ms": 50,
+          "read_interval_us": 100,
+          "reader_samples": [
+            3010,
+            1583,
+            1880,
+            1754
+          ],
+          "readers": 4,
+          "reads_per_second": 39915.15726935844,
+          "replica_io_jobs": 131,
+          "source_log_requests": 33,
+          "source_status_requests": 12,
+          "transactions": 8192,
+          "transactions_per_second": 39745.34682759017,
+          "version": "0.8.0"
+        },
+        "sampled_vm_hwm_bytes": 26775552
+      }
+    ],
+    "after": [
+      {
+        "result": {
+          "after": {
+            "commits": 8192,
+            "compaction_read_bytes": 0,
+            "compaction_write_bytes": 0,
+            "document_bytes": 3194192,
+            "flush_bytes": 393135,
+            "fsyncs": 36,
+            "scheduler": {
+              "completed_jobs": 125,
+              "queue_wait_ns": 1579836,
+              "queued_jobs": 0
+            },
+            "wal_bytes": 5052400,
+            "write_lock_wait_ns": 0
+          },
+          "before": {
+            "commits": 0,
+            "compaction_read_bytes": 0,
+            "compaction_write_bytes": 0,
+            "document_bytes": 0,
+            "flush_bytes": 0,
+            "fsyncs": 0,
+            "scheduler": {
+              "completed_jobs": 6,
+              "queue_wait_ns": 71709,
+              "queued_jobs": 0
+            },
+            "wal_bytes": 0,
+            "write_lock_wait_ns": 0
+          },
+          "catchup_ms": 184.263765,
+          "keys": 1024,
+          "light_tenant_ms": 2.816754,
+          "load_ms": 8942.800889,
+          "lookup_max_us": 1148.919,
+          "lookup_p50_us": 1.625,
+          "lookup_p95_us": 5.209,
+          "lookup_p99_us": 13.709,
+          "lookup_samples": 7303,
+          "note": "Loopback catch-up with concurrent replica lookups, 4 source loading threads; not client write throughput or a hardware HA qualification.",
+          "offered_reads_per_second": 40000.0,
+          "peak_replica_budget_bytes": 5211384,
+          "poll_ms": 50,
+          "read_interval_us": 100,
+          "reader_samples": [
+            1254,
+            2641,
+            1750,
+            1658
+          ],
+          "readers": 4,
+          "reads_per_second": 39633.402693144795,
+          "replica_io_jobs": 119,
+          "source_log_requests": 33,
+          "source_status_requests": 12,
+          "transactions": 8192,
+          "transactions_per_second": 44458.00833386857,
+          "version": "0.8.1"
+        },
+        "sampled_vm_hwm_bytes": 23744512
+      },
+      {
+        "result": {
+          "after": {
+            "commits": 8192,
+            "compaction_read_bytes": 0,
+            "compaction_write_bytes": 0,
+            "document_bytes": 3194192,
+            "flush_bytes": 392075,
+            "fsyncs": 36,
+            "scheduler": {
+              "completed_jobs": 120,
+              "queue_wait_ns": 1249169,
+              "queued_jobs": 0
+            },
+            "wal_bytes": 5052400,
+            "write_lock_wait_ns": 0
+          },
+          "before": {
+            "commits": 0,
+            "compaction_read_bytes": 0,
+            "compaction_write_bytes": 0,
+            "document_bytes": 0,
+            "flush_bytes": 0,
+            "fsyncs": 0,
+            "scheduler": {
+              "completed_jobs": 6,
+              "queue_wait_ns": 109959,
+              "queued_jobs": 0
+            },
+            "wal_bytes": 0,
+            "write_lock_wait_ns": 0
+          },
+          "catchup_ms": 292.484905,
+          "keys": 1024,
+          "light_tenant_ms": 2.892088,
+          "load_ms": 9145.372061,
+          "lookup_max_us": 1181.461,
+          "lookup_p50_us": 1.083,
+          "lookup_p95_us": 3.917,
+          "lookup_p99_us": 7.0,
+          "lookup_samples": 11664,
+          "note": "Loopback catch-up with concurrent replica lookups, 4 source loading threads; not client write throughput or a hardware HA qualification.",
+          "offered_reads_per_second": 40000.0,
+          "peak_replica_budget_bytes": 5187656,
+          "poll_ms": 50,
+          "read_interval_us": 100,
+          "reader_samples": [
+            2517,
+            2382,
+            2852,
+            3913
+          ],
+          "readers": 4,
+          "reads_per_second": 39878.98110502489,
+          "replica_io_jobs": 114,
+          "source_log_requests": 33,
+          "source_status_requests": 11,
+          "transactions": 8192,
+          "transactions_per_second": 28008.28302575136,
+          "version": "0.8.1"
+        },
+        "sampled_vm_hwm_bytes": 26238976
+      },
+      {
+        "result": {
+          "after": {
+            "commits": 8192,
+            "compaction_read_bytes": 0,
+            "compaction_write_bytes": 0,
+            "document_bytes": 3194192,
+            "flush_bytes": 368234,
+            "fsyncs": 36,
+            "scheduler": {
+              "completed_jobs": 104,
+              "queue_wait_ns": 1627584,
+              "queued_jobs": 0
+            },
+            "wal_bytes": 5052400,
+            "write_lock_wait_ns": 0
+          },
+          "before": {
+            "commits": 0,
+            "compaction_read_bytes": 0,
+            "compaction_write_bytes": 0,
+            "document_bytes": 0,
+            "flush_bytes": 0,
+            "fsyncs": 0,
+            "scheduler": {
+              "completed_jobs": 6,
+              "queue_wait_ns": 85167,
+              "queued_jobs": 0
+            },
+            "wal_bytes": 0,
+            "write_lock_wait_ns": 0
+          },
+          "catchup_ms": 307.94459800000004,
+          "keys": 1024,
+          "light_tenant_ms": 8.092431000000001,
+          "load_ms": 9587.489924,
+          "lookup_max_us": 574.293,
+          "lookup_p50_us": 0.875,
+          "lookup_p95_us": 3.916,
+          "lookup_p99_us": 6.834,
+          "lookup_samples": 12299,
+          "note": "Loopback catch-up with concurrent replica lookups, 4 source loading threads; not client write throughput or a hardware HA qualification.",
+          "offered_reads_per_second": 40000.0,
+          "peak_replica_budget_bytes": 5183749,
+          "poll_ms": 50,
+          "read_interval_us": 100,
+          "reader_samples": [
+            2976,
+            3038,
+            3484,
+            2801
+          ],
+          "readers": 4,
+          "reads_per_second": 39939.00227468838,
+          "replica_io_jobs": 98,
+          "source_log_requests": 33,
+          "source_status_requests": 13,
+          "transactions": 8192,
+          "transactions_per_second": 26602.187709102134,
+          "version": "0.8.1"
+        },
+        "sampled_vm_hwm_bytes": 26066944
+      }
+    ]
+  },
+  "soak": {
+    "before": {
+      "updates": 839220,
+      "reads": 802652,
+      "writer_backpressure": 0,
+      "readers": [
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 24,
+          "p99_us": 90,
+          "reads": 51016,
+          "tenant": "65a2185d-3dd2-41ca-a27c-4d0e4bb0ac64"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 25,
+          "p99_us": 86,
+          "reads": 51774,
+          "tenant": "65a2185d-3dd2-41ca-a27c-4d0e4bb0ac64"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 23,
+          "p99_us": 82,
+          "reads": 50761,
+          "tenant": "3a25e117-6a44-48ce-9d71-7c441b407cb7"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 26,
+          "p99_us": 84,
+          "reads": 50999,
+          "tenant": "3a25e117-6a44-48ce-9d71-7c441b407cb7"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 8,
+          "p99_us": 13,
+          "reads": 49791,
+          "tenant": "7f431a92-f93b-4ec7-8482-bef6ddcf1007"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 8,
+          "p99_us": 13,
+          "reads": 49770,
+          "tenant": "7f431a92-f93b-4ec7-8482-bef6ddcf1007"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 8,
+          "p99_us": 13,
+          "reads": 49740,
+          "tenant": "02e99e52-681d-4b90-8fb0-f1f1133f9476"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 8,
+          "p99_us": 14,
+          "reads": 49432,
+          "tenant": "02e99e52-681d-4b90-8fb0-f1f1133f9476"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 8,
+          "p99_us": 13,
+          "reads": 49817,
+          "tenant": "c1c48310-8213-4bf5-9872-80962fde9f59"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 8,
+          "p99_us": 13,
+          "reads": 49871,
+          "tenant": "c1c48310-8213-4bf5-9872-80962fde9f59"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 8,
+          "p99_us": 13,
+          "reads": 49726,
+          "tenant": "ecf44dd0-5f60-443e-bd79-1c039f1c8616"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 8,
+          "p99_us": 13,
+          "reads": 49761,
+          "tenant": "ecf44dd0-5f60-443e-bd79-1c039f1c8616"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 8,
+          "p99_us": 13,
+          "reads": 50554,
+          "tenant": "1ae8f48d-e9a5-48dc-adfb-b5bb99f2ddad"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 8,
+          "p99_us": 13,
+          "reads": 49921,
+          "tenant": "1ae8f48d-e9a5-48dc-adfb-b5bb99f2ddad"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 8,
+          "p99_us": 14,
+          "reads": 49828,
+          "tenant": "cce63173-da02-426a-b16a-ed721ff907fe"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 8,
+          "p99_us": 14,
+          "reads": 49891,
+          "tenant": "cce63173-da02-426a-b16a-ed721ff907fe"
+        }
+      ],
+      "hot_tenants": [
+        "65a2185d-3dd2-41ca-a27c-4d0e4bb0ac64",
+        "3a25e117-6a44-48ce-9d71-7c441b407cb7"
+      ],
+      "maintenance_backpressure_samples": [],
+      "max_engine_memory_bytes": 35100476,
+      "sampled_vm_hwm_bytes": 60252160,
+      "retention": [
+        {
+          "kind": "retention",
+          "status": {
+            "expiration_lag_ms": 0,
+            "gc": {
+              "completed_rounds": 1000,
+              "history_sweep_active": false,
+              "knowledge_floor": 0,
+              "migration_complete": true,
+              "reclaimed_records": 21096,
+              "watermark_ms": 1793884988129
+            },
+            "next_expiration_ms": null,
+            "physical_reclamation": "as snapshots release and compaction completes",
+            "policy": {
+              "activated_seq": 18,
+              "legacy_expires_at_ms": 1793884865613,
+              "retention_seconds": 3
+            }
+          },
+          "tenant": "65a2185d-3dd2-41ca-a27c-4d0e4bb0ac64"
+        },
+        {
+          "kind": "retention",
+          "status": {
+            "expiration_lag_ms": 0,
+            "gc": {
+              "completed_rounds": 998,
+              "history_sweep_active": false,
+              "knowledge_floor": 0,
+              "migration_complete": true,
+              "reclaimed_records": 21026,
+              "watermark_ms": 1793884988129
+            },
+            "next_expiration_ms": null,
+            "physical_reclamation": "as snapshots release and compaction completes",
+            "policy": {
+              "activated_seq": 18,
+              "legacy_expires_at_ms": 1793884865734,
+              "retention_seconds": 3
+            }
+          },
+          "tenant": "3a25e117-6a44-48ce-9d71-7c441b407cb7"
+        },
+        {
+          "kind": "retention",
+          "status": {
+            "expiration_lag_ms": 0,
+            "gc": {
+              "completed_rounds": 5,
+              "history_sweep_active": false,
+              "knowledge_floor": 0,
+              "migration_complete": true,
+              "reclaimed_records": 0,
+              "watermark_ms": 0
+            },
+            "next_expiration_ms": null,
+            "physical_reclamation": "as snapshots release and compaction completes",
+            "policy": {
+              "activated_seq": 18,
+              "legacy_expires_at_ms": 1793884865880,
+              "retention_seconds": 3
+            }
+          },
+          "tenant": "7f431a92-f93b-4ec7-8482-bef6ddcf1007"
+        },
+        {
+          "kind": "retention",
+          "status": {
+            "expiration_lag_ms": 0,
+            "gc": {
+              "completed_rounds": 5,
+              "history_sweep_active": false,
+              "knowledge_floor": 0,
+              "migration_complete": true,
+              "reclaimed_records": 0,
+              "watermark_ms": 0
+            },
+            "next_expiration_ms": null,
+            "physical_reclamation": "as snapshots release and compaction completes",
+            "policy": {
+              "activated_seq": 18,
+              "legacy_expires_at_ms": 1793884866043,
+              "retention_seconds": 3
+            }
+          },
+          "tenant": "02e99e52-681d-4b90-8fb0-f1f1133f9476"
+        },
+        {
+          "kind": "retention",
+          "status": {
+            "expiration_lag_ms": 0,
+            "gc": {
+              "completed_rounds": 5,
+              "history_sweep_active": false,
+              "knowledge_floor": 0,
+              "migration_complete": true,
+              "reclaimed_records": 0,
+              "watermark_ms": 0
+            },
+            "next_expiration_ms": null,
+            "physical_reclamation": "as snapshots release and compaction completes",
+            "policy": {
+              "activated_seq": 18,
+              "legacy_expires_at_ms": 1793884866221,
+              "retention_seconds": 3
+            }
+          },
+          "tenant": "c1c48310-8213-4bf5-9872-80962fde9f59"
+        },
+        {
+          "kind": "retention",
+          "status": {
+            "expiration_lag_ms": 0,
+            "gc": {
+              "completed_rounds": 5,
+              "history_sweep_active": false,
+              "knowledge_floor": 0,
+              "migration_complete": true,
+              "reclaimed_records": 0,
+              "watermark_ms": 0
+            },
+            "next_expiration_ms": null,
+            "physical_reclamation": "as snapshots release and compaction completes",
+            "policy": {
+              "activated_seq": 18,
+              "legacy_expires_at_ms": 1793884866435,
+              "retention_seconds": 3
+            }
+          },
+          "tenant": "ecf44dd0-5f60-443e-bd79-1c039f1c8616"
+        },
+        {
+          "kind": "retention",
+          "status": {
+            "expiration_lag_ms": 0,
+            "gc": {
+              "completed_rounds": 5,
+              "history_sweep_active": false,
+              "knowledge_floor": 0,
+              "migration_complete": true,
+              "reclaimed_records": 0,
+              "watermark_ms": 0
+            },
+            "next_expiration_ms": null,
+            "physical_reclamation": "as snapshots release and compaction completes",
+            "policy": {
+              "activated_seq": 18,
+              "legacy_expires_at_ms": 1793884866630,
+              "retention_seconds": 3
+            }
+          },
+          "tenant": "1ae8f48d-e9a5-48dc-adfb-b5bb99f2ddad"
+        },
+        {
+          "kind": "retention",
+          "status": {
+            "expiration_lag_ms": 0,
+            "gc": {
+              "completed_rounds": 5,
+              "history_sweep_active": false,
+              "knowledge_floor": 0,
+              "migration_complete": true,
+              "reclaimed_records": 0,
+              "watermark_ms": 0
+            },
+            "next_expiration_ms": null,
+            "physical_reclamation": "as snapshots release and compaction completes",
+            "policy": {
+              "activated_seq": 18,
+              "legacy_expires_at_ms": 1793884866767,
+              "retention_seconds": 3
+            }
+          },
+          "tenant": "cce63173-da02-426a-b16a-ed721ff907fe"
+        }
+      ],
+      "verified_reopen": {
+        "active_tenants": 8,
+        "batch_atomicity_checked": true,
+        "cold_closed": 32,
+        "cold_create_open_p99_us": 183496,
+        "cold_reopen_p99_us": 139,
+        "cold_tenants": 32,
+        "duration_s": 120,
+        "kind": "summary",
+        "memory_limit": 536870912,
+        "peak_engine_memory": 38349586,
+        "reopened_verified_documents": 8000,
+        "reopened_verified_tenants": 8
+      }
+    },
+    "after": {
+      "updates": 883740,
+      "reads": 802576,
+      "writer_backpressure": 0,
+      "readers": [
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 24,
+          "p99_us": 83,
+          "reads": 50718,
+          "tenant": "5d89b976-ac24-4620-86be-b3a73cb3dc72"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 23,
+          "p99_us": 80,
+          "reads": 51057,
+          "tenant": "5d89b976-ac24-4620-86be-b3a73cb3dc72"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 20,
+          "p99_us": 77,
+          "reads": 50669,
+          "tenant": "429d3f0b-49ca-4297-a62b-dc9fcc88e818"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 25,
+          "p99_us": 81,
+          "reads": 51022,
+          "tenant": "429d3f0b-49ca-4297-a62b-dc9fcc88e818"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 8,
+          "p99_us": 12,
+          "reads": 50239,
+          "tenant": "1623dbdf-5111-4086-a7a1-9cdf2f35e1f0"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 8,
+          "p99_us": 13,
+          "reads": 49960,
+          "tenant": "1623dbdf-5111-4086-a7a1-9cdf2f35e1f0"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 7,
+          "p99_us": 12,
+          "reads": 49981,
+          "tenant": "72aa9750-ca9c-4c45-9f91-9225e473b492"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 8,
+          "p99_us": 12,
+          "reads": 49878,
+          "tenant": "72aa9750-ca9c-4c45-9f91-9225e473b492"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 8,
+          "p99_us": 12,
+          "reads": 49781,
+          "tenant": "d78cdb7c-4ae4-4673-8373-847efdbff956"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 8,
+          "p99_us": 12,
+          "reads": 49743,
+          "tenant": "d78cdb7c-4ae4-4673-8373-847efdbff956"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 8,
+          "p99_us": 12,
+          "reads": 49610,
+          "tenant": "daeda8f2-3819-4400-b8ea-093576af3227"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 8,
+          "p99_us": 12,
+          "reads": 49650,
+          "tenant": "daeda8f2-3819-4400-b8ea-093576af3227"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 8,
+          "p99_us": 12,
+          "reads": 49849,
+          "tenant": "da4269fd-826d-471a-b8b6-4b7ff439adb9"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 8,
+          "p99_us": 13,
+          "reads": 50119,
+          "tenant": "da4269fd-826d-471a-b8b6-4b7ff439adb9"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 8,
+          "p99_us": 13,
+          "reads": 50231,
+          "tenant": "d209bd3f-56ed-4e50-b952-ea5819d03966"
+        },
+        {
+          "backpressure": 0,
+          "kind": "reader",
+          "p95_us": 8,
+          "p99_us": 13,
+          "reads": 50069,
+          "tenant": "d209bd3f-56ed-4e50-b952-ea5819d03966"
+        }
+      ],
+      "hot_tenants": [
+        "5d89b976-ac24-4620-86be-b3a73cb3dc72",
+        "429d3f0b-49ca-4297-a62b-dc9fcc88e818"
+      ],
+      "maintenance_backpressure_samples": [],
+      "max_engine_memory_bytes": 34341381,
+      "sampled_vm_hwm_bytes": 61104128,
+      "retention": [
+        {
+          "kind": "retention",
+          "status": {
+            "expiration_lag_ms": 0,
+            "gc": {
+              "completed_rounds": 1029,
+              "history_sweep_active": false,
+              "knowledge_floor": 0,
+              "migration_complete": true,
+              "reclaimed_records": 22148,
+              "watermark_ms": 1793885115074
+            },
+            "next_expiration_ms": null,
+            "physical_reclamation": "as snapshots release and compaction completes",
+            "policy": {
+              "activated_seq": 18,
+              "legacy_expires_at_ms": 1793884992806,
+              "retention_seconds": 3
+            }
+          },
+          "tenant": "5d89b976-ac24-4620-86be-b3a73cb3dc72"
+        },
+        {
+          "kind": "retention",
+          "status": {
+            "expiration_lag_ms": 0,
+            "gc": {
+              "completed_rounds": 1036,
+              "history_sweep_active": false,
+              "knowledge_floor": 0,
+              "migration_complete": true,
+              "reclaimed_records": 22201,
+              "watermark_ms": 1793885115175
+            },
+            "next_expiration_ms": null,
+            "physical_reclamation": "as snapshots release and compaction completes",
+            "policy": {
+              "activated_seq": 18,
+              "legacy_expires_at_ms": 1793884992998,
+              "retention_seconds": 3
+            }
+          },
+          "tenant": "429d3f0b-49ca-4297-a62b-dc9fcc88e818"
+        },
+        {
+          "kind": "retention",
+          "status": {
+            "expiration_lag_ms": 0,
+            "gc": {
+              "completed_rounds": 5,
+              "history_sweep_active": false,
+              "knowledge_floor": 0,
+              "migration_complete": true,
+              "reclaimed_records": 0,
+              "watermark_ms": 0
+            },
+            "next_expiration_ms": null,
+            "physical_reclamation": "as snapshots release and compaction completes",
+            "policy": {
+              "activated_seq": 18,
+              "legacy_expires_at_ms": 1793884993166,
+              "retention_seconds": 3
+            }
+          },
+          "tenant": "1623dbdf-5111-4086-a7a1-9cdf2f35e1f0"
+        },
+        {
+          "kind": "retention",
+          "status": {
+            "expiration_lag_ms": 0,
+            "gc": {
+              "completed_rounds": 5,
+              "history_sweep_active": false,
+              "knowledge_floor": 0,
+              "migration_complete": true,
+              "reclaimed_records": 0,
+              "watermark_ms": 0
+            },
+            "next_expiration_ms": null,
+            "physical_reclamation": "as snapshots release and compaction completes",
+            "policy": {
+              "activated_seq": 18,
+              "legacy_expires_at_ms": 1793884993339,
+              "retention_seconds": 3
+            }
+          },
+          "tenant": "72aa9750-ca9c-4c45-9f91-9225e473b492"
+        },
+        {
+          "kind": "retention",
+          "status": {
+            "expiration_lag_ms": 0,
+            "gc": {
+              "completed_rounds": 5,
+              "history_sweep_active": false,
+              "knowledge_floor": 0,
+              "migration_complete": true,
+              "reclaimed_records": 0,
+              "watermark_ms": 0
+            },
+            "next_expiration_ms": null,
+            "physical_reclamation": "as snapshots release and compaction completes",
+            "policy": {
+              "activated_seq": 18,
+              "legacy_expires_at_ms": 1793884993515,
+              "retention_seconds": 3
+            }
+          },
+          "tenant": "d78cdb7c-4ae4-4673-8373-847efdbff956"
+        },
+        {
+          "kind": "retention",
+          "status": {
+            "expiration_lag_ms": 0,
+            "gc": {
+              "completed_rounds": 5,
+              "history_sweep_active": false,
+              "knowledge_floor": 0,
+              "migration_complete": true,
+              "reclaimed_records": 0,
+              "watermark_ms": 0
+            },
+            "next_expiration_ms": null,
+            "physical_reclamation": "as snapshots release and compaction completes",
+            "policy": {
+              "activated_seq": 18,
+              "legacy_expires_at_ms": 1793884993667,
+              "retention_seconds": 3
+            }
+          },
+          "tenant": "daeda8f2-3819-4400-b8ea-093576af3227"
+        },
+        {
+          "kind": "retention",
+          "status": {
+            "expiration_lag_ms": 0,
+            "gc": {
+              "completed_rounds": 5,
+              "history_sweep_active": false,
+              "knowledge_floor": 0,
+              "migration_complete": true,
+              "reclaimed_records": 0,
+              "watermark_ms": 0
+            },
+            "next_expiration_ms": null,
+            "physical_reclamation": "as snapshots release and compaction completes",
+            "policy": {
+              "activated_seq": 18,
+              "legacy_expires_at_ms": 1793884993834,
+              "retention_seconds": 3
+            }
+          },
+          "tenant": "da4269fd-826d-471a-b8b6-4b7ff439adb9"
+        },
+        {
+          "kind": "retention",
+          "status": {
+            "expiration_lag_ms": 0,
+            "gc": {
+              "completed_rounds": 5,
+              "history_sweep_active": false,
+              "knowledge_floor": 0,
+              "migration_complete": true,
+              "reclaimed_records": 0,
+              "watermark_ms": 0
+            },
+            "next_expiration_ms": null,
+            "physical_reclamation": "as snapshots release and compaction completes",
+            "policy": {
+              "activated_seq": 18,
+              "legacy_expires_at_ms": 1793884993987,
+              "retention_seconds": 3
+            }
+          },
+          "tenant": "d209bd3f-56ed-4e50-b952-ea5819d03966"
+        }
+      ],
+      "verified_reopen": {
+        "active_tenants": 8,
+        "batch_atomicity_checked": true,
+        "cold_closed": 32,
+        "cold_create_open_p99_us": 209417,
+        "cold_reopen_p99_us": 176,
+        "cold_tenants": 32,
+        "duration_s": 120,
+        "kind": "summary",
+        "memory_limit": 536870912,
+        "peak_engine_memory": 37011708,
+        "reopened_verified_documents": 8000,
+        "reopened_verified_tenants": 8
+      }
+    }
+  }
+}

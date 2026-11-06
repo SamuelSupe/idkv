@@ -1,0 +1,3 @@
+    Blocking waiting for file lock on build directory
+    Checking tenant-kv v0.4.0 (/Users/livesite/Documents/Codex/2026-11-04/splunk-kv-store-lookup/outputs/tenant-kv)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.18s

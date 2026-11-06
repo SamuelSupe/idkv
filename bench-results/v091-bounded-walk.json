@@ -1,0 +1,9 @@
+{
+  "exit": 0,
+  "seconds": 1.9638995460118167,
+  "memory_max": "100663296",
+  "memory_peak": "100663296",
+  "memory_events": "low 0\nhigh 0\nmax 892\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0\n",
+  "stdout": "{\"calls\":80,\"calls_per_second\":41.62359463597423,\"last_stats\":{\"blocks_read\":20584,\"cache_hits\":121,\"candidate_files\":200,\"decompressed_bytes\":352223553,\"document_reads\":80079,\"scanned_entries\":80079},\"mode\":\"walk_all_documents\",\"p50_us\":16092.224,\"p95_us\":19070.068,\"p99_us\":21592.869,\"seconds\":1.921986813}\n{\"engine_memory_bytes\":3271931,\"metrics\":{\"commits\":0,\"compaction_read_bytes\":0,\"compaction_write_bytes\":0,\"document_bytes\":0,\"flush_bytes\":0,\"fsyncs\":0,\"scheduler\":{\"completed_jobs\":5644,\"queue_wait_ns\":44444814,\"queued_jobs\":0},\"wal_bytes\":0,\"write_lock_wait_ns\":378},\"mode\":\"resources\"}\n",
+  "stderr": ""
+}

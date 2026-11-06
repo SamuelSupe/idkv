@@ -1,0 +1,18 @@
+{
+  "before_lock_change": {
+    "seconds": 300,
+    "updates": 2762020,
+    "reads": 2211168,
+    "hot_p99_us": 5032,
+    "light_p99_us": 13,
+    "peak_engine_mib": 34.61771774291992
+  },
+  "final": {
+    "seconds": 120,
+    "updates": 1095060,
+    "reads": 896641,
+    "hot_p99_us": 105,
+    "light_p99_us": 17,
+    "peak_engine_mib": 33.98177719116211
+  }
+}

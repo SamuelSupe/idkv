@@ -1,0 +1,24 @@
+{
+  "platform": "Linux-7.2.12-orbstack-00394-gbecdd6130068-aarch64-with-glibc2.42",
+  "logical_cpus": 18,
+  "engine_tenant_memory": 67108864,
+  "engine_global_memory": 134217728,
+  "cache_bytes": 8388608,
+  "memtable_bytes": 2097152,
+  "rows": 80000,
+  "payload_bytes_per_row": 4096,
+  "filesystem": "Btrfs on OrbStack /dev/vdb1",
+  "process_memory_test_limit": 100663296,
+  "benchmark_binaries": {
+    "before": "ca373c424a26fc7dd6244bab19b8fd16288b199d9eef6667902a85297be9b5a5",
+    "after": "d062fd364d75bed098b5cecb938b861343e6daadcd7079a44e044556abe9204a"
+  },
+  "post_compaction_sst_files": {
+    "before-paced-isolated": 86,
+    "after-fixed-paced": 86,
+    "before-mixed": 86,
+    "after-fixed-mixed": 86
+  },
+  "available_cpus": 17,
+  "system_memory_bytes": 33669160960
+}

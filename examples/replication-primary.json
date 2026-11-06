@@ -1,0 +1,8 @@
+{
+  "cluster": "e71c8e57-3178-4921-81ca-54c85784ce3a",
+  "role": "primary",
+  "peer_url": "http://127.0.0.1:8081",
+  "token_file": "peer-token.txt",
+  "poll_ms": 50,
+  "log_retention_bytes": 268435456
+}

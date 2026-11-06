@@ -1,0 +1,25 @@
+{
+  "timestamp_utc": "2026-11-05T02:12:23.429068+00:00",
+  "platform": "Linux-7.2.12-orbstack-00394-gbecdd6130068-aarch64-with-glibc2.42",
+  "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)",
+  "cpu_affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "cgroup_memory_limit": null,
+  "before_version": "0.3.0",
+  "after_version": "0.4.0",
+  "same_deep_source": true,
+  "deep_source_sha256": "4ebd2a702a1df4541a0bb738f97019b7dff4767dc2540e8c838071b2d5b6cda0",
+  "before_binary_sha256": "8f75b546836983fc9d7ed6a0fd814d8eabbc678d0921739c80797f41e0af3b75",
+  "after_binary_sha256": "b8911383cab823852ef15ed33fe68727249bb257640b1b02ef5741d2f30809d0",
+  "soak_binary_sha256": "51b04b5c2fdbaa6f32c649a84239041f85b7037f4ec338c9ec2e2f7a3d6cbde7",
+  "server_sha256": "ff494666f674a125917a0cebc72e6b933fbf47d09d904f082d70e09ac09d2d83",
+  "fmt_check_exit": 0
+}

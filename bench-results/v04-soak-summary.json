@@ -1,0 +1,173 @@
+{
+  "summary": {
+    "active_tenants": 8,
+    "batch_atomicity_checked": true,
+    "cold_closed": 32,
+    "cold_create_open_p99_us": 54493,
+    "cold_reopen_p99_us": 137,
+    "cold_tenants": 32,
+    "duration_s": 120,
+    "kind": "summary",
+    "memory_limit": 536870912,
+    "peak_engine_memory": 35632476,
+    "reopened_verified_documents": 8000,
+    "reopened_verified_tenants": 8
+  },
+  "resources": {
+    "wall_seconds": 122.47645788200316,
+    "max_rss_kib": 57864,
+    "user_seconds": 34.982799,
+    "system_seconds": 32.250812,
+    "exit_code": 0
+  },
+  "samples": 24,
+  "maintenance_errors": [],
+  "total_updates": 1095060,
+  "total_reads": 896641,
+  "tenants": [
+    {
+      "tenant": "active-0",
+      "hot": true,
+      "reads": 113412,
+      "reader_p99_us": 105,
+      "read_backpressure": 0,
+      "updates": 547820,
+      "write_backpressure": 0,
+      "write_lock_wait_ms": 9198.422007,
+      "io_jobs": 213262,
+      "queue_wait_ms": 2950.530049,
+      "write_amplification": 1.5836608945381132,
+      "compaction_read_bytes": 90731270,
+      "compaction_write_bytes": 28635024,
+      "levels_after_compact": {
+        "1": 6
+      }
+    },
+    {
+      "tenant": "active-1",
+      "hot": true,
+      "reads": 114999,
+      "reader_p99_us": 105,
+      "read_backpressure": 0,
+      "updates": 547240,
+      "write_backpressure": 0,
+      "write_lock_wait_ms": 8322.718702,
+      "io_jobs": 213245,
+      "queue_wait_ms": 2816.017597,
+      "write_amplification": 1.5837511442027203,
+      "compaction_read_bytes": 90694281,
+      "compaction_write_bytes": 28663932,
+      "levels_after_compact": {
+        "1": 6
+      }
+    },
+    {
+      "tenant": "active-2",
+      "hot": false,
+      "reads": 111609,
+      "reader_p99_us": 17,
+      "read_backpressure": 0,
+      "updates": 0,
+      "write_backpressure": 0,
+      "write_lock_wait_ms": 0.000125,
+      "io_jobs": 1550,
+      "queue_wait_ms": 10.947972,
+      "write_amplification": 1.5606295693529755,
+      "compaction_read_bytes": 99569,
+      "compaction_write_bytes": 98161,
+      "levels_after_compact": {
+        "1": 6
+      }
+    },
+    {
+      "tenant": "active-3",
+      "hot": false,
+      "reads": 111313,
+      "reader_p99_us": 16,
+      "read_backpressure": 0,
+      "updates": 0,
+      "write_backpressure": 0,
+      "write_lock_wait_ms": 0.000292,
+      "io_jobs": 1550,
+      "queue_wait_ms": 19.37736,
+      "write_amplification": 1.5603765947937835,
+      "compaction_read_bytes": 99304,
+      "compaction_write_bytes": 98126,
+      "levels_after_compact": {
+        "1": 6
+      }
+    },
+    {
+      "tenant": "active-4",
+      "hot": false,
+      "reads": 111362,
+      "reader_p99_us": 16,
+      "read_backpressure": 0,
+      "updates": 0,
+      "write_backpressure": 0,
+      "write_lock_wait_ms": 0.000207,
+      "io_jobs": 1552,
+      "queue_wait_ms": 20.813499,
+      "write_amplification": 1.5605806609381982,
+      "compaction_read_bytes": 99551,
+      "compaction_write_bytes": 98121,
+      "levels_after_compact": {
+        "1": 6
+      }
+    },
+    {
+      "tenant": "active-5",
+      "hot": false,
+      "reads": 111853,
+      "reader_p99_us": 16,
+      "read_backpressure": 0,
+      "updates": 0,
+      "write_backpressure": 0,
+      "write_lock_wait_ms": 0.000165,
+      "io_jobs": 1546,
+      "queue_wait_ms": 139.07633,
+      "write_amplification": 1.5603799677879062,
+      "compaction_read_bytes": 99306,
+      "compaction_write_bytes": 98128,
+      "levels_after_compact": {
+        "1": 6
+      }
+    },
+    {
+      "tenant": "active-6",
+      "hot": false,
+      "reads": 110967,
+      "reader_p99_us": 16,
+      "read_backpressure": 0,
+      "updates": 0,
+      "write_backpressure": 0,
+      "write_lock_wait_ms": 5.033317,
+      "io_jobs": 1546,
+      "queue_wait_ms": 16.466467,
+      "write_amplification": 1.56049043334542,
+      "compaction_read_bytes": 99434,
+      "compaction_write_bytes": 98131,
+      "levels_after_compact": {
+        "1": 6
+      }
+    },
+    {
+      "tenant": "active-7",
+      "hot": false,
+      "reads": 111126,
+      "reader_p99_us": 17,
+      "read_backpressure": 0,
+      "updates": 0,
+      "write_backpressure": 0,
+      "write_lock_wait_ms": 7.493352,
+      "io_jobs": 1545,
+      "queue_wait_ms": 135.626803,
+      "write_amplification": 1.5603074484142712,
+      "compaction_read_bytes": 99224,
+      "compaction_write_bytes": 98124,
+      "levels_after_compact": {
+        "1": 6
+      }
+    }
+  ]
+}

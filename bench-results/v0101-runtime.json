@@ -1,0 +1,25 @@
+{
+  "result": "passed",
+  "version": "0.10.1",
+  "environment": "OrbStack Ubuntu Linux aarch64",
+  "checks": [
+    "scheduler cancellation count in detailed metrics",
+    "request timeout, scan limit, full-scan rejection and indexed success",
+    "minimum position rejects an older snapshot without consuming its cursor",
+    "primary range, sparse unique range, secondary IN and nonunique Lookup HTTP results",
+    "Check pre-batch semantics and receipt replay",
+    "read_batch snapshot and missing keys",
+    "publication without Lookup",
+    "published Get/MultiGet/Query",
+    "cursor stays on old version",
+    "replayed publication does not reset latest",
+    "immutable writes rejected",
+    "backup restore and restart",
+    "v0.10.0 reads new publication metadata and enforces immutability",
+    "native HTTP, DSL, identity and retention smoke scripts",
+    "OpenAPI 3.1 validation",
+    "response JSON Schema validation"
+  ],
+  "paths": 62,
+  "schemas": 83
+}

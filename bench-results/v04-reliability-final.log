@@ -1,0 +1,12 @@
+   Compiling tenant-kv v0.4.0 (/Users/livesite/Documents/Codex/2026-11-04/splunk-kv-store-lookup/outputs/tenant-kv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.11s
+     Running tests/reliability.rs (/tmp/tkv-20261104-target/debug/deps/reliability-922ffdbd578a3550)
+
+running 4 tests
+test a_cursor_can_only_be_consumed_once_under_concurrent_requests ... ok
+test compiled_sort_matches_reference_type_order_and_full_document_topk ... ok
+test hot_history_and_tombstones_keep_snapshot_order_through_flush_and_recovery ... ok
+test multi_get_budget_includes_missing_rows_and_json_array_framing ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.22s
+

@@ -1,0 +1,54 @@
+{
+  "cache": {
+    "entries": 3,
+    "hits": 0,
+    "misses": 3,
+    "reserved_bytes": 23168
+  },
+  "lookup": {
+    "matches": [
+      [
+        {
+          "owner": "platform",
+          "service": "edge"
+        }
+      ],
+      []
+    ],
+    "snapshot_seq": 5,
+    "stats": {
+      "blocks_read": 0,
+      "cache_hits": 0,
+      "candidate_files": 0,
+      "decompressed_bytes": 0,
+      "document_reads": 0,
+      "scanned_entries": 1
+    }
+  },
+  "query": {
+    "cursor": null,
+    "documents": [
+      {
+        "_key": "gateway-1",
+        "owner": "platform",
+        "service": "edge"
+      }
+    ],
+    "plan": {
+      "covering": false,
+      "extra_sort": true,
+      "indexes": [],
+      "scan": true
+    },
+    "snapshot_seq": 5,
+    "stats": {
+      "blocks_read": 0,
+      "cache_hits": 0,
+      "candidate_files": 0,
+      "decompressed_bytes": 0,
+      "document_reads": 1,
+      "scanned_entries": 1
+    }
+  },
+  "tenant": "ecde0b99-73a0-49aa-af78-d5b02ce17af4"
+}

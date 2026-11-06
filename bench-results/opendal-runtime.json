@@ -1,0 +1,16 @@
+{
+  "result": "passed",
+  "source_removed_before_import": true,
+  "cli_import": "passed",
+  "imported_data_and_integrity": "passed",
+  "packaged_http_workflow": "passed",
+  "backend": "Moto Server 5.1.14 on loopback HTTP; not AWS",
+  "multipart": {
+    "multipart_create": 1,
+    "multipart_parts": 2,
+    "multipart_complete": 1
+  },
+  "first_uploaded": 16684680,
+  "second_uploaded": 756,
+  "second_reused": 16683924
+}

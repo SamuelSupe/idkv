@@ -1,0 +1,1 @@
+{"mode": "http_keepalive_get", "readers": 16, "operations": 320000, "seconds": 13.763493022997864, "qps": 23249.911883945573, "p50_us": 523.999, "p95_us": 1800.289, "p99_us": 2673.329, "notes": "loopback Python standard-library client; 1 hot 1KiB payload; no concurrent writes"}

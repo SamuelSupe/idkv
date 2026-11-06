@@ -1,0 +1,75 @@
+   Compiling tenant-kv v0.6.0 (/Users/livesite/Documents/Codex/2026-11-04/splunk-kv-store-lookup/outputs/tenant-kv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.84s
+     Running unittests src/lib.rs (/tmp/tkv-20261104-target/debug/deps/tenant_kv-2990c6044f6a7966)
+
+running 1 test
+test storage::engine::replication::tests::malformed_page_is_rejected_before_mutation_and_valid_replay_survives_restart ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.41s
+
+     Running unittests src/bin/crash_probe.rs (/tmp/tkv-20261104-target/debug/deps/crash_probe-84d8b0da4bff3e0e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/server.rs (/tmp/tkv-20261104-target/debug/deps/tenant_kv-e3618cdad4cbbe31)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/restore_remote.rs (/tmp/tkv-20261104-target/debug/deps/tenant_kv_restore-9f8e53931e7fe576)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/backup.rs (/tmp/tkv-20261104-target/debug/deps/backup-ed9ca35f8cb9de8b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+
+     Running tests/dsl.rs (/tmp/tkv-20261104-target/debug/deps/dsl-5ee7d2cbd95ff7ea)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/engine.rs (/tmp/tkv-20261104-target/debug/deps/engine-4bfcd33caba05c45)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 19 filtered out; finished in 0.00s
+
+     Running tests/http.rs (/tmp/tkv-20261104-target/debug/deps/http-4f36c806d0b5e46a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/identity.rs (/tmp/tkv-20261104-target/debug/deps/identity-413cc602e7e85c48)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/recovery.rs (/tmp/tkv-20261104-target/debug/deps/recovery-73ae2aaa566d212c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/reliability.rs (/tmp/tkv-20261104-target/debug/deps/reliability-f63f00e6f27180cd)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/replication.rs (/tmp/tkv-20261104-target/debug/deps/replication-88118f2f93026337)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.00s
+

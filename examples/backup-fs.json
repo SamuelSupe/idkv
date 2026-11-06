@@ -1,0 +1,8 @@
+{
+  "service": "fs",
+  "options": {"root": "/var/lib/tenant-kv-backups"},
+  "max_backup_bytes": 10737418240,
+  "max_staging_bytes": 32212254720,
+  "reserve_free_bytes": 1073741824,
+  "bytes_per_second": 52428800
+}

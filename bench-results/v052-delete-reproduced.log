@@ -1,0 +1,74 @@
+   Compiling tenant-kv v0.5.1 (/Users/livesite/Documents/Codex/2026-11-04/splunk-kv-store-lookup/outputs/tenant-kv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.31s
+     Running unittests src/lib.rs (/tmp/tkv-20261104-target/debug/deps/tenant_kv-64cff6860bb1f6ec)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running unittests src/bin/crash_probe.rs (/tmp/tkv-20261104-target/debug/deps/crash_probe-caafe0437af2363f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/server.rs (/tmp/tkv-20261104-target/debug/deps/tenant_kv-2aa2fa94f186683d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/restore_remote.rs (/tmp/tkv-20261104-target/debug/deps/tenant_kv_restore-a4d9f47cf2f0e54f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/backup.rs (/tmp/tkv-20261104-target/debug/deps/backup-8903e6ec93e66c95)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+
+     Running tests/dsl.rs (/tmp/tkv-20261104-target/debug/deps/dsl-920b7fc9e1847c58)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/engine.rs (/tmp/tkv-20261104-target/debug/deps/engine-47bff85e2791663d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 19 filtered out; finished in 0.00s
+
+     Running tests/http.rs (/tmp/tkv-20261104-target/debug/deps/http-d2ce5a9cbe2f4df0)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/recovery.rs (/tmp/tkv-20261104-target/debug/deps/recovery-e1095910096d899a)
+
+running 1 test
+test uncertain_tenant_deletion_rejects_new_writes_until_restart ... 
+thread 'main' panicked at src/bin/crash_probe.rs:44:13:
+acknowledged a write after an uncertain durable deletion; restart will discard it
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+---- uncertain_tenant_deletion_rejects_new_writes_until_restart stdout ----
+
+thread 'uncertain_tenant_deletion_rejects_new_writes_until_restart' panicked at tests/recovery.rs:81:5:
+uncertain deletion exposed a writable tenant
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    uncertain_tenant_deletion_rejects_new_writes_until_restart
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.22s
+
+error: test failed, to rerun pass `--test recovery`

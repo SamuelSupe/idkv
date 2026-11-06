@@ -1,0 +1,130 @@
+[
+  {
+    "mode": "mem_8000_versions_scan",
+    "before": {
+      "p50_us": 51304.867,
+      "p95_us": 53691.062,
+      "p99_us": 54434.79,
+      "calls_per_second": 19.805137146685507,
+      "stats": {
+        "blocks_read": 0,
+        "cache_hits": 0,
+        "candidate_files": 0,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 8000
+      }
+    },
+    "after": {
+      "p50_us": 932.669,
+      "p95_us": 992.084,
+      "p99_us": 1374.542,
+      "calls_per_second": 1076.2153453460173,
+      "stats": {
+        "blocks_read": 0,
+        "cache_hits": 0,
+        "candidate_files": 0,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 8000
+      }
+    },
+    "p50_speedup": 55.008654731742986
+  },
+  {
+    "mode": "sst_8000_versions_get",
+    "before": {
+      "p50_us": 3.791,
+      "p95_us": 4.0,
+      "p99_us": 4.959,
+      "calls_per_second": 258324.54461567642,
+      "stats": {
+        "blocks_read": 0,
+        "cache_hits": 70,
+        "candidate_files": 1,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 0
+      }
+    },
+    "after": {
+      "p50_us": 0.125,
+      "p95_us": 0.167,
+      "p99_us": 0.167,
+      "calls_per_second": 6111019.751365828,
+      "stats": {
+        "blocks_read": 0,
+        "cache_hits": 2,
+        "candidate_files": 1,
+        "decompressed_bytes": 0,
+        "document_reads": 0,
+        "scanned_entries": 0
+      }
+    },
+    "p50_speedup": 30.328
+  },
+  {
+    "mode": "topk_full",
+    "before": {
+      "p50_us": 57042.921,
+      "p95_us": 60941.888,
+      "p99_us": 62119.35,
+      "calls_per_second": 17.60110122658799,
+      "stats": {
+        "blocks_read": 1250,
+        "cache_hits": 20,
+        "candidate_files": 1,
+        "decompressed_bytes": 20609160,
+        "document_reads": 10000,
+        "scanned_entries": 10000
+      }
+    },
+    "after": {
+      "p50_us": 28531.761,
+      "p95_us": 31753.948,
+      "p99_us": 33251.763,
+      "calls_per_second": 34.91794363556912,
+      "stats": {
+        "blocks_read": 1250,
+        "cache_hits": 20,
+        "candidate_files": 1,
+        "decompressed_bytes": 20609160,
+        "document_reads": 10000,
+        "scanned_entries": 10000
+      }
+    },
+    "p50_speedup": 1.9992779625484738
+  },
+  {
+    "mode": "topk_projected",
+    "before": {
+      "p50_us": 36593.0,
+      "p95_us": 41461.553,
+      "p99_us": 47429.894,
+      "calls_per_second": 27.40853283351146,
+      "stats": {
+        "blocks_read": 1250,
+        "cache_hits": 20,
+        "candidate_files": 1,
+        "decompressed_bytes": 20609160,
+        "document_reads": 10000,
+        "scanned_entries": 10000
+      }
+    },
+    "after": {
+      "p50_us": 36706.458,
+      "p95_us": 40656.474,
+      "p99_us": 41987.933,
+      "calls_per_second": 27.67001602196702,
+      "stats": {
+        "blocks_read": 1250,
+        "cache_hits": 20,
+        "candidate_files": 1,
+        "decompressed_bytes": 20609160,
+        "document_reads": 10000,
+        "scanned_entries": 10000
+      }
+    },
+    "p50_speedup": 0.9969090452693639
+  }
+]

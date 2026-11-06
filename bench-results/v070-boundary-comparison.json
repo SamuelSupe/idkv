@@ -1,0 +1,39 @@
+{
+  "environment": "OrbStack Ubuntu, loopback HTTP, sequential requests, no claimed engine throughput result",
+  "results": {
+    "0.6.1": {
+      "reserved_bytes_with_3_waits": 218127378,
+      "other_tenant_put_status": 429,
+      "waits": [
+        409,
+        409,
+        409
+      ],
+      "http_get_p50_ms": 0.068959,
+      "http_get_p95_ms": 0.109667,
+      "http_get_p99_ms": 0.154792,
+      "sigterm_exit": -15,
+      "inflight_wait_outcome": "RemoteDisconnected",
+      "shutdown_ms": 0.7630850013811141
+    },
+    "0.7.0": {
+      "reserved_bytes_with_3_waits": 7186,
+      "other_tenant_put_status": 200,
+      "waits": [
+        409,
+        409,
+        409
+      ],
+      "http_get_p50_ms": 0.072167,
+      "http_get_p95_ms": 0.124167,
+      "http_get_p99_ms": 0.16725,
+      "sigterm_exit": 0,
+      "inflight_wait_outcome": 409,
+      "shutdown_ms": 1055.1361670077313
+    }
+  },
+  "old_binary_rejects_v3": {
+    "exit": 1,
+    "error": "CORRUPTION: registry version"
+  }
+}

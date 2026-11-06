@@ -1,0 +1,15 @@
+   Compiling tenant-kv v0.6.0 (/Users/livesite/Documents/Codex/2026-11-04/splunk-kv-store-lookup/outputs/tenant-kv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.39s
+     Running unittests src/lib.rs (/tmp/tkv-20261104-target/debug/deps/tenant_kv-bcd95a9d9bf40fe9)
+
+running 7 tests
+test identity::time::tests::timezone_precision_and_clock_discontinuities ... ok
+test storage::wal::tests::buffered_replication_preserves_frames_limits_and_pinned_end ... ok
+test codec::typed::tests::typed_records_match_json_decoder_and_reject_malformed_nodes ... ok
+test storage::sst::point_get_preserves_versions_and_tombstones_across_index_partitions ... ok
+test tenant::catalog::tests::collection_resolution_preserves_snapshot_generations ... ok
+test storage::engine::write::tests::read_only_transaction_waits_for_the_observed_group_commit ... ok
+test storage::engine::replication::tests::malformed_page_is_rejected_before_mutation_and_valid_replay_survives_restart ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s
+

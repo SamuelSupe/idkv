@@ -1,0 +1,3 @@
+   Compiling tenant-kv v0.8.0 (/Users/livesite/Documents/Codex/2026-11-04/splunk-kv-store-lookup/outputs/tenant-kv)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 5.47s
+     Running `/tmp/tkv-20261104-target/debug/examples/retention /var/tmp/tkv-v080-example-oheta0rc`

@@ -1,0 +1,8 @@
+{
+  "version": "0.9.1",
+  "binaries": {
+    "tenant-kv-linux-aarch64": "210faae4a8faa1cafe0eef21eee6d71cd7662724295a7897394c01fd5ce2deff",
+    "tenant-kv-restore-linux-aarch64": "7229a4c561978e75326c72b07340c2e9f5b83a2f48e9c00b3df70c74963871ff"
+  },
+  "openapi_matches_executable": true
+}

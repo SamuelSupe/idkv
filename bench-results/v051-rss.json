@@ -1,0 +1,7 @@
+{
+  "pid": 182302,
+  "samples": 154,
+  "observed_vm_hwm_bytes": 62717952,
+  "monitor_seconds": 154.27563290399848,
+  "note": "Linux process VmHWM sampled during the soak run; separate from engine budget accounting."
+}

@@ -1,0 +1,167 @@
+{
+  "trials": 3,
+  "rows": 10000,
+  "payload_bytes": 512,
+  "results": [
+    {
+      "mode": "get",
+      "before": {
+        "calls_per_second": 749995.6481502516,
+        "p50_us": 1.25,
+        "p95_us": 1.5,
+        "p99_us": 1.75,
+        "last_stats": {
+          "blocks_read": 0,
+          "cache_hits": 0,
+          "candidate_files": 0,
+          "decompressed_bytes": 0,
+          "document_reads": 0,
+          "scanned_entries": 0
+        }
+      },
+      "after": {
+        "calls_per_second": 1009829.5801502243,
+        "p50_us": 0.917,
+        "p95_us": 1.166,
+        "p99_us": 1.209,
+        "last_stats": {
+          "blocks_read": 0,
+          "cache_hits": 0,
+          "candidate_files": 0,
+          "decompressed_bytes": 0,
+          "document_reads": 0,
+          "scanned_entries": 0
+        }
+      },
+      "p50_speedup": 1.3631406761177753
+    },
+    {
+      "mode": "in_scan_256",
+      "before": {
+        "calls_per_second": 10.272983667232266,
+        "p50_us": 98100.129,
+        "p95_us": 101449.926,
+        "p99_us": 102320.345,
+        "last_stats": {
+          "blocks_read": 499,
+          "cache_hits": 9,
+          "candidate_files": 1,
+          "decompressed_bytes": 7106053,
+          "document_reads": 10000,
+          "scanned_entries": 10000
+        }
+      },
+      "after": {
+        "calls_per_second": 82.82080207990374,
+        "p50_us": 11110.103,
+        "p95_us": 18832.824,
+        "p99_us": 22641.498,
+        "last_stats": {
+          "blocks_read": 499,
+          "cache_hits": 9,
+          "candidate_files": 1,
+          "decompressed_bytes": 7106053,
+          "document_reads": 10000,
+          "scanned_entries": 10000
+        }
+      },
+      "p50_speedup": 8.829812738909801
+    },
+    {
+      "mode": "lookup_1000",
+      "before": {
+        "calls_per_second": 872.7841753107766,
+        "p50_us": 1147.752,
+        "p95_us": 1203.294,
+        "p99_us": 1239.169,
+        "last_stats": {
+          "blocks_read": 0,
+          "cache_hits": 179,
+          "candidate_files": 1,
+          "decompressed_bytes": 0,
+          "document_reads": 0,
+          "scanned_entries": 1000
+        }
+      },
+      "after": {
+        "calls_per_second": 1017.5114545939698,
+        "p50_us": 982.126,
+        "p95_us": 1036.418,
+        "p99_us": 1099.918,
+        "last_stats": {
+          "blocks_read": 0,
+          "cache_hits": 179,
+          "candidate_files": 1,
+          "decompressed_bytes": 0,
+          "document_reads": 0,
+          "scanned_entries": 1000
+        }
+      },
+      "p50_speedup": 1.1686402762985604
+    },
+    {
+      "mode": "lookup_duplicate_1000",
+      "before": {
+        "calls_per_second": 4007.917372775443,
+        "p50_us": 248.501,
+        "p95_us": 270.917,
+        "p99_us": 288.917,
+        "last_stats": {
+          "blocks_read": 0,
+          "cache_hits": 2,
+          "candidate_files": 1,
+          "decompressed_bytes": 0,
+          "document_reads": 0,
+          "scanned_entries": 1
+        }
+      },
+      "after": {
+        "calls_per_second": 4205.607951123992,
+        "p50_us": 237.293,
+        "p95_us": 254.334,
+        "p99_us": 270.834,
+        "last_stats": {
+          "blocks_read": 0,
+          "cache_hits": 2,
+          "candidate_files": 1,
+          "decompressed_bytes": 0,
+          "document_reads": 0,
+          "scanned_entries": 1
+        }
+      },
+      "p50_speedup": 1.047232746014421
+    },
+    {
+      "mode": "unique_query",
+      "before": {
+        "calls_per_second": 52197.637278618546,
+        "p50_us": 21.625,
+        "p95_us": 29.625,
+        "p99_us": 37.25,
+        "last_stats": {
+          "blocks_read": 0,
+          "cache_hits": 2,
+          "candidate_files": 1,
+          "decompressed_bytes": 0,
+          "document_reads": 0,
+          "scanned_entries": 1
+        }
+      },
+      "after": {
+        "calls_per_second": 645486.0322631993,
+        "p50_us": 1.459,
+        "p95_us": 1.75,
+        "p99_us": 1.959,
+        "last_stats": {
+          "blocks_read": 0,
+          "cache_hits": 2,
+          "candidate_files": 1,
+          "decompressed_bytes": 0,
+          "document_reads": 0,
+          "scanned_entries": 1
+        }
+      },
+      "p50_speedup": 14.82179575051405
+    }
+  ]
+}

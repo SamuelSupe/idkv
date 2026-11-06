@@ -1,0 +1,8 @@
+{
+  "label": "after-2",
+  "mode": "read",
+  "exit": 0,
+  "seconds": 5.1112084640190005,
+  "peak_rss_bytes": 5632000,
+  "peak_fds": 92
+}

@@ -1,0 +1,10 @@
+{
+  "metrics": true,
+  "traces": true,
+  "logs": true,
+  "service_name": "tenant-kv",
+  "endpoint": "http://127.0.0.1:4318",
+  "sample_ratio": 0.1,
+  "queue_size": 1024,
+  "export_timeout_ms": 2000
+}

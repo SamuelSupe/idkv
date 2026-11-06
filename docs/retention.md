@@ -1,0 +1,105 @@
+# 租户级统一历史保留（v0.8）
+
+每个租户只有一个 `retention_seconds`，同时用于旧发布版本、普通/时态/发布操作回执、旧时态知识。**当前业务文档、当前发布版本、当前知识头和当前时间线不过期。只有被覆盖的业务状态才开始计时；幂等回执仍从提交后计时。** 没有分类 TTL、保留版本数、消费者租约或自动退回最新结果。
+
+## 配置与查看
+
+```http
+PUT /v1/tenants/{tenant}/retention
+Authorization: Bearer <tenant-admin-token>
+Content-Type: application/json
+
+{"retention_seconds":604800}
+```
+
+`GET` 同一路径返回 `policy` 和 `gc`。只有该租户 admin 或全局 admin 可以设置或查看。Rust 使用 `tenant.set_retention(604800)?` 与 `tenant.retention_status()?`。
+
+合法范围为 1–315360000 秒。引擎展开原子批次预算至少为 16 条和 16 KiB；默认预算满足。未配置时维持原有不自动清理行为。首次启用时，存量回执和已被覆盖的历史从启用时获得完整保留期；存量当前状态不设置截止时间。后续覆盖时，以覆盖时的租户设置计算截止时间。变更只影响新进入保留期的数据，不缩短或延长已经固定的截止时间，不复活已经过期的历史。本版不提供关闭已启用回收的接口，以免重新开放无凭据的旧写入。
+
+| 对象 | 计时起点 | 到期后 |
+|---|---|---|
+| 被替代的发布版本 | 后继版本原子发布 | 新的显式版本访问返回 `VERSION_UNAVAILABLE`；当前指针不受影响 |
+| 普通、时态及发布回执 | 操作持久提交 | 拒绝旧请求重放；不会再次执行业务操作 |
+| 被替代的知识版本 | 后继知识原子提交 | 指定知识查询返回 `KNOWLEDGE_UNAVAILABLE`；不降级到 latest |
+
+回收按到期顺序分小批执行：小型到期元信息每轮最多 64 条，迁移和时态历史扫描每轮最多 16 条，并随原子预算下调。v0.8.1 同时适配展开后的字节预算：批次过大时，在写入 WAL 前放弃该次变更与进度，缩小批次重试；不会因长回执键和较小字节预算永久卡在同一批。其他存储、配额或 I/O 错误仍明确报告。复用租户 WAL、维护池、配额和保留的磁盘维护余量。启用时迁移同样有持久进度，不一次性扫描整个租户。冷租户关闭期间不主动打开数据库；再次访问会检查到期，并继续后台回收。配置与历史数据位于租户自身 LSM，不写入共享控制目录。
+
+## 安全重试
+
+启用保留后，首次提交带 operation_id 的新操作前，调用：
+
+```http
+POST /v1/tenants/{tenant}/retry-context
+Authorization: Bearer <write-capable-token>
+Content-Type: application/json
+
+{}
+```
+
+返回 `retry_token`、`history`、`submit_before_ms`。凭据绑定租户、认证 subject 和数据历史，服务端持久化后才返回；只读/复制角色不能签发。Rust 使用 `tenant.retry_context("stable-principal")?`；主从 HTTP 客户端使用 `client.retry_context().await?`。
+
+```json
+{
+  "document":{"owner":"platform"},
+  "write_options":{
+    "operation_id":"ingest-0001",
+    "expected_history":"使用 retry-context 返回的 history",
+    "retry_token":"使用 retry-context 返回的 UUID"
+  }
+}
+```
+
+将凭据与原请求一同持久保存。原生写入、批次和 DSL 的 write_options 均支持 retry_token；时态 `/identity/write` 也接受 write_options，但 operation_id 仍位于时态请求自身。嵌入式时态使用 `identity_write_with`。token 可以在提交窗口内用于多个新的逻辑操作；每个操作 ID 必须稳定，重试不得自动换 token。
+
+存在有效回执时，同主体、相同请求返回原结果；不同内容仍返回 `OPERATION_CONFLICT`。未找到回执时，只有尚在提交窗口、且属于当前历史的有效 token 才能授权首次写入。回执过期/凭据缺失或过期返回 `IDEMPOTENCY_EXPIRED`（410），无凭据的新幂等操作返回 `RETRY_TOKEN_REQUIRED`（428）。二者均不能解释为“原操作没有执行”，SDK 不会自动刷新凭据继续重试。
+
+缩短配置时，回执的截止时间至少覆盖其原 token 的提交窗口，否则旧 token 在回执删除后可能再次执行操作。超过 token 提交窗口但回执仍有效时，可以重放已存在的结果。token 与回执删除后不保留逐操作永久墓碑。
+
+旧版无 token 回执在首次启用的完整宽限期内继续支持原请求重放；回执消失后，无 token 的旧请求明确拒绝。原始时态回执查询 `GET identity/operations/{id}` 物理回收后可能返回 NOT_FOUND；这不证明该操作从未提交。恢复改变历史；缺失回执时不能用旧 token 在新历史上写入。异步升主仍可能丢失未复制提交，不提供跨数据回退的恰好一次承诺。
+
+## 发布版本与队列消费者
+
+`Publication.version` 在 v0.8 是调用方的**发布请求 ID**，用于重试；返回对象顶层 `version` 才是引擎生成的实际版本。二者不再等价。`expected_version`、执行请求的 version、入队时固定的版本都使用响应顶层 `version`。
+
+```json
+{
+  "version":"调用方的发布请求 UUID",
+  "collection":"assets_next",
+  "lookup":"owner",
+  "expected_version":"上次响应顶层 version；首次为 null",
+  "retry_token":"由同一发布主体取得的凭据"
+}
+```
+
+HTTP 发布需 admin，Rust 显式主体使用 `publish_lookup_with(resource, publication, principal)`；便利接口 `publish_lookup` 固定主体为 `embedded`。同一请求必须重试相同内容。旧 v0.7 的实际版本 UUID 可继续读取；新版本不能由调用方选择或复用，避免旧 UUID 在回收后指向其他数据。
+
+排队任务需要在旧版本保留期内开始执行。过期后明确失败，不自动切换当前版本。已经取得有效快照的执行继续完成。多个资源/版本可以引用同一冻结集合，只有最后一个保留引用消失才移除集合目录和内容，释放 1024 集合上限中的名额。
+
+## 时态边界与快照
+
+知识历史回收按 ordinal 保留最早仍需支持的知识边界。每个标识保留边界内的所有修订，以及边界之前最近的一份时间线基线。空时间线同样是有效基线，不能丢弃后让旧绑定重新出现。基线是内部解析数据，不让已过期知识 UUID 恢复可用。
+
+当前完整时间线不按业务时间裁剪，1,000 段限制仍然存在。知识回收不等于永久审计归档；需要长期审计的使用方应选择相应保留期或外部归档。
+
+所有删除均为普通 MVCC 删除标记。已有有效快照保持原来的文档、索引与目录视图，合并保留其所需版本。到期读取检查在操作开始时完成；长时间挂起不会延长原有快照租约。物理空间需要等待快照释放和合并完成，不能把逻辑回收条数当成已释放字节数。
+
+## 复制、恢复与运维
+
+主库提交策略、token、固定截止时间、回收边界与任务进度，从库只回放相同 WAL，不独立按本机时钟删除。复制回放可以使用维护预留的磁盘空间，避免达到前台写入门槛后无法接收到删除记录；仍不能超过租户总磁盘配额。副本的正常读取仍可能滞后；需要观察特定提交后状态时使用已有最小历史/序号等待。
+
+GC 时间水位持久化且不回退。v0.8.1 的回执检查、首次提交授权和新期限计算统一取系统时间与该持久水位的较大值；系统时钟回拨不能让已越过回收水位的旧 token 重新获得首次执行权限。新签发 token 也不会落在该水位之前。状态中的到期滞后使用相同水位。该水位不是外部可信时钟，不消除任意时钟跳变的影响，部署仍需正常时间同步。
+
+检查点和 OpenDAL 备份包含完整保留状态。在线回收不修改已完成备份；对象存储的备份保留策略独立。恢复后期限不会重新从恢复时计时，旧历史 token 不能授权缺失回执的重执行。已回收历史若存在旧备份中，可以按原有恢复流程恢复，但不能保证它仍未到期。
+
+状态另提供 `next_expiration_ms` 与 `expiration_lag_ms`，表示最早待处理截止时间及其滞后；到期任务已清空时前者为 null、后者为 0。`gc` 返回 `migration_complete`、`reclaimed_records`（包括回收元信息）、`completed_rounds`、`watermark_ms`、`knowledge_floor`、`history_sweep_active`。维护错误继续在租户 status 中报告。到期积压受现有预算约束；不会为了清理强制终止有效快照或突破磁盘配额。
+
+升级到 v0.8 要同时升级主从与调用方：根注册表 4、复制协议 3，旧节点拒绝混跑。WAL/SST 编码仍为 v1。详见 [中间件升级契约](middleware.md)。
+
+## 可运行示例
+
+```sh
+cargo run --locked --example retention -- /var/tmp/retention-demo-new
+python3 scripts/retention_smoke.py http://127.0.0.1:8080 token.txt
+```
+
+示例使用 1–2 秒便于观察，实际保留期应覆盖业务重试与排队时间。截止时间记录在原子提交事务中，排队和落盘耗时也会占用窗口。持续负载示例 `soak ROOT SECONDS RETENTION_SECONDS` 支持比较：省略最后参数为原有普通写入，传 `0` 为持久回执但不清理，正数则启用统一保留。它是测试工具参数，不增加数据库配置项。

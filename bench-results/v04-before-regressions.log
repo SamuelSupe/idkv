@@ -1,0 +1,31 @@
+   Compiling tenant-kv v0.3.0 (/Users/livesite/Documents/Codex/2026-11-04/splunk-kv-store-lookup/outputs/tenant-kv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.31s
+     Running tests/reliability.rs (/tmp/tkv-20261104-target/debug/deps/reliability-7adef194359df2f1)
+
+running 2 tests
+test a_cursor_can_only_be_consumed_once_under_concurrent_requests ... FAILED
+test multi_get_budget_includes_missing_rows_and_json_array_framing ... FAILED
+
+failures:
+
+---- a_cursor_can_only_be_consumed_once_under_concurrent_requests stdout ----
+
+thread 'a_cursor_can_only_be_consumed_once_under_concurrent_requests' panicked at tests/reliability.rs:31:5:
+assertion `left == right` failed: one cursor must not fork into concurrent pages
+  left: 8
+ right: 1
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- multi_get_budget_includes_missing_rows_and_json_array_framing stdout ----
+
+thread 'multi_get_budget_includes_missing_rows_and_json_array_framing' panicked at tests/reliability.rs:51:45:
+called `Result::unwrap_err()` on an `Ok` value: [Some(Object {"_key": String("a"), "_rev": Number(2), "payload": String("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx [long test payload omitted]
+
+
+failures:
+    a_cursor_can_only_be_consumed_once_under_concurrent_requests
+    multi_get_budget_includes_missing_rows_and_json_array_framing
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+
+error: test failed, to rerun pass `--test reliability`

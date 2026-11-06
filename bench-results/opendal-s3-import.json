@@ -1,0 +1,26 @@
+{
+  "id": "edf3b27a-17c8-4c09-8382-e7de087f01c6",
+  "tenant": "de25d45d-a483-4611-aad6-d1160ae981b8",
+  "backup": "6ba4c464-ce35-4d70-b241-53383e83714d",
+  "operation": {
+    "operation": "import",
+    "backup": "6ba4c464-ce35-4d70-b241-53383e83714d"
+  },
+  "state": "completed",
+  "created_ms": 1793831812720,
+  "updated_ms": 1793831813139,
+  "uploaded_bytes": 0,
+  "reused_bytes": 0,
+  "processed_files": 6,
+  "checkpoint_seq": null,
+  "result": {
+    "backup": "6ba4c464-ce35-4d70-b241-53383e83714d",
+    "checkpoint_ms": 1793831811113,
+    "checkpoint_seq": 21,
+    "files": 6,
+    "generation": "bbbed608-e066-4362-b37a-0af205452bb3",
+    "tenant": "de25d45d-a483-4611-aad6-d1160ae981b8",
+    "total_bytes": 16684680
+  },
+  "error": null
+}

@@ -1,0 +1,9 @@
+v060-final-replica-0-before-1 passed
+Traceback (most recent call last):
+  File "/Users/livesite/Documents/Codex/2026-11-04/splunk-kv-store-lookup/work/run_v060_replica_final.py", line 10, in <module>
+    subprocess.run([bins[version],f'/var/tmp/{name}','8192','4',str(interval)],stdout=out,stderr=err,check=True)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/tmp/tkv-v053-baseline-target/release/examples/replication_perf', '/var/tmp/v060-final-replica-100-before-1', '8192', '4', '100']' returned non-zero exit status 101.

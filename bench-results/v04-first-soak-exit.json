@@ -1,0 +1,11 @@
+{
+  "resources": {
+    "wall_seconds": 302.74087543800124,
+    "max_rss_kib": 70012,
+    "user_seconds": 83.520792,
+    "system_seconds": 77.753172,
+    "exit_code": 1
+  },
+  "error": "Error: Error { code: \"BUSY\", message: \"tenant has active requests, handles or snapshots\", location: None }\n",
+  "result": "not counted as a completed verification"
+}
