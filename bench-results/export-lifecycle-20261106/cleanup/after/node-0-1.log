@@ -1,0 +1,4 @@
+tenant-kv listening on 127.0.0.1:49497
+replication export cleanup: IO_ERROR: Permission denied (os error 13)
+tenant-kv draining requests
+tenant-kv shutdown complete

@@ -1,0 +1,15 @@
+{
+  "result": "passed",
+  "binary_sha256": "4fd0333ce5f8ad6764cac08afe5228df53d28324eaed75560c35bb8454ddf6b7",
+  "log_request": "OK",
+  "export_exists_during_fault": true,
+  "background_error_logged": true,
+  "export_exists_after_permission_repair": false,
+  "verified": {
+    "node": 0,
+    "tenant": "3247e914-bf21-433b-97e2-e32c67b2ce61",
+    "documents": 100,
+    "sha256": "49dae72bfad80f564b3c5884f560def86e0dce8861167d26bc6c84c1f25153e0",
+    "acknowledged_mismatches": 0
+  }
+}

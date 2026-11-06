@@ -33,6 +33,16 @@ tenant-kv serve --root data --auth auth.json --telemetry-config examples/telemet
 
 v0.10.1 的详细引擎统计 `scheduler.cancelled_jobs` 记录出队时跳过的过期、取消或被放弃的读取任务；`completed_jobs` 只统计实际执行的任务。取消项仍占据有界队列，直到被取出；已开始执行的 I/O 不计入跳过数。`queue_wait_ns` 包含这些跳过任务的排队时间。这组嵌套统计可通过引擎 metrics / 详细 JSON 查看，目前不汇总为 Prometheus 指标。
 
+启用复制时，`/metrics` 增加下列服务实例累计计数，不随冷租户关闭而重置，进程/Service 重建后归零；不使用租户标签。`/v1/replication/status` 提供去掉前缀及 `_total` 的同名字段。计数直接从服务状态读取，Prometheus 抓取不额外获取租户位置。
+
+| Prometheus 指标 | 含义 |
+|---|---|
+| tkv_replication_initialization_attempts_total | 实际启动的检查点初始化尝试，包含新租户和日志过期重建；重复调度在途任务不计数 |
+| tkv_replication_initialization_failures_total | 初始化任务失败并由复制循环收集的次数，包含对端 BUSY/超时等失败；正常停止取消不计数 |
+| tkv_replication_reinitializations_total | 本地已有租户因 LOG_GONE 实际启动重建的次数；是尝试数，不是成功数 |
+
+可以在从库对 `increase(tkv_replication_reinitializations_total[15m]) >= 3` 持续 5 分钟告警，并结合失败计数、last_error 及实际源/副本位置检查日志窗口和传输吞吐；阈值需按租户数和部署条件调整。首次安装反复失败时还应监测初始化尝试与失败计数，不能只看重建计数。此处提供告警表达式，不自动安装监控规则。
+
 链路采样为 ParentBased + TraceIdRatioBased，`sample_ratio` 只控制根链路，范围 0–1；上游采样决定会被保留。日志独立于链路采样。HTTP 层不会导出请求/响应正文、DSL 文本、文档键、Authorization 或任意 baggage；日志 subject 来自管理员配置，不接受请求自报。启动/退出消息仍输出到标准错误，数据库请求事件通过此日志开关导出。
 
 队列大小限制为每信号 16–65,536 条，默认 1,024；导出批次最多 256 条，正常每 500 ms 发送。采集端不可用、超时或队列满不会阻塞数据库请求；遥测可能丢弃，操作日志不能代替要求不丢记录的持久审计系统。SDK 队列内存由 queue_size 控制，不包含在引擎 memory_bytes 计数中。导出超时为 100–10,000 ms。SIGINT/SIGTERM 后先停止接收并排空请求，再限时关闭 exporter。HTTP 中断记录为 499；后台已开始的写入仍可能提交，应使用原 operation_id 查询式重试。

@@ -439,7 +439,7 @@ async fn checkpoint_transfer_pins_wal_beyond_the_retention_byte_window() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn stalled_export_has_a_bounded_wal_window_and_cannot_pin_the_slot_forever() {
-    let pair = Pair::with_options(Options {
+    let mut pair = Pair::with_options(Options {
         l0_stop: 128,
         ..options()
     })
@@ -467,14 +467,17 @@ async fn stalled_export_has_a_bounded_wal_window_and_cannot_pin_the_slot_forever
         .sa
         .snapshot(state.cluster, state.epoch, other.id)
         .unwrap();
-    assert!(
-        !pair
-            .a
-            .root()
-            .join("replication-work/export")
-            .join(snapshot.id.to_string())
-            .exists()
-    );
+    pair.servers.push(pair.sa.start());
+    let obsolete = pair
+        .a
+        .root()
+        .join("replication-work/export")
+        .join(snapshot.id.to_string());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while obsolete.exists() {
+        assert!(Instant::now() < deadline, "expired export was not cleaned");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
     let bytes: u64 = std::fs::read_dir(tenant.engine().path().join("wal"))
         .unwrap()
         .map(|p| p.unwrap().metadata().unwrap().len())
@@ -496,7 +499,7 @@ async fn stalled_export_has_a_bounded_wal_window_and_cannot_pin_the_slot_forever
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn untracked_export_hands_off_its_slot_and_advances_the_retained_log() {
-    let pair = Pair::with_options(Options {
+    let mut pair = Pair::with_options(Options {
         l0_stop: 128,
         ..options()
     })
@@ -532,14 +535,20 @@ async fn untracked_export_hands_off_its_slot_and_advances_the_retained_log() {
         .sa
         .snapshot(state.cluster, state.epoch, other.id)
         .unwrap();
-    assert!(
-        !pair
-            .a
-            .root()
-            .join("replication-work/export")
-            .join(snapshot.id.to_string())
-            .exists()
-    );
+    pair.servers.push(pair.sa.start());
+    let obsolete = pair
+        .a
+        .root()
+        .join("replication-work/export")
+        .join(snapshot.id.to_string());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while obsolete.exists() {
+        assert!(
+            Instant::now() < deadline,
+            "handed-off export was not cleaned"
+        );
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
     for n in 4..48u64 {
         tenant
             .engine()
@@ -579,6 +588,8 @@ async fn retained_log_expiry_installs_checkpoint_and_replicates_catalog_deletion
     let tenant = pair.a.tenant(id).unwrap();
     tenant.create_collection("docs").unwrap();
     pair.catch_up(false).await;
+    let initial = pair.sb.status().unwrap();
+    assert_eq!(initial.reinitializations, 0);
     for round in 0..16 {
         tenant
             .put(
@@ -600,6 +611,37 @@ async fn retained_log_expiry_installs_checkpoint_and_replicates_catalog_deletion
             .unwrap()["value"],
         15
     );
+    let status = pair.sb.status().unwrap();
+    assert_eq!(status.reinitializations, 1);
+    assert_eq!(
+        status.initialization_attempts,
+        initial.initialization_attempts + 1
+    );
+    assert_eq!(status.initialization_failures, 0);
+    assert_eq!(
+        pair.b.tenant(id).unwrap().get("docs", "hot").unwrap(),
+        tenant.get("docs", "hot").unwrap()
+    );
+    let response = reqwest::Client::new()
+        .get(format!("{}/metrics", pair.ub))
+        .bearer_auth(ADMIN)
+        .send()
+        .await
+        .unwrap();
+    assert!(response.status().is_success());
+    let metrics = response.text().await.unwrap();
+    for (name, expected) in [
+        ("initialization_attempts", status.initialization_attempts),
+        ("initialization_failures", 0),
+        ("reinitializations", 1),
+    ] {
+        let metric = format!("tkv_replication_{name}_total");
+        let value = metrics
+            .lines()
+            .find_map(|line| line.strip_prefix(&format!("{metric} ")))
+            .unwrap();
+        assert_eq!(value.parse::<u64>().unwrap(), expected);
+    }
     drop(tenant);
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {

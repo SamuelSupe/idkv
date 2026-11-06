@@ -488,6 +488,32 @@ mod tests {
     }
 
     #[test]
+    fn active_replication_leases_survive_long_preparation_and_transfer_but_not_idle_expiry() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::Store::open(dir.path(), Options::default()).unwrap();
+        let tenant = store
+            .tenant(store.create_tenant("long-transfer").unwrap().id)
+            .unwrap();
+        let engine = tenant.engine();
+        let lease = engine.retain_replication_log();
+        assert!(lease.valid());
+        let start = Instant::now() + Duration::from_secs(7200);
+        assert!(
+            lease.renew_at(0, start),
+            "two-hour preparation expired its pin"
+        );
+        for step in 1..=60 {
+            assert!(lease.renew_at(step, start + Duration::from_secs(step * 240)));
+        }
+        let after_idle = start + Duration::from_secs(60 * 240 + 301);
+        assert!(!lease.renew_at(61, after_idle));
+        assert!(
+            !lease.renew_at(61, after_idle),
+            "expired pin was resurrected"
+        );
+    }
+
+    #[test]
     fn consistency_deadline_does_not_wait_for_the_writer_mutex() {
         let dir = tempfile::tempdir().unwrap();
         let store = crate::Store::open(dir.path(), Options::default()).unwrap();

@@ -1,0 +1,39 @@
+{
+  "result": "passed",
+  "tests_passed": 134,
+  "acknowledged_batches": 10909,
+  "acknowledged_document_operations": 166035,
+  "acknowledged_mismatches": 0,
+  "phases": [
+    {
+      "phase": "baseline",
+      "light_p99_ms": 15.492,
+      "heavy_p99_ms": 32.965,
+      "verified_backups": 0,
+      "overlap_intervals": 0
+    },
+    {
+      "phase": "combined",
+      "light_p99_ms": 22.653,
+      "heavy_p99_ms": 35.135,
+      "verified_backups": 3,
+      "overlap_intervals": 13
+    },
+    {
+      "phase": "recovery",
+      "light_p99_ms": 33.778,
+      "heavy_p99_ms": 34.519,
+      "verified_backups": 0,
+      "overlap_intervals": 5
+    }
+  ],
+  "fault_cases": 3,
+  "fault_confirmed_documents_preserved": 6000,
+  "source_files_verified": 103,
+  "binary_sha256": "4fd0333ce5f8ad6764cac08afe5228df53d28324eaed75560c35bb8454ddf6b7",
+  "cleanup_comparison": {
+    "before_log_result": "IO_ERROR",
+    "after_log_result": "OK",
+    "background_retry_succeeded": true
+  }
+}

@@ -1,8 +1,4 @@
-use crate::{
-    Error, Result, Store,
-    model::TenantInfo,
-    storage::{reject_symlink, sync_dir},
-};
+use crate::{Error, Result, Store, model::TenantInfo, storage::reject_symlink};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -34,7 +30,20 @@ pub struct SnapshotInfo {
 pub(crate) struct Exports {
     root: PathBuf,
     current: Option<(SnapshotInfo, Instant, PathBuf, crate::storage::LogRetention)>,
+    pub(super) generating: Option<Uuid>,
     catching_up: HashMap<Uuid, Catchup>,
+    pub(super) garbage: Vec<PathBuf>,
+}
+pub(super) enum Start {
+    Ready(SnapshotInfo),
+    Build(Preparation),
+}
+pub(super) struct Preparation {
+    id: Uuid,
+    cluster: Uuid,
+    epoch: Uuid,
+    tenant: Uuid,
+    path: PathBuf,
 }
 struct Catchup {
     id: Uuid,
@@ -57,16 +66,18 @@ impl Exports {
         Ok(Self {
             root,
             current: None,
+            generating: None,
             catching_up: HashMap::new(),
+            garbage: Vec::new(),
         })
     }
-    pub fn create(
+    pub(super) fn begin(
         &mut self,
         store: &Store,
         cluster: Uuid,
         epoch: Uuid,
         tenant: Uuid,
-    ) -> Result<SnapshotInfo> {
+    ) -> Result<Start> {
         let state = store.replication_state();
         if !state.enabled
             || state.cluster != cluster
@@ -78,13 +89,19 @@ impl Exports {
                 "checkpoint source changed",
             ));
         }
-        self.expire()?;
+        self.expire();
+        if self.generating.is_some() {
+            return Err(Error::new(
+                "BUSY",
+                "replication checkpoint preparation is active",
+            ));
+        }
         if self
             .current
             .as_ref()
             .is_some_and(|(info, _, _, _)| info.epoch != epoch)
         {
-            self.clear()?;
+            self.clear();
         }
         if let Some((info, created, _, lease)) = &mut self.current {
             if created.elapsed() < Duration::from_secs(300) {
@@ -96,55 +113,39 @@ impl Exports {
                             "replication log lease expired",
                         ));
                     }
-                    return Ok(info.clone());
+                    return Ok(Start::Ready(info.clone()));
                 }
                 return Err(Error::new(
                     "BUSY",
                     "another replica checkpoint transfer is active",
                 ));
             }
-            self.clear()?;
+            self.clear();
         }
-        let handle = store.tenant(tenant)?;
-        let info = handle.info();
-        // Pin before checkpoint copying starts: writes and flushes continue while
-        // files are copied and must remain available after its captured position.
-        let lease = handle.engine().retain_replication_log();
         let id = Uuid::new_v4();
-        let path = self.root.join(id.to_string());
-        let result = (|| {
-            let position = handle
-                .engine()
-                .checkpoint_limited(&path, info.disk_bytes, 0)?;
-            let mut files = Vec::new();
-            enumerate(&path, &path, &mut files)?;
-            if files.len() > 20_000 {
-                return Err(Error::limit("replication snapshot file limit"));
-            }
-            files.sort_by(|a, b| a.path.cmp(&b.path));
-            Ok(SnapshotInfo {
-                id,
-                cluster,
-                epoch,
-                tenant: info,
-                position,
-                files,
-            })
-        })();
+        self.generating = Some(id);
+        Ok(Start::Build(Preparation {
+            id,
+            cluster,
+            epoch,
+            tenant,
+            path: self.root.join(id.to_string()),
+        }))
+    }
+    pub(super) fn finish(
+        &mut self,
+        preparation: Preparation,
+        result: Result<(SnapshotInfo, crate::storage::LogRetention)>,
+    ) -> Result<SnapshotInfo> {
+        debug_assert_eq!(self.generating, Some(preparation.id));
+        self.generating = None;
         match result {
-            Ok(info) => {
-                if !lease.renew(info.position) {
-                    let _ = fs::remove_dir_all(path);
-                    return Err(Error::new(
-                        "SNAPSHOT_EXPIRED",
-                        "checkpoint exceeded its log lease window",
-                    ));
-                }
-                self.current = Some((info.clone(), Instant::now(), path, lease));
+            Ok((info, lease)) => {
+                self.current = Some((info.clone(), Instant::now(), preparation.path, lease));
                 Ok(info)
             }
             Err(error) => {
-                let _ = fs::remove_dir_all(path);
+                self.garbage.push(preparation.path);
                 Err(error)
             }
         }
@@ -175,13 +176,13 @@ impl Exports {
     }
     pub fn release(&mut self, id: Uuid) -> Result<()> {
         if self.current.as_ref().is_some_and(|(s, _, _, _)| s.id == id) {
-            self.clear()?;
+            self.clear();
         }
         self.catching_up.retain(|_, transfer| transfer.id != id);
         Ok(())
     }
-    pub fn progress(&mut self, request: &super::LogRequest, head: u64) -> Result<()> {
-        self.expire()?;
+    pub fn progress(&mut self, request: &super::LogRequest, head: u64) {
+        self.expire();
         if self.current.as_ref().is_some_and(|(info, _, _, _)| {
             info.tenant.id == request.tenant
                 && info.epoch == request.epoch
@@ -201,8 +202,7 @@ impl Exports {
                     lease,
                 },
             );
-            fs::remove_dir_all(path)?;
-            sync_dir(&self.root)?;
+            self.garbage.push(path);
         }
         if let Some(transfer) = self.catching_up.remove(&request.tenant)
             && transfer.epoch == request.epoch
@@ -212,24 +212,64 @@ impl Exports {
         {
             self.catching_up.insert(request.tenant, transfer);
         }
-        Ok(())
     }
-    pub fn expire(&mut self) -> Result<()> {
+    pub fn expire(&mut self) {
         self.catching_up
             .retain(|_, transfer| transfer.lease.valid());
         if self.current.as_ref().is_some_and(|(_, touched, _, lease)| {
             touched.elapsed() >= Duration::from_secs(300) || !lease.valid()
         }) {
-            self.clear()?;
+            self.clear();
         }
-        Ok(())
     }
-    fn clear(&mut self) -> Result<()> {
+    fn clear(&mut self) {
         if let Some((_, _, path, _lease)) = self.current.take() {
-            fs::remove_dir_all(path)?;
-            sync_dir(&self.root)?;
+            self.garbage.push(path);
         }
-        Ok(())
+    }
+}
+impl Preparation {
+    pub fn create(&self, store: &Store) -> Result<(SnapshotInfo, crate::storage::LogRetention)> {
+        let handle = store.tenant(self.tenant)?;
+        let tenant = handle.info();
+        // Own the pin outside the exports lock throughout copying and hashing.
+        let lease = handle.engine().retain_replication_log();
+        let position = handle
+            .engine()
+            .checkpoint_limited(&self.path, tenant.disk_bytes, 0)?;
+        let mut files = Vec::new();
+        enumerate(&self.path, &self.path, &mut files)?;
+        if files.len() > 20_000 {
+            return Err(Error::limit("replication snapshot file limit"));
+        }
+        files.sort_by(|a, b| a.path.cmp(&b.path));
+        let state = store.replication_state();
+        if state.cluster != self.cluster
+            || state.epoch != self.epoch
+            || state.role == super::Role::Replica
+        {
+            return Err(Error::new(
+                "REPLICATION_CONFLICT",
+                "checkpoint source changed",
+            ));
+        }
+        if !lease.renew(position) {
+            return Err(Error::new(
+                "SNAPSHOT_EXPIRED",
+                "checkpoint exceeded its log lease window",
+            ));
+        }
+        Ok((
+            SnapshotInfo {
+                id: self.id,
+                cluster: self.cluster,
+                epoch: self.epoch,
+                tenant,
+                position,
+                files,
+            },
+            lease,
+        ))
     }
 }
 fn enumerate(root: &Path, dir: &Path, files: &mut Vec<FileInfo>) -> Result<()> {

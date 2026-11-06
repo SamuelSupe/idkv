@@ -331,11 +331,11 @@ async fn dispatch_async(
         return tokio::task::spawn_blocking(move || {
             let _permit = permit;
             let mut memory = state.store.reserve_http(2 << 20)?;
-            let bytes = state
-                .runtime
-                .telemetry
-                .render_metrics(&state.store)
-                .into_bytes();
+            let mut rendered = state.runtime.telemetry.render_metrics(&state.store);
+            if let Some(replication) = &state.replication {
+                rendered.push_str(&replication.render_metrics());
+            }
+            let bytes = rendered.into_bytes();
             memory.shrink(bytes.capacity());
             Ok(Response::builder()
                 .header("content-type", "text/plain; version=0.0.4; charset=utf-8")

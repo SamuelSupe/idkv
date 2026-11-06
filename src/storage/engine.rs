@@ -36,7 +36,6 @@ pub use write::Transaction;
 pub(crate) struct LogRetention {
     engine: Arc<Engine>,
     id: Uuid,
-    deadline: Instant,
 }
 impl LogRetention {
     pub(crate) fn valid(&self) -> bool {
@@ -44,20 +43,22 @@ impl LogRetention {
             .log_retention
             .lock()
             .get(&self.id)
-            .is_some_and(|(_, expires)| expires.is_some_and(|expires| expires > Instant::now()))
+            .is_some_and(|(_, expires)| expires.is_none_or(|expires| expires > Instant::now()))
     }
     pub(crate) fn renew(&self, position: u64) -> bool {
+        self.renew_at(position, Instant::now())
+    }
+    fn renew_at(&self, position: u64, now: Instant) -> bool {
         let mut leases = self.engine.log_retention.lock();
         let Some((floor, expires)) = leases.get_mut(&self.id) else {
             return false;
         };
-        let now = Instant::now();
-        if now >= self.deadline || expires.is_some_and(|expires| expires <= now) {
+        if expires.is_some_and(|expires| expires <= now) {
             leases.remove(&self.id);
             return false;
         }
         *floor = (*floor).max(position);
-        *expires = Some((now + Duration::from_secs(300)).min(self.deadline));
+        *expires = Some(now + Duration::from_secs(300));
         true
     }
 }
@@ -464,11 +465,12 @@ impl Engine {
         let lease = LogRetention {
             engine: self.clone(),
             id: Uuid::new_v4(),
-            deadline: Instant::now() + Duration::from_secs(3600),
         };
         self.log_retention
             .lock()
-            .insert(lease.id, (0, Some(lease.deadline)));
+            // Preparation owns this handle while copying and hashing. The byte
+            // window can invalidate it; inactivity starts after preparation.
+            .insert(lease.id, (0, None));
         lease
     }
     fn pin(self: &Arc<Self>, view: View, seq: u64, seconds: u64) -> Result<Snapshot> {

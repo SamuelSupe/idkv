@@ -16,6 +16,10 @@ use std::{
 use tokio::sync::Mutex as AsyncMutex;
 use uuid::Uuid;
 
+#[cfg(test)]
+#[path = "client_tests.rs"]
+mod tests;
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Status {
     pub node: NodeState,
@@ -23,6 +27,12 @@ pub struct Status {
     pub unavailable: Vec<UnavailableTenant>,
     pub last_error: Option<String>,
     pub completed_cycles: u64,
+    #[serde(default)]
+    pub initialization_attempts: u64,
+    #[serde(default)]
+    pub initialization_failures: u64,
+    #[serde(default)]
+    pub reinitializations: u64,
 }
 #[derive(Clone, Serialize, Deserialize)]
 pub struct UnavailableTenant {
@@ -40,6 +50,9 @@ struct Progress {
     initializing: HashMap<Uuid, tokio::task::JoinHandle<Result<()>>>,
     retry_at: HashMap<Uuid, Instant>,
     confirmed: HashMap<Uuid, u64>,
+    initialization_attempts: u64,
+    initialization_failures: u64,
+    reinitializations: u64,
 }
 struct Inner {
     store: Store,
@@ -138,6 +151,9 @@ impl Service {
                     initializing: HashMap::new(),
                     retry_at: HashMap::new(),
                     confirmed: HashMap::new(),
+                    initialization_attempts: 0,
+                    initialization_failures: 0,
+                    reinitializations: 0,
                 }),
             }),
         })
@@ -178,6 +194,9 @@ impl Service {
             unavailable,
             last_error: progress.error.clone(),
             completed_cycles: progress.cycles,
+            initialization_attempts: progress.initialization_attempts,
+            initialization_failures: progress.initialization_failures,
+            reinitializations: progress.reinitializations,
         })
     }
     pub fn start(&self) -> tokio::task::JoinHandle<()> {
@@ -190,6 +209,7 @@ impl Service {
                     let result =
                         tokio::task::spawn_blocking(move || expiring.expire_exports()).await;
                     if let Ok(Err(error)) = result {
+                        eprintln!("replication export cleanup: {error}");
                         service.inner.progress.lock().error = Some(error.to_string());
                     }
                     expiration = Instant::now();
@@ -367,9 +387,9 @@ impl Service {
                     "replica initialization worker failed",
                 ))
             }) {
-                self.inner
-                    .progress
-                    .lock()
+                let mut progress = self.inner.progress.lock();
+                progress.initialization_failures += 1;
+                progress
                     .retry_at
                     .insert(id, Instant::now() + Duration::from_millis(100));
                 failure.get_or_insert(error);
@@ -439,7 +459,7 @@ impl Service {
     ) -> Result<TenantSync> {
         let store = self.inner.store.clone();
         if !store.contains_tenant(position.info.id) {
-            self.start_initialize(source, position.info.id);
+            self.start_initialize(source, position.info.id, false);
             return Ok(TenantSync::Idle);
         }
         let id = position.info.id;
@@ -473,7 +493,7 @@ impl Service {
         match page {
             Err(error) if error.code == "LOG_GONE" => {
                 self.inner.progress.lock().cursors.remove(&position.info.id);
-                self.start_initialize(source, position.info.id);
+                self.start_initialize(source, position.info.id, true);
                 Ok(TenantSync::Idle)
             }
             Err(error) => Err(error),
@@ -521,13 +541,15 @@ impl Service {
             }
         }
     }
-    fn start_initialize(&self, source: &Source, tenant: Uuid) {
+    fn start_initialize(&self, source: &Source, tenant: Uuid, reinitializing: bool) {
         let mut progress = self.inner.progress.lock();
         if progress.initializing.len() >= 2 || progress.initializing.contains_key(&tenant) {
             return;
         }
         let service = self.clone();
         let source = source.clone();
+        progress.initialization_attempts += 1;
+        progress.reinitializations += u64::from(reinitializing);
         progress.confirmed.remove(&tenant);
         progress.initializing.insert(
             tenant,
@@ -536,16 +558,38 @@ impl Service {
     }
     pub fn export_log(&self, request: &LogRequest) -> Result<LogPage> {
         let page = self.inner.store.export_logs(request)?;
-        if let Some(mut exports) = self.inner.exports.try_lock() {
-            exports.progress(request, page.source_position)?;
-        }
+        self.inner
+            .exports
+            .lock()
+            .progress(request, page.source_position);
         Ok(page)
     }
     fn expire_exports(&self) -> Result<()> {
-        if let Some(mut exports) = self.inner.exports.try_lock() {
-            exports.expire()?;
+        let paths = {
+            let mut exports = self.inner.exports.lock();
+            exports.expire();
+            std::mem::take(&mut exports.garbage)
+        };
+        let mut retry = Vec::new();
+        let mut failure = None;
+        for path in paths {
+            let result = fs::remove_dir_all(&path)
+                .or_else(|error| {
+                    if error.kind() == std::io::ErrorKind::NotFound {
+                        Ok(())
+                    } else {
+                        Err(error)
+                    }
+                })
+                .map_err(Error::from)
+                .and_then(|_| crate::storage::sync_dir(path.parent().unwrap()));
+            if let Err(error) = result {
+                retry.push(path);
+                failure.get_or_insert(error);
+            }
         }
-        Ok(())
+        self.inner.exports.lock().garbage.extend(retry);
+        failure.map_or(Ok(()), Err)
     }
     pub fn snapshot(
         &self,
@@ -553,17 +597,34 @@ impl Service {
         epoch: Uuid,
         tenant: Uuid,
     ) -> Result<super::snapshot::SnapshotInfo> {
-        self.inner
+        let start = self
+            .inner
             .exports
-            .try_lock()
-            .ok_or_else(|| Error::new("BUSY", "replication checkpoint preparation is active"))?
-            .create(&self.inner.store, cluster, epoch, tenant)
+            .lock()
+            .begin(&self.inner.store, cluster, epoch, tenant)?;
+        match start {
+            super::snapshot::Start::Ready(info) => Ok(info),
+            super::snapshot::Start::Build(preparation) => {
+                let result = preparation.create(&self.inner.store);
+                self.inner.exports.lock().finish(preparation, result)
+            }
+        }
     }
     pub fn snapshot_chunk(&self, id: Uuid, file: usize, offset: u64) -> Result<String> {
         self.inner.exports.lock().chunk(id, file, offset)
     }
     pub fn release_snapshot(&self, id: Uuid) -> Result<()> {
         self.inner.exports.lock().release(id)
+    }
+    pub(crate) fn render_metrics(&self) -> String {
+        let progress = self.inner.progress.lock();
+        [
+            ("initialization_attempts", progress.initialization_attempts),
+            ("initialization_failures", progress.initialization_failures),
+            ("reinitializations", progress.reinitializations),
+        ].into_iter().map(|(name, value)| format!(
+            "# TYPE tkv_replication_{name}_total counter\ntkv_replication_{name}_total {value}\n"
+        )).collect()
     }
     pub fn fence(&self, target: Uuid) -> Result<Fence> {
         self.inner.store.fence_primary(target)

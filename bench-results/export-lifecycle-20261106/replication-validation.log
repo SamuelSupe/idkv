@@ -1,0 +1,32 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.36s
+     Running tests/replication.rs (/var/tmp/tkv-20261104-target/debug/deps/replication-9a982e8f8cdf365a)
+
+running 24 tests
+test busy_catalog_tenant_does_not_stall_healthy_replication ... ok
+test catchup_keeps_progress_while_source_head_and_other_tenants_advance ... ok
+test checked_batches_and_generic_publications_survive_replication_and_switch ... ok
+test checkpoint_transfer_pins_wal_beyond_the_retention_byte_window ... ok
+test client_fallback_never_bypasses_budgets_or_cursor_affinity_and_checks_capabilities ... ok
+test client_read_apis_preserve_positions_and_pin_all_cursor_forms ... ok
+test cloned_clients_reuse_primary_discovery_for_sequential_writes ... ok
+test expired_log_window_counts_one_reinitialization_and_preserves_confirmed_data ... ok
+test idle_replication_does_not_reopen_cold_engines_and_read_tokens_wait_for_apply ... ok
+test incompatible_successor_is_rejected_before_fencing_primary ... ok
+test legacy_replication_protocol_is_rejected_before_data_or_fencing ... ok
+test middleware_client_retries_receipts_across_switch_and_requires_read_history ... ok
+test one_corrupt_source_tenant_does_not_delete_its_replica_or_stop_healthy_tenants ... ok
+test persisted_fence_survives_restart_and_stale_initial_role_configuration ... ok
+test replication_credentials_and_promotion_proof_are_enforced ... ok
+test retained_log_expiry_installs_checkpoint_and_replicates_catalog_deletion ... ok
+test retention_replicates_expiry_and_current_state_across_switchover ... ok
+test slow_checkpoint_initialization_does_not_hold_healthy_replication_cycles ... ok
+test small_memory_budget_supports_replication_and_switchover ... ok
+test stalled_export_has_a_bounded_wal_window_and_cannot_pin_the_slot_forever ... ok
+test streams_atomic_indexes_deletes_and_switches_both_directions ... ok
+test switchover_preserves_every_acknowledged_write_racing_with_the_fence ... ok
+test temporal_history_receipts_and_effective_time_survive_replication_and_switchover ... ok
+test untracked_export_hands_off_its_slot_and_advances_the_retained_log ... ok
+
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.38s
+

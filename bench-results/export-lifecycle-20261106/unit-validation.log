@@ -1,0 +1,77 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+warning: type `snapshot::Start` is more private than the item `Exports::begin`
+  --> src/replication/snapshot.rs:74:5
+   |
+74 | /     pub fn begin(
+75 | |         &mut self,
+76 | |         store: &Store,
+77 | |         cluster: Uuid,
+78 | |         epoch: Uuid,
+79 | |         tenant: Uuid,
+80 | |     ) -> Result<Start> {
+   | |______________________^ method `Exports::begin` is reachable at visibility `pub(crate)`
+   |
+note: but type `snapshot::Start` is only usable at visibility `pub(in crate::replication)`
+  --> src/replication/snapshot.rs:37:1
+   |
+37 | pub(super) enum Start {
+   | ^^^^^^^^^^^^^^^^^^^^^
+   = note: `#[warn(private_interfaces)]` on by default
+
+warning: type `Preparation` is more private than the item `Exports::finish`
+   --> src/replication/snapshot.rs:135:5
+    |
+135 | /     pub fn finish(
+136 | |         &mut self,
+137 | |         preparation: Preparation,
+138 | |         result: Result<(SnapshotInfo, crate::storage::LogRetention)>,
+139 | |     ) -> Result<SnapshotInfo> {
+    | |_____________________________^ method `Exports::finish` is reachable at visibility `pub(crate)`
+    |
+note: but type `Preparation` is only usable at visibility `pub(in crate::replication)`
+   --> src/replication/snapshot.rs:41:1
+    |
+ 41 | pub(super) struct Preparation {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `tenant-kv` (lib test) generated 2 warnings
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.93s
+     Running unittests src/lib.rs (/var/tmp/tkv-20261104-target/debug/deps/tenant_kv-7def2c613512144d)
+
+running 33 tests
+test codec::typed::tests::typed_records_match_json_decoder_and_reject_malformed_nodes ... ok
+test http::body::tests::response_budget_failure_preserves_completed_mutation_status ... ok
+test identity::time::tests::normal_clock_discipline_refreshes_the_anchor_but_jumps_still_fail_closed ... ok
+test identity::time::tests::timezone_precision_and_clock_discontinuities ... ok
+test replication::client::tests::checkpoint_preparation_does_not_lock_out_other_tenant_log_progress ... ok
+test replication::client::tests::export_cleanup_failure_does_not_fail_logs_and_is_retried ... ok
+test replication::client::tests::failed_preparation_releases_the_slot_for_a_new_export ... ok
+test resources::tests::abandoned_reads_skip_io_but_dropped_write_handles_still_execute ... ok
+test storage::cache::tests::a_failed_reservation_reclaims_only_the_cache_space_it_needs ... ok
+test storage::engine::maintenance::tests::disk_reconciliation_accounts_for_concurrent_wal_growth ... ok
+test storage::engine::read::tests::disjoint_ranges_preserve_spanning_versions_and_tombstones ... ok
+test storage::engine::read::tests::keys_created_after_a_snapshot_still_consume_the_scan_budget ... ok
+test storage::engine::replication::tests::malformed_page_is_rejected_before_mutation_and_valid_replay_survives_restart ... ok
+test storage::engine::write::tests::active_replication_leases_survive_long_preparation_and_transfer_but_not_idle_expiry ... ok
+test storage::engine::write::tests::cleanup_can_use_reserved_disk_headroom_when_user_writes_are_backpressured ... ok
+test storage::engine::write::tests::consistency_deadline_does_not_wait_for_the_writer_mutex ... ok
+test storage::engine::write::tests::index_admission_waits_for_compaction_before_running_the_transaction_once ... ok
+test storage::engine::write::tests::read_only_transaction_waits_for_the_observed_group_commit ... ok
+test storage::engine::write::tests::saturated_read_queue_cannot_poison_another_tenants_writer ... ok
+test storage::engine::write::tests::snapshot_admission_failure_does_not_leak_disk_reservations ... ok
+test storage::sst::point_get_preserves_versions_and_tombstones_across_index_partitions ... ok
+test storage::wal::tests::buffered_replication_preserves_frames_limits_and_pinned_end ... ok
+test tenant::catalog::tests::collection_resolution_preserves_snapshot_generations ... ok
+test tenant::manager::tests::a_temporary_position_reader_does_not_close_a_reused_or_reopened_engine ... ok
+test tenant::manager::tests::deleted_tenant_history_does_not_consume_live_tenant_capacity ... ok
+test tenant::retention::tests::expired_receipts_never_repeat_generated_writes_and_current_documents_survive ... ok
+test tenant::retention::tests::persisted_expiry_watermark_rejects_retry_after_clock_rollback ... ok
+test tenant::retention::tests::receipt_metadata_does_not_reduce_the_public_document_batch_limit ... ok
+test tenant::retention::tests::retention_makes_progress_with_small_byte_batches_and_long_receipt_keys ... ok
+test tenant::retention::tests::rolling_publications_continue_beyond_the_collection_limit ... ok
+test tenant::retention::tests::shortening_policy_cannot_remove_receipts_while_the_original_token_is_valid ... ok
+test tenant::retention::tests::superseded_publications_preserve_shared_current_collections_and_old_snapshots ... ok
+test tenant::retention::tests::temporal_gc_keeps_predecessor_baselines_including_empty_timelines_and_latest_state ... ok
+
+test result: ok. 33 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 40.62s
+

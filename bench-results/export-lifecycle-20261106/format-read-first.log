@@ -1,0 +1,17 @@
+error: this file contains an unclosed delimiter
+   --> /Users/livesite/Documents/ChatGPT/idkv/src/storage/engine/write.rs:774:30
+    |
+416 | mod tests {
+    |           - unclosed delimiter
+...
+707 |     fn read_only_transaction_waits_for_the_observed_group_commit() {
+    |                                                                    - unclosed delimiter
+708 |         for pin in [false, true] {
+    |                                  - unclosed delimiter
+...
+774 |             assert_eq!(engine
+    |                       -      ^
+    |                       |
+    |                       unclosed delimiter
+
+Error writing files: failed to resolve mod `write`: cannot parse /Users/livesite/Documents/ChatGPT/idkv/src/storage/engine/write.rs
