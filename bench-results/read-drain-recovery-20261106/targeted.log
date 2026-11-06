@@ -1,0 +1,158 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+warning: unused import: `admission::ReplicaInstall`
+  --> src/tenant/manager.rs:47:5
+   |
+47 | use admission::ReplicaInstall;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: `tenant-kv` (lib test) generated 1 warning (run `cargo fix --lib -p tenant-kv --tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.37s
+     Running unittests src/lib.rs (/var/tmp/tkv-20261104-target/debug/deps/tenant_kv-7def2c613512144d)
+
+running 40 tests
+test codec::typed::tests::typed_records_match_json_decoder_and_reject_malformed_nodes ... ok
+test http::body::tests::response_budget_failure_preserves_completed_mutation_status ... ok
+test identity::time::tests::normal_clock_discipline_refreshes_the_anchor_but_jumps_still_fail_closed ... ok
+test identity::time::tests::timezone_precision_and_clock_discontinuities ... ok
+test replication::client::tests::checkpoint_preparation_does_not_lock_out_other_tenant_log_progress ... ok
+test replication::client::tests::export_cleanup_failure_does_not_fail_logs_and_is_retried ... ok
+test replication::client::tests::failed_preparation_releases_the_slot_for_a_new_export ... ok
+test replication::client::tests::unwinding_checkpoint_preparation_releases_the_reserved_export ... ok
+test resources::tests::abandoned_reads_skip_io_but_dropped_write_handles_still_execute ... ok
+test storage::cache::tests::a_failed_reservation_reclaims_only_the_cache_space_it_needs ... ok
+test storage::engine::maintenance::tests::disk_reconciliation_accounts_for_concurrent_wal_growth ... ok
+test storage::engine::maintenance::tests::missing_checkpointed_wal_does_not_block_flush_or_lose_current_data ... ok
+test storage::engine::read::tests::disjoint_ranges_preserve_spanning_versions_and_tombstones ... ok
+test storage::engine::read::tests::keys_created_after_a_snapshot_still_consume_the_scan_budget ... ok
+test storage::engine::replication::tests::malformed_page_is_rejected_before_mutation_and_valid_replay_survives_restart ... ok
+test storage::engine::write::tests::active_replication_leases_survive_long_preparation_and_transfer_but_not_idle_expiry ... ok
+test storage::engine::write::tests::cleanup_can_use_reserved_disk_headroom_when_user_writes_are_backpressured ... ok
+test storage::engine::write::tests::consistency_deadline_does_not_wait_for_the_writer_mutex ... ok
+test storage::engine::write::tests::hot_retries_do_not_keep_an_uncertain_engine_alive ... ok
+test storage::engine::write::tests::index_admission_waits_for_compaction_before_running_the_transaction_once ... ok
+test storage::engine::write::tests::read_only_transaction_waits_for_the_observed_group_commit ... ok
+test storage::engine::write::tests::saturated_read_queue_cannot_poison_another_tenants_writer ... ok
+test storage::engine::write::tests::snapshot_admission_failure_does_not_leak_disk_reservations ... ok
+test storage::engine::write::tests::uncertain_wal_tail_cannot_be_fenced_or_cached_as_the_old_position ... ok
+test storage::sst::point_get_preserves_versions_and_tombstones_across_index_partitions ... ok
+test storage::wal::tests::buffered_replication_preserves_frames_limits_and_pinned_end ... ok
+test tenant::catalog::tests::collection_resolution_preserves_snapshot_generations ... ok
+test tenant::manager::replication::tests::replica_quota_updates_wait_until_restore_preparation_finishes ... ok
+test tenant::manager::tests::a_temporary_position_reader_does_not_close_a_reused_or_reopened_engine ... ok
+test tenant::manager::tests::cold_export_reuses_the_open_engine_until_its_log_pages_catch_up ... ok
+test tenant::manager::tests::deleted_tenant_history_does_not_consume_live_tenant_capacity ... ok
+test tenant::manager::tests::io_open_failures_are_cached_briefly_and_recover_without_manual_close ... ok
+test tenant::retention::tests::expired_receipts_never_repeat_generated_writes_and_current_documents_survive ... ok
+test tenant::retention::tests::persisted_expiry_watermark_rejects_retry_after_clock_rollback ... ok
+test tenant::retention::tests::receipt_metadata_does_not_reduce_the_public_document_batch_limit ... ok
+test tenant::retention::tests::retention_makes_progress_with_small_byte_batches_and_long_receipt_keys ... ok
+test tenant::retention::tests::rolling_publications_continue_beyond_the_collection_limit ... ok
+test tenant::retention::tests::shortening_policy_cannot_remove_receipts_while_the_original_token_is_valid ... ok
+test tenant::retention::tests::superseded_publications_preserve_shared_current_collections_and_old_snapshots ... ok
+test tenant::retention::tests::temporal_gc_keeps_predecessor_baselines_including_empty_timelines_and_latest_state ... ok
+
+test result: ok. 40 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 48.18s
+
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+warning: unused import: `admission::ReplicaInstall`
+  --> src/tenant/manager.rs:47:5
+   |
+47 | use admission::ReplicaInstall;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: `tenant-kv` (lib) generated 1 warning (run `cargo fix --lib -p tenant-kv` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.95s
+     Running tests/engine.rs (/var/tmp/tkv-20261104-target/debug/deps/engine-19e0c9ad211678a3)
+
+running 23 tests
+test array_projection_preserves_shape_in_covering_indexes ... ok
+test atomic_indexes_unique_conflicts_and_conditional_updates ... ok
+test backup_restore_does_not_change_other_tenants ... ok
+test batched_nonunique_ranges_reuse_blocks_and_preserve_limits ... ok
+test binary_document_precision_projection_and_types ... ok
+test bounded_primary_ranges_keep_snapshot_and_encoded_key_boundaries ... ok
+test collection_gc_resumes_and_preserves_recreated_collection_and_old_snapshot ... ok
+test concurrent_group_commits_survive_reopen ... ok
+test covering_ranges_sparse_unique_and_boolean_queries ... ok
+test deleting_another_tenant_preserves_unpublished_restore_preparation ... ok
+test failed_unique_build_can_be_repaired_and_nonunique_lookup_is_bounded ... ok
+test idle_tenant_waits_for_cursor_lease_then_reopens_with_new_runtime ... ok
+test index_multi_ranges_match_scan_with_sparse_and_typed_values ... ok
+test indexed_ranges_match_reference_with_negative_values_and_ties ... ok
+test live_handles_and_snapshots_keep_manager_ownership_after_store_drop ... ok
+test model_comparison_over_flush_compaction_and_recovery ... ok
+test online_index_build_tracks_concurrent_changes ... ok
+test pagination_keeps_snapshot_during_compaction_and_updates ... ok
+test quota_scan_and_expired_cursor_leave_other_tenants_usable ... ok
+test restore_cleanup_error_still_fences_the_tenant_until_store_recovery ... ok
+test tenant_delete_respects_a_standalone_engine_directory_lock ... ok
+test tenant_files_keys_and_unique_values_are_isolated ... ok
+test write_result_limit_rejects_before_committing_and_multiget_restores_order ... ok
+
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.27s
+
+     Running tests/recovery.rs (/var/tmp/tkv-20261104-target/debug/deps/recovery-e0c3a44a7c47dba2)
+
+running 11 tests
+test durable_retry_receipt_and_generated_document_recover_together ... ok
+test incomplete_tail_is_discarded_but_complete_corruption_is_rejected ... ok
+test missing_or_foreign_sst_never_becomes_an_empty_database ... ok
+test process_crashes_preserve_atomic_documents_and_indexes ... ok
+test recovery_rewrite_survives_abort_before_and_after_publication ... ok
+test recovery_rewrites_valid_wal_to_a_fresh_inode ... ok
+test restore_journal_survives_both_directory_switch_crashes ... ok
+test retention_cleanup_recovers_before_and_after_atomic_progress_commits ... ok
+test temporal_corrections_history_heads_and_receipts_recover_atomically ... ok
+test uncertain_tenant_deletion_rejects_new_writes_until_restart ... ok
+test unpublished_flush_failure_is_retryable_without_checkpoint_gaps ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.24s
+
+     Running tests/replication.rs (/var/tmp/tkv-20261104-target/debug/deps/replication-9a982e8f8cdf365a)
+
+running 25 tests
+test busy_catalog_tenant_does_not_stall_healthy_replication ... ok
+test catchup_keeps_progress_while_source_head_and_other_tenants_advance ... ok
+test checked_batches_and_generic_publications_survive_replication_and_switch ... ok
+test checkpoint_install_waits_for_readers_without_retransferring_and_other_tenants_progress ... ok
+test checkpoint_transfer_pins_wal_beyond_the_retention_byte_window ... ok
+test client_fallback_never_bypasses_budgets_or_cursor_affinity_and_checks_capabilities ... ok
+test client_read_apis_preserve_positions_and_pin_all_cursor_forms ... ok
+test cloned_clients_reuse_primary_discovery_for_sequential_writes ... ok
+test hot_short_readers_and_cached_cursors_cannot_starve_checkpoint_installation ... ok
+test idle_replication_does_not_reopen_cold_engines_and_read_tokens_wait_for_apply ... ok
+test incompatible_successor_is_rejected_before_fencing_primary ... ok
+test legacy_replication_protocol_is_rejected_before_data_or_fencing ... ok
+test middleware_client_retries_receipts_across_switch_and_requires_read_history ... ok
+test one_corrupt_source_tenant_does_not_delete_its_replica_or_stop_healthy_tenants ... ok
+test persisted_fence_survives_restart_and_stale_initial_role_configuration ... ok
+test replication_credentials_and_promotion_proof_are_enforced ... ok
+test retained_log_expiry_installs_checkpoint_and_replicates_catalog_deletion ... FAILED
+test retention_replicates_expiry_and_current_state_across_switchover ... ok
+test slow_checkpoint_initialization_does_not_hold_healthy_replication_cycles ... ok
+test small_memory_budget_supports_replication_and_switchover ... ok
+test stalled_export_has_a_bounded_wal_window_and_cannot_pin_the_slot_forever ... ok
+test streams_atomic_indexes_deletes_and_switches_both_directions ... ok
+test switchover_preserves_every_acknowledged_write_racing_with_the_fence ... ok
+test temporal_history_receipts_and_effective_time_survive_replication_and_switchover ... ok
+test untracked_export_hands_off_its_slot_and_advances_the_retained_log ... ok
+
+failures:
+
+---- retained_log_expiry_installs_checkpoint_and_replicates_catalog_deletion stdout ----
+
+thread 'retained_log_expiry_installs_checkpoint_and_replicates_catalog_deletion' panicked at tests/replication.rs:173:53:
+called `Result::unwrap()` on an `Err` value: Error { code: "BUSY", message: "replica checkpoint installation is draining readers", location: None }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    retained_log_expiry_installs_checkpoint_and_replicates_catalog_deletion
+
+test result: FAILED. 24 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 14.54s
+
+error: test failed, to rerun pass `--test replication`

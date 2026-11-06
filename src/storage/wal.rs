@@ -10,7 +10,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::{File, OpenOptions},
+    fs::{self, File, OpenOptions},
     io::{Read, Seek, SeekFrom, Write},
     path::Path,
     sync::Arc,
@@ -121,12 +121,45 @@ impl Wal {
             apply(seq, records)?;
             offset += 24 + len as u64;
         }
-        if offset != length {
-            file.set_len(offset)?;
+        // Retrying fsync on the old inode is insufficient after writeback errors:
+        // clean page-cache data can survive without being durable. Fresh writes
+        // to a new inode re-establish durability, including across process opens.
+        let temp = dir.join(format!("{}.recover", info.id));
+        if temp.exists() {
+            reject_symlink(&temp)?;
+            fs::remove_file(&temp)?;
         }
-        // A complete tail can come from COMMIT_UNKNOWN and still exist only in
-        // the page cache. Persist it before recovery publishes its sequence.
-        file.sync_all()?;
+        let rewritten = (|| -> Result<File> {
+            use std::os::unix::fs::OpenOptionsExt;
+            let _memory = budget.reserve(64 << 10)?;
+            let mut output = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create_new(true)
+                .mode(0o600)
+                .open(&temp)?;
+            file.seek(SeekFrom::Start(0))?;
+            let mut buffer = vec![0; 64 << 10];
+            let mut remaining = offset;
+            // Reflinks or copy_file_range can retain the failed physical extent.
+            while remaining != 0 {
+                let count = remaining.min(buffer.len() as u64) as usize;
+                file.read_exact(&mut buffer[..count])?;
+                output.write_all(&buffer[..count])?;
+                remaining -= count as u64;
+            }
+            output.set_permissions(file.metadata()?.permissions())?;
+            output.sync_all()?;
+            super::failpoint("wal_recovery_written");
+            fs::rename(&temp, &path)?;
+            sync_dir(dir)?;
+            super::failpoint("wal_recovery_published");
+            Ok(output)
+        })();
+        if rewritten.is_err() {
+            let _ = fs::remove_file(&temp);
+        }
+        file = rewritten?;
         file.seek(SeekFrom::End(0))?;
         Ok(Self {
             info: info.clone(),

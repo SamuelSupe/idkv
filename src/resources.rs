@@ -337,6 +337,7 @@ impl Drop for IoScheduler {
 
 pub struct RequestGate {
     active: AtomicUsize,
+    closed: AtomicBool,
     limit: usize,
 }
 pub struct RequestPermit<'a>(&'a RequestGate);
@@ -344,16 +345,30 @@ impl RequestGate {
     pub fn new(limit: usize) -> Self {
         Self {
             active: AtomicUsize::new(0),
+            closed: AtomicBool::new(false),
             limit,
         }
     }
     pub fn enter(&self) -> Result<RequestPermit<'_>> {
+        if self.closed.load(Ordering::Acquire) {
+            return Err(Error::new("BUSY", "tenant is draining for recovery"));
+        }
         self.active
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
                 (n < self.limit).then_some(n + 1)
             })
             .map_err(|_| Error::limit("tenant concurrency limit reached"))?;
-        Ok(RequestPermit(self))
+        let permit = RequestPermit(self);
+        if self.closed.load(Ordering::Acquire) {
+            return Err(Error::new("BUSY", "tenant is draining for recovery"));
+        }
+        Ok(permit)
+    }
+    pub(crate) fn close(&self) {
+        self.closed.store(true, Ordering::Release);
+    }
+    pub(crate) fn open(&self) {
+        self.closed.store(false, Ordering::Release);
     }
 }
 impl Drop for RequestPermit<'_> {

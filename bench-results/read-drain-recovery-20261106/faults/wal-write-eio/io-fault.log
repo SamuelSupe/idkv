@@ -1,0 +1,2 @@
+write EIO /var/tmp/idkv-read-drain-recovery-20261106-faults-final/wal-write-eio/node-0/tenants/f8d3365e-8944-49d6-b824-5091738e2036/wal/dbea4b03-ab1e-497e-8564-535b372085d9.wal
+write EIO /var/tmp/idkv-read-drain-recovery-20261106-faults-final/wal-write-eio/node-0/tenants/f8d3365e-8944-49d6-b824-5091738e2036/wal/dbea4b03-ab1e-497e-8564-535b372085d9.recover

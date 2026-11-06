@@ -124,7 +124,7 @@ impl Engine {
                 let old_wals = manifest.wals.clone();
                 manifest.wals.push(new_wal.info.clone());
                 if let Err(e) = publish(&self.path, &manifest) {
-                    writer.poison = Some(Error::new("COMMIT_UNKNOWN", e.to_string()));
+                    self.poison_writer(&mut writer, Error::new("COMMIT_UNKNOWN", e.to_string()));
                     return Err(e);
                 }
                 writer.manifest = manifest;
@@ -248,7 +248,7 @@ impl Engine {
             }
             if let Err(error) = publish(&self.path, &manifest) {
                 let mut writer = self.writer.lock();
-                writer.poison = Some(Error::new("COMMIT_UNKNOWN", error.to_string()));
+                self.poison_writer(&mut writer, Error::new("COMMIT_UNKNOWN", error.to_string()));
                 self.notify_durable();
                 return Err(error);
             }
@@ -401,7 +401,7 @@ impl Engine {
                 .level = destination;
             if let Err(error) = publish(&self.path, &manifest) {
                 let mut writer = self.writer.lock();
-                writer.poison = Some(Error::new("COMMIT_UNKNOWN", error.to_string()));
+                self.poison_writer(&mut writer, Error::new("COMMIT_UNKNOWN", error.to_string()));
                 self.notify_durable();
                 return Err(error);
             }
@@ -526,7 +526,7 @@ impl Engine {
             manifest.tables.extend(outputs);
             if let Err(error) = publish(&self.path, &manifest) {
                 let mut writer = self.writer.lock();
-                writer.poison = Some(Error::new("COMMIT_UNKNOWN", error.to_string()));
+                self.poison_writer(&mut writer, Error::new("COMMIT_UNKNOWN", error.to_string()));
                 self.notify_durable();
                 return Err(error);
             }

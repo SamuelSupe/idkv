@@ -75,7 +75,7 @@ impl Snapshot {
         self.0.engine.runtime_id
     }
     pub fn check(&self) -> Result<()> {
-        if Instant::now() >= self.0.expires {
+        if self.0.revoked.load(Ordering::Acquire) || Instant::now() >= self.0.expires {
             return Err(Error::new("CURSOR_EXPIRED", "snapshot lease expired"));
         }
         if self.0.engine.closed.load(Ordering::Acquire) {

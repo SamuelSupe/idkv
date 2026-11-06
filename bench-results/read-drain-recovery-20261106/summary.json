@@ -1,0 +1,40 @@
+{
+  "result": "passed",
+  "tests_passed": 145,
+  "acknowledged_batches": 10925,
+  "acknowledged_document_operations": 166450,
+  "acknowledged_mismatches": 0,
+  "phases": [
+    {
+      "phase": "baseline",
+      "light_p99_ms": 9.971,
+      "heavy_p99_ms": 24.818,
+      "verified_backups": 0,
+      "overlap_intervals": 0
+    },
+    {
+      "phase": "combined",
+      "light_p99_ms": 26.719,
+      "heavy_p99_ms": 27.094,
+      "verified_backups": 4,
+      "overlap_intervals": 13
+    },
+    {
+      "phase": "recovery",
+      "light_p99_ms": 30.266,
+      "heavy_p99_ms": 25.367,
+      "verified_backups": 0,
+      "overlap_intervals": 5
+    }
+  ],
+  "fault_cases": 3,
+  "fault_confirmed_documents_preserved": 6000,
+  "source_files_verified": 105,
+  "binary_sha256": "17256d1438dd82a06ca97540a752ed2c497b99bb1eebe2ebe88b85f43890fb20",
+  "cold_export_comparison": {
+    "before_ms": 535.868593986379,
+    "after_ms": 73.41812198865227,
+    "ratio": 7.298860001747313
+  },
+  "fresh_recovery_writes_verified": true
+}

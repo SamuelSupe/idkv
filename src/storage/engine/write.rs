@@ -135,7 +135,7 @@ impl Engine {
         let wal_bytes = bytes.len() as u64;
         if let Err(error) = writer.wal.append(bytes, &self.io, self.info.id) {
             if error.code == "COMMIT_UNKNOWN" {
-                writer.poison = Some(error.clone());
+                self.poison_writer(&mut writer, error.clone());
                 self.notify_durable();
             } else {
                 self.disk.fetch_sub(reserved_disk, Ordering::AcqRel);
@@ -163,7 +163,7 @@ impl Engine {
             writer = self.writer.lock();
             writer.syncing = false;
             if let Err(error) = synced {
-                writer.poison = Some(Error::new("COMMIT_UNKNOWN", error.to_string()));
+                self.poison_writer(&mut writer, Error::new("COMMIT_UNKNOWN", error.to_string()));
             } else if writer.poison.is_none() {
                 // Appends may have arrived during fsync. Only the prefix captured
                 // before it began is acknowledged; later appends need another sync.
@@ -217,7 +217,7 @@ impl Engine {
         }
         if let Err(error) = writer.wal.sync(&self.io, self.info.id) {
             let error = Error::new("COMMIT_UNKNOWN", error.to_string());
-            writer.poison = Some(error.clone());
+            self.poison_writer(&mut *writer, error.clone());
             writer.syncing = false;
             self.notify_durable();
             return Err(error);
@@ -415,6 +415,36 @@ impl Transaction<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn hot_retries_do_not_keep_an_uncertain_engine_alive() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::Store::open(dir.path(), Options::default()).unwrap();
+        let id = store.create_tenant("automatic-recovery").unwrap().id;
+        let tenant = store.tenant(id).unwrap();
+        let old_runtime = tenant.engine().runtime_id;
+        let touched = *tenant.core.last_used.lock();
+        tenant.engine().poison_writer(
+            &mut tenant.engine().writer.lock(),
+            Error::new("COMMIT_UNKNOWN", "injected failed sync"),
+        );
+        for _ in 0..10 {
+            assert_eq!(store.tenant(id).err().unwrap().code, "COMMIT_UNKNOWN");
+            assert_eq!(*tenant.core.last_used.lock(), touched);
+        }
+        drop(tenant);
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while store.status(id).unwrap()["open"] == true {
+            assert!(
+                Instant::now() < deadline,
+                "poisoned engine waited for idle timeout"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let recovered = store.tenant(id).unwrap();
+        assert_ne!(recovered.engine().runtime_id, old_runtime);
+        recovered.create_collection("healthy").unwrap();
+    }
+
     #[test]
     fn uncertain_wal_tail_cannot_be_fenced_or_cached_as_the_old_position() {
         let dir = tempfile::tempdir().unwrap();

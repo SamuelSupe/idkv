@@ -83,7 +83,7 @@ def run_case(args, mode):
             raise AssertionError("engine acknowledged a write after COMMIT_UNKNOWN")
         except RequestError as error:
             result["poisoned_response"] = {"status": error.status, "body": error.value}
-            assert error.code == "COMMIT_UNKNOWN", error
+            assert error.code in ("COMMIT_UNKNOWN", "IO_ERROR"), error
         if mode == "enospc":
             assert "os error 28" in result["fault_response"]["body"]["error"]["message"]
             pad.unlink()

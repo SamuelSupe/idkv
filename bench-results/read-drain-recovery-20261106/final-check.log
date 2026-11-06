@@ -1,0 +1,6 @@
+    Checking tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.00s
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `release` profile [optimized] target(s) in 50.67s
+17256d1438dd82a06ca97540a752ed2c497b99bb1eebe2ebe88b85f43890fb20  /var/tmp/tkv-20261104-target/release/tenant-kv
+c8aedee44c76d033a539d203082eb8009e8fe37195c4abea07314511415529c3  /var/tmp/tkv-20261104-target/release/tenant-kv-restore

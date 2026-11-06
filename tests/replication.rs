@@ -317,6 +317,122 @@ async fn streams_atomic_indexes_deletes_and_switches_both_directions() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn hot_short_readers_and_cached_cursors_cannot_starve_checkpoint_installation() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+    };
+    let pair = Pair::new().await;
+    let mut ids = Vec::new();
+    for name in ["hot-a", "hot-b"] {
+        let id = pair.a.create_tenant(name).unwrap().id;
+        let tenant = pair.a.tenant(id).unwrap();
+        tenant.create_collection("docs").unwrap();
+        tenant
+            .put("docs", json!({"_key":"hot","value":-1}), None)
+            .unwrap();
+        tenant.put("docs", json!({"_key":"other"}), None).unwrap();
+        ids.push(id);
+    }
+    pair.catch_up(false).await;
+    let cursor = pair
+        .b
+        .tenant(ids[0])
+        .unwrap()
+        .query("docs", serde_json::from_value(json!({"limit":1})).unwrap())
+        .unwrap()
+        .cursor
+        .unwrap();
+    let running = Arc::new(AtomicBool::new(true));
+    let busy = Arc::new(AtomicUsize::new(0));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut threads = Vec::new();
+    for offset in [0, 10] {
+        let store = pair.b.clone();
+        let running = running.clone();
+        let busy = busy.clone();
+        let calls = calls.clone();
+        let ids = ids.clone();
+        threads.push(std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(offset));
+            while running.load(Ordering::Acquire) {
+                let mut handles = Vec::new();
+                for id in &ids {
+                    match store.tenant(*id) {
+                        Ok(handle) => {
+                            calls.fetch_add(1, Ordering::Relaxed);
+                            handles.push(handle);
+                        }
+                        Err(error) if error.code == "BUSY" => {
+                            busy.fetch_add(1, Ordering::Relaxed);
+                        }
+                        Err(error) => panic!("{error}"),
+                    }
+                }
+                std::thread::sleep(Duration::from_millis(20));
+                drop(handles);
+            }
+        }));
+    }
+    for id in &ids {
+        let tenant = pair.a.tenant(*id).unwrap();
+        for round in 0..16 {
+            tenant
+                .put(
+                    "docs",
+                    json!({"_key":"hot","value":round,"payload":"x".repeat(128<<10)}),
+                    None,
+                )
+                .unwrap();
+            tenant.engine().flush().unwrap();
+            tenant.engine().compact(true).unwrap();
+        }
+    }
+    let deadline = Instant::now() + Duration::from_secs(8);
+    let caught_up = loop {
+        let result = pair.sb.sync_once().await;
+        if let Err(error) = result {
+            assert_eq!(error.code, "BUSY");
+        }
+        let expected = pair.a.replication_positions().unwrap();
+        let actual = pair.b.replication_positions();
+        if actual.as_ref().is_ok_and(|actual| {
+            actual.len() == expected.len()
+                && actual
+                    .iter()
+                    .zip(&expected)
+                    .all(|(a, b)| a.info.id == b.info.id && a.seq == b.seq)
+        }) {
+            break true;
+        }
+        if Instant::now() >= deadline {
+            break false;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    };
+    running.store(false, Ordering::Release);
+    for thread in threads {
+        thread.join().unwrap();
+    }
+    assert!(
+        caught_up,
+        "overlapping short readers prevented installation"
+    );
+    assert!(calls.load(Ordering::Relaxed) > 0 && busy.load(Ordering::Relaxed) > 0);
+    for id in &ids {
+        assert_eq!(
+            pair.b.tenant(*id).unwrap().get("docs", "hot").unwrap(),
+            pair.a.tenant(*id).unwrap().get("docs", "hot").unwrap()
+        );
+    }
+    let old_page = pair.b.tenant(ids[0]).unwrap().query(
+        "docs",
+        serde_json::from_value(json!({"limit":1,"cursor":cursor})).unwrap(),
+    );
+    assert_eq!(old_page.err().unwrap().code, "CURSOR_EXPIRED");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn checkpoint_install_waits_for_readers_without_retransferring_and_other_tenants_progress() {
     use std::sync::atomic::Ordering;
     let gate = std::sync::Arc::new(SnapshotGate::default());

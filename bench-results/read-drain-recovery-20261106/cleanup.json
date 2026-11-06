@@ -1,0 +1,9 @@
+{
+  "result": "passed",
+  "utc": "2026-11-06T12:06:41.059097+00:00",
+  "scope_prefix": "/var/tmp/idkv-read-drain-recovery-20261106-",
+  "remaining_server_processes": [],
+  "credential_files": [],
+  "loop_devices": [],
+  "mounts": []
+}

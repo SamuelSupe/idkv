@@ -1,0 +1,2 @@
+sync EIO /var/tmp/idkv-read-drain-recovery-20261106-faults-final/wal-sync-eio/node-0/tenants/5578eb3e-b6e1-4a3d-bd63-cab45a27a402/wal/ce916766-1e8f-4722-bc5a-5506d250d717.wal
+sync EIO /var/tmp/idkv-read-drain-recovery-20261106-faults-final/wal-sync-eio/node-0/tenants/5578eb3e-b6e1-4a3d-bd63-cab45a27a402/wal/ce916766-1e8f-4722-bc5a-5506d250d717.recover

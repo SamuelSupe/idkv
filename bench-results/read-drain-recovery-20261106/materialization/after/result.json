@@ -1,0 +1,13 @@
+{
+  "result": "passed",
+  "binary_sha256": "17256d1438dd82a06ca97540a752ed2c497b99bb1eebe2ebe88b85f43890fb20",
+  "scope": "Syscall-boundary test; not a reproduction of kernel clean-page writeback failure",
+  "reopen_with_wal_writes_failing": "IO_ERROR",
+  "verified": {
+    "node": 0,
+    "tenant": "43d7c7ec-8dc7-4b46-82f9-5913531029dd",
+    "documents": 100,
+    "sha256": "49dae72bfad80f564b3c5884f560def86e0dce8861167d26bc6c84c1f25153e0",
+    "acknowledged_mismatches": 0
+  }
+}

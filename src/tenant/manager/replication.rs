@@ -98,10 +98,8 @@ impl Store {
     pub(crate) fn replication_position(&self, id: Uuid) -> Result<u64> {
         let slot = self.slot(id);
         {
-            let guard = slot.lock();
-            if let Some(error) = &guard.failure {
-                return Err(error.clone());
-            }
+            let mut guard = slot.lock();
+            guard.check_failure()?;
             if let Some(core) = &guard.core {
                 return core.engine.replication_position();
             }
@@ -343,10 +341,8 @@ impl Store {
         }
         let slot = self.slot(request.tenant);
         {
-            let guard = slot.lock();
-            if let Some(error) = &guard.failure {
-                return Err(error.clone());
-            }
+            let mut guard = slot.lock();
+            guard.check_failure()?;
             if guard.core.is_none() && guard.last_seq == Some(request.after) {
                 return Ok(LogPage {
                     epoch: request.epoch,
@@ -361,7 +357,11 @@ impl Store {
         let runtime = handle.engine().runtime_id;
         let page = handle.engine().log_page(request);
         drop(handle);
-        if let Some(touched) = opened {
+        if let Some(touched) = opened
+            && page
+                .as_ref()
+                .map_or(true, |page| page.through == page.source_position)
+        {
             let _ = self.close_unmodified_tenant(request.tenant, runtime, touched);
         }
         page
@@ -445,9 +445,6 @@ impl Store {
         }
         let slot = self.slot(info.id);
         let mut slot = slot.lock();
-        if slot.restoring {
-            return Err(Error::new("BUSY", "tenant restore preparation is active"));
-        }
         let mut registry = self.owner.inner.registry.write();
         let current = registry.tenants.get(&info.id).unwrap();
         if current.info.generation != info.generation
@@ -464,6 +461,9 @@ impl Store {
             && current.info.disk_bytes == info.disk_bytes
         {
             return Ok(());
+        }
+        if slot.restoring || slot.installing.is_some() {
+            return Err(Error::new("BUSY", "tenant restore preparation is active"));
         }
         self.close_slot(&mut slot)?;
         slot.memory.set_limit(info.memory_bytes)?;

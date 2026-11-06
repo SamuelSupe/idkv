@@ -193,6 +193,7 @@ impl Store {
             inner.io.clone(),
         )?;
         check.verify()?;
+        let restored_seq = check.seq();
         drop(check);
         // Copy and verification run without the tenant lifecycle lock. Only publication
         // needs a stopped tenant; a failed attempt leaves the serving database intact.
@@ -227,10 +228,13 @@ impl Store {
             collect_lifecycle_debris(&inner.root, &registry, false)
         })();
         if let Err(error) = &result {
-            slot.failure = Some(Error::new(
+            slot.record_failure(Error::new(
                 "UNAVAILABLE",
                 format!("restore publication uncertain; reopen Store: {error}"),
             ));
+        }
+        if result.is_ok() {
+            slot.last_seq = Some(restored_seq);
         }
         drop(registry);
         drop(slot);
@@ -239,7 +243,7 @@ impl Store {
         drop(_permission);
         let cleanup = remove_lifecycle_debris(&inner.root, result?);
         if let Err(error) = &cleanup {
-            preparation.slot.lock().failure = Some(Error::new(
+            preparation.slot.lock().record_failure(Error::new(
                 "UNAVAILABLE",
                 format!("restore cleanup failed; reopen Store to recover: {error}"),
             ));

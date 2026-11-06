@@ -618,13 +618,24 @@ fn online_index_build_tracks_concurrent_changes() {
     let writer = t.clone();
     let work = std::thread::spawn(move || {
         for i in 0..40 {
-            writer
-                .put(
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            loop {
+                match writer.put(
                     "assets",
                     json!({"_key":format!("{i:04}"),"ip":format!("new-{i}"),"owner":"after"}),
                     None,
-                )
-                .unwrap();
+                ) {
+                    Ok(_) => break,
+                    Err(error) if error.code == "RESOURCE_EXHAUSTED" => {
+                        assert!(
+                            std::time::Instant::now() < deadline,
+                            "write backlog did not drain: {error}"
+                        );
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    }
+                    Err(error) => panic!("{error}"),
+                }
+            }
         }
     });
     t.create_index("assets", index("ip", &[("/ip", Order::Asc)], true))

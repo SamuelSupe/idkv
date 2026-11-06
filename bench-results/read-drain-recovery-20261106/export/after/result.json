@@ -1,0 +1,66 @@
+{
+  "result": "passed",
+  "binary_sha256": "17256d1438dd82a06ca97540a752ed2c497b99bb1eebe2ebe88b85f43890fb20",
+  "options": {
+    "global_memory_bytes": 1073741824,
+    "tenant_memory_bytes": 268435456,
+    "memtable_bytes": 67108864,
+    "cache_bytes": 8388608,
+    "target_sst_bytes": 4194304,
+    "level_base_bytes": 16777216,
+    "l0_stop": 24,
+    "tenant_disk_bytes": 4294967296
+  },
+  "scope": "Local HTTP, warm OS page cache, one fenced source, unflushed WAL",
+  "wal_bytes": 12681898,
+  "rows": 12032,
+  "head": 12033,
+  "samples": [
+    {
+      "phase": "warm",
+      "sample": 0,
+      "ms": 53.467913006898016,
+      "pages": 48,
+      "frames": 12033
+    },
+    {
+      "phase": "warm",
+      "sample": 1,
+      "ms": 51.867661997675896,
+      "pages": 48,
+      "frames": 12033
+    },
+    {
+      "phase": "warm",
+      "sample": 2,
+      "ms": 50.80615801853128,
+      "pages": 48,
+      "frames": 12033
+    },
+    {
+      "phase": "cold",
+      "sample": 0,
+      "ms": 73.41812198865227,
+      "pages": 48,
+      "frames": 12033
+    },
+    {
+      "phase": "cold",
+      "sample": 1,
+      "ms": 78.69843501248397,
+      "pages": 48,
+      "frames": 12033
+    },
+    {
+      "phase": "cold",
+      "sample": 2,
+      "ms": 71.72215700848028,
+      "pages": 48,
+      "frames": 12033
+    }
+  ],
+  "log_sha256": "d434277b1663cf5dc69f396f2bb16c81ceb07f76af226dd416c9887807d0dcf4",
+  "acknowledged_mismatches": 0,
+  "warm_median_ms": 51.867661997675896,
+  "cold_median_ms": 73.41812198865227
+}

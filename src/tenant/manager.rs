@@ -41,6 +41,7 @@ struct Registry {
     replication_enabled: bool,
     tenants: BTreeMap<Uuid, Registration>,
 }
+mod admission;
 mod lifecycle;
 mod replication;
 use lifecycle::{
@@ -50,9 +51,11 @@ use lifecycle::{
 struct Slot {
     last_seq: Option<u64>,
     restoring: bool,
+    installing: Option<Uuid>,
     memory: Arc<Counter>,
     core: Option<Arc<TenantCore>>,
     failure: Option<Error>,
+    failure_until: Option<Instant>,
     queued: bool,
 }
 struct Inner {
@@ -237,7 +240,14 @@ impl Store {
                     if build_stop.load(Ordering::Acquire) {
                         break;
                     }
-                    let core = slot.try_lock().and_then(|slot| slot.core.clone());
+                    let core = slot.try_lock().and_then(|slot| {
+                        slot.core
+                            .as_ref()
+                            .filter(|core| {
+                                slot.installing.is_none() && !core.engine.recovery_required()
+                            })
+                            .cloned()
+                    });
                     if let Some(core) = core {
                         let handle = TenantHandle { core };
                         if let Err(error) = handle.restart_interrupted_build(&build_stop) {
@@ -341,6 +351,8 @@ impl Store {
                 failure: None,
                 queued: false,
                 restoring: false,
+                installing: None,
+                failure_until: None,
                 memory: Counter::new(self.options().tenant_memory_bytes),
             }));
         }
@@ -356,6 +368,8 @@ impl Store {
                     failure: None,
                     queued: false,
                     restoring: false,
+                    installing: None,
+                    failure_until: None,
                     memory: Counter::new(
                         self.owner.inner.registry.read().tenants[&id]
                             .info
@@ -436,8 +450,29 @@ impl Store {
         if !matches!(registration.lifecycle, Lifecycle::Active) {
             return Err(Error::new("UNAVAILABLE", "tenant is not active"));
         }
-        if let Some(error) = &slot.failure {
-            return Err(error.clone());
+        if slot.installing.is_some() {
+            return Err(Error::new(
+                "BUSY",
+                "replica checkpoint installation is draining readers",
+            ));
+        }
+        slot.check_failure()?;
+        if slot
+            .core
+            .as_ref()
+            .is_some_and(|core| core.engine.recovery_required())
+        {
+            if let Some(core) = &slot.core {
+                core.gate.close();
+                core.cursors.lock().clear();
+                core.engine.invalidate_snapshots();
+            }
+            if self.close_slot(&mut slot).is_err() {
+                return Err(Error::new(
+                    "COMMIT_UNKNOWN",
+                    "tenant is draining for WAL recovery",
+                ));
+            }
         }
         let opened = slot.core.is_none();
         if opened {
@@ -471,8 +506,8 @@ impl Store {
                     }))
                 }
                 Err(error) => {
-                    if error.code == "CORRUPTION" {
-                        slot.failure = Some(error.clone());
+                    if matches!(error.code.as_str(), "CORRUPTION" | "IO_ERROR") {
+                        slot.record_failure(error.clone());
                     }
                     return Err(error);
                 }
@@ -516,6 +551,7 @@ impl Store {
         }
         slot.core = None;
         slot.failure = None;
+        slot.failure_until = None;
         Ok(())
     }
     fn offline_lock(&self, id: Uuid) -> Result<Option<File>> {
@@ -547,7 +583,7 @@ impl Store {
     pub fn close_tenant(&self, id: Uuid) -> Result<()> {
         let slot = self.slot(id);
         let mut slot = slot.lock();
-        if slot.restoring {
+        if slot.restoring || slot.installing.is_some() {
             return Err(Error::new("BUSY", "tenant restore preparation is active"));
         }
         self.close_slot(&mut slot)?;
@@ -564,7 +600,7 @@ impl Store {
         }
         let slot = self.slot(id);
         let mut slot = slot.lock();
-        if slot.restoring {
+        if slot.restoring || slot.installing.is_some() {
             return Err(Error::new("BUSY", "tenant restore preparation is active"));
         }
         self.close_slot(&mut slot)?;
@@ -605,7 +641,7 @@ impl Store {
     ) -> Result<()> {
         let slot = self.slot(id);
         let mut slot = slot.lock();
-        if slot.restoring {
+        if slot.restoring || slot.installing.is_some() {
             return Err(Error::new("BUSY", "tenant restore preparation is active"));
         }
         self.close_slot(&mut slot)?;
@@ -632,7 +668,7 @@ impl Store {
             collect_lifecycle_debris(&inner.root, &registry, false)
         })();
         if result.is_err() {
-            slot.failure = Some(Error::new(
+            slot.record_failure(Error::new(
                 "UNAVAILABLE",
                 "tenant deletion outcome is uncertain; restart Store to recover",
             ));
@@ -642,7 +678,7 @@ impl Store {
         drop(permission);
         let cleanup = remove_lifecycle_debris(&inner.root, result?);
         if cleanup.is_err() {
-            self.slot(id).lock().failure = Some(Error::new(
+            self.slot(id).lock().record_failure(Error::new(
                 "UNAVAILABLE",
                 "tenant deletion cleanup failed; reopen Store to recover",
             ));
@@ -665,13 +701,33 @@ impl Store {
             "levels":core.engine.table_counts(), "snapshots":core.engine.active_snapshots(), "maintenance_error":core.engine.maintenance_error.lock().clone()
         }));
         Ok(
-            serde_json::json!({"tenant":registration.info,"lifecycle":registration.lifecycle,"open":slot.core.is_some(),"failure":slot.failure,"stats":stats}),
+            serde_json::json!({"tenant":registration.info,"lifecycle":registration.lifecycle,"open":slot.core.is_some(),"installing":slot.installing.is_some(),"failure":slot.failure,"stats":stats}),
         )
     }
 }
 
 fn maintain_tenant(inner: &Arc<Inner>, slot: &Arc<Mutex<Slot>>) {
-    let Some(guard) = slot.try_lock() else { return };
+    let Some(mut guard) = slot.try_lock() else {
+        return;
+    };
+    if guard
+        .core
+        .as_ref()
+        .is_some_and(|core| core.engine.recovery_required())
+    {
+        let core = guard.core.as_ref().unwrap();
+        core.gate.close();
+        core.cursors.lock().clear();
+        core.engine.invalidate_snapshots();
+        if Arc::strong_count(core) == 1 && Arc::strong_count(&core.engine) == 1 {
+            guard.last_seq = None;
+            guard.core = None;
+        }
+        return;
+    }
+    if guard.installing.is_some() {
+        return;
+    }
     let core = guard.core.clone();
     drop(guard);
     if let Some(core) = core {
@@ -706,6 +762,97 @@ fn maintain_tenant(inner: &Arc<Inner>, slot: &Arc<Mutex<Slot>>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn io_open_failures_are_cached_briefly_and_recover_without_manual_close() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        let id = store.create_tenant("cached-io-error").unwrap().id;
+        let wal = fs::read_dir(dir.path().join("tenants").join(id.to_string()).join("wal"))
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        let mode = fs::metadata(&wal).unwrap().permissions();
+        fs::set_permissions(&wal, fs::Permissions::from_mode(0o000)).unwrap();
+        let failed = store.tenant(id).err().unwrap();
+        fs::set_permissions(&wal, mode).unwrap();
+        assert_eq!(failed.code, "IO_ERROR");
+        assert_eq!(
+            store.tenant(id).err().unwrap().code,
+            "IO_ERROR",
+            "replayed immediately after cached failure"
+        );
+        std::thread::sleep(Duration::from_millis(1100));
+        store
+            .tenant(id)
+            .unwrap()
+            .create_collection("recovered")
+            .unwrap();
+    }
+
+    #[test]
+    fn cold_export_reuses_the_open_engine_until_its_log_pages_catch_up() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        store
+            .configure_replication(&crate::replication::Config {
+                cluster: Uuid::new_v4(),
+                role: crate::replication::Role::Primary,
+                peer_url: "http://127.0.0.1:1".into(),
+                token_file: dir.path().join("unused"),
+                poll_ms: 10,
+                log_retention_bytes: 1 << 20,
+            })
+            .unwrap();
+        let info = store.create_tenant("paged-cold-export").unwrap();
+        let tenant = store.tenant(info.id).unwrap();
+        for n in 0..600u64 {
+            tenant
+                .engine()
+                .transact(|tx| tx.put(format!("Z{n:04}").into_bytes(), vec![42; 1024]))
+                .unwrap();
+        }
+        drop(tenant);
+        store.close_tenant(info.id).unwrap();
+        let state = store.replication_state();
+        let mut request = crate::replication::LogRequest {
+            protocol: crate::replication::PROTOCOL,
+            cluster: state.cluster,
+            epoch: state.epoch,
+            tenant: info.id,
+            generation: info.generation,
+            after: 0,
+            cursor: None,
+        };
+        let mut runtime = None;
+        let mut pages = 0;
+        loop {
+            let page = store.export_logs(&request).unwrap();
+            let id = store
+                .slot(info.id)
+                .lock()
+                .core
+                .as_ref()
+                .unwrap()
+                .engine
+                .runtime_id;
+            assert_eq!(
+                *runtime.get_or_insert(id),
+                id,
+                "recovered the WAL again for a later page"
+            );
+            pages += 1;
+            if page.through == page.source_position {
+                break;
+            }
+            request.after = page.through;
+            request.cursor = page.cursor;
+        }
+        assert!(pages >= 3);
+    }
+
     #[test]
     fn a_temporary_position_reader_does_not_close_a_reused_or_reopened_engine() {
         let dir = tempfile::tempdir().unwrap();

@@ -252,12 +252,14 @@ pub struct Engine {
     disk: AtomicU64,
     metrics: Metrics,
     closed: AtomicBool,
+    recovery_required: AtomicBool,
     pub maintenance_error: Mutex<Option<String>>,
 }
 struct Lease {
     id: Uuid,
     seq: u64,
     expires: Instant,
+    revoked: AtomicBool,
     view: View,
     engine: Arc<Engine>,
 }
@@ -397,6 +399,7 @@ impl Engine {
             disk: AtomicU64::new(disk),
             metrics: Metrics::default(),
             closed: AtomicBool::new(false),
+            recovery_required: AtomicBool::new(false),
             maintenance_error: Mutex::new(None),
         }))
     }
@@ -429,6 +432,18 @@ impl Engine {
             return Err(error.clone());
         }
         Ok(self.seq())
+    }
+    fn poison_writer(&self, writer: &mut Writer, error: Error) {
+        self.recovery_required.store(true, Ordering::Release);
+        writer.poison = Some(error);
+    }
+    pub(crate) fn recovery_required(&self) -> bool {
+        self.recovery_required.load(Ordering::Acquire)
+    }
+    pub(crate) fn invalidate_snapshots(&self) {
+        for lease in self.snapshots.lock().values().filter_map(Weak::upgrade) {
+            lease.revoked.store(true, Ordering::Release);
+        }
     }
     pub(crate) fn wait_progress(&self, observed: u64, timeout: Duration) {
         let mut progress = self.progress.lock();
@@ -490,6 +505,7 @@ impl Engine {
             id: Uuid::new_v4(),
             seq,
             expires: Instant::now() + Duration::from_secs(seconds),
+            revoked: AtomicBool::new(false),
             view,
             engine: self.clone(),
         });

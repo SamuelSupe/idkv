@@ -206,7 +206,7 @@ impl Engine {
         // the fair I/O queue. A torn page still recovers complete atomic batches.
         if let Err(error) = writer.wal.append(bytes, &self.io, self.info.id) {
             if error.code == "COMMIT_UNKNOWN" {
-                writer.poison = Some(error.clone());
+                self.poison_writer(&mut writer, error.clone());
                 self.notify_durable();
             } else {
                 self.disk.fetch_sub(disk_bytes, Ordering::AcqRel);

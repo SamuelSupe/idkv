@@ -47,9 +47,10 @@ impl Service {
             }
         };
         check_cancelled()?;
-        // Do not ask the source to copy an entire tenant which cannot currently
-        // be replaced. A later reader race is handled using the downloaded copy.
-        self.store().check_replica_install(source, tenant)?;
+        // Drain first without holding the gate throughout the network transfer.
+        let ready = self.drain_before_download(source, tenant, cancelled).await;
+        self.waiting_for_readers(tenant, false);
+        ready?;
         let state = self.store().replication_state();
         let info: super::client::Received<super::snapshot::SnapshotInfo> = self
             .request(
@@ -166,8 +167,10 @@ impl Service {
                     )
                 };
                 probe().await?;
+                let mut installation = store.begin_replica_install(source, tenant)?;
                 loop {
                     check_cancelled()?;
+                    installation.expire_readers();
                     let installed = store
                         .check_replica_install(source, tenant)
                         .and_then(|_| store.install_replica(source, &path, tenant_info.clone()));
@@ -212,6 +215,28 @@ impl Service {
                 .await;
         }
         result
+    }
+    async fn drain_before_download(
+        &self,
+        source: &Source,
+        tenant: Uuid,
+        cancelled: &AtomicBool,
+    ) -> Result<()> {
+        let mut installation = self.store().begin_replica_install(source, tenant)?;
+        loop {
+            if cancelled.load(Ordering::Acquire) {
+                return Err(Error::new("CANCELLED", "replica transfer stopped"));
+            }
+            installation.expire_readers();
+            match self.store().check_replica_install(source, tenant) {
+                Ok(()) => return Ok(()),
+                Err(error) if error.code == "BUSY" => {
+                    self.waiting_for_readers(tenant, true);
+                    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                }
+                Err(error) => return Err(error),
+            }
+        }
     }
 }
 struct CancelTransfer(Arc<AtomicBool>);
