@@ -157,20 +157,16 @@ impl Service {
         }
         .await;
         if result.is_ok() {
-            // The snapshot position can be far behind the head after a large
-            // transfer. Keep its WAL lease until incremental catch-up completes.
-            self.hold_transfer(tenant, info.id);
-            let head: Result<super::client::Received<super::client::Status>> =
-                self.request("/v1/replication/status", None).await;
-            if let Ok(head) = head
-                && head.node.epoch == source.epoch
-                && head
-                    .tenants
-                    .iter()
-                    .any(|entry| entry.info.id == tenant && entry.seq <= info.position)
-            {
-                self.finish_transfer(tenant).await?;
-            }
+            // The source hands off its export slot when it observes our durable
+            // position, even if this process later restarts and forgets all IDs.
+            let _: Result<super::client::Received<super::LogPage>> = self
+                .request(
+                    "/v1/replication/log",
+                    Some(json!({"protocol":super::PROTOCOL,
+                    "cluster":state.cluster,"epoch":source.epoch,"tenant":tenant,
+                    "generation":info.tenant.generation,"after":info.position})),
+                )
+                .await;
         } else {
             let _: Result<super::client::Received<Value>> = self
                 .request(

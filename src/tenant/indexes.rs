@@ -314,6 +314,7 @@ impl TenantHandle {
                     snapshot.check()?;
                     check_stop()
                 },
+                stop.is_none().then_some(std::time::Duration::from_secs(5)),
             )?;
             if finished {
                 crate::storage::failpoint("index_ready");
@@ -352,6 +353,7 @@ impl TenantHandle {
                     Ok(())
                 }
             },
+            stop.is_none().then_some(std::time::Duration::from_secs(5)),
         )
     }
     pub(crate) fn restart_interrupted_build(

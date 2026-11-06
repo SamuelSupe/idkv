@@ -7,6 +7,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
+    collections::HashMap,
     fs::{self, File},
     io::Read,
     os::unix::fs::FileExt,
@@ -33,6 +34,13 @@ pub struct SnapshotInfo {
 pub(crate) struct Exports {
     root: PathBuf,
     current: Option<(SnapshotInfo, Instant, PathBuf, crate::storage::LogRetention)>,
+    catching_up: HashMap<Uuid, Catchup>,
+}
+struct Catchup {
+    id: Uuid,
+    epoch: Uuid,
+    generation: Uuid,
+    lease: crate::storage::LogRetention,
 }
 impl Exports {
     pub fn open(store: &Store) -> Result<Self> {
@@ -49,6 +57,7 @@ impl Exports {
         Ok(Self {
             root,
             current: None,
+            catching_up: HashMap::new(),
         })
     }
     pub fn create(
@@ -69,11 +78,24 @@ impl Exports {
                 "checkpoint source changed",
             ));
         }
+        self.expire()?;
+        if self
+            .current
+            .as_ref()
+            .is_some_and(|(info, _, _, _)| info.epoch != epoch)
+        {
+            self.clear()?;
+        }
         if let Some((info, created, _, lease)) = &mut self.current {
             if created.elapsed() < Duration::from_secs(300) {
                 if info.tenant.id == tenant && info.epoch == epoch {
                     *created = Instant::now();
-                    lease.renew(info.position);
+                    if !lease.renew(info.position) {
+                        return Err(Error::new(
+                            "SNAPSHOT_EXPIRED",
+                            "replication log lease expired",
+                        ));
+                    }
                     return Ok(info.clone());
                 }
                 return Err(Error::new(
@@ -111,7 +133,13 @@ impl Exports {
         })();
         match result {
             Ok(info) => {
-                lease.renew(info.position);
+                if !lease.renew(info.position) {
+                    let _ = fs::remove_dir_all(path);
+                    return Err(Error::new(
+                        "SNAPSHOT_EXPIRED",
+                        "checkpoint exceeded its log lease window",
+                    ));
+                }
                 self.current = Some((info.clone(), Instant::now(), path, lease));
                 Ok(info)
             }
@@ -127,7 +155,7 @@ impl Exports {
             .as_mut()
             .filter(|(s, _, _, _)| s.id == id)
             .ok_or_else(|| Error::missing("replication snapshot"))?;
-        if created.elapsed() > Duration::from_secs(300) {
+        if created.elapsed() > Duration::from_secs(300) || !lease.renew(info.position) {
             return Err(Error::new(
                 "SNAPSHOT_EXPIRED",
                 "replication snapshot expired",
@@ -143,24 +171,58 @@ impl Exports {
         let mut bytes = vec![0; (item.size - offset).min(super::PAGE_BYTES as u64) as usize];
         File::open(path.join(&item.path))?.read_exact_at(&mut bytes, offset)?;
         *created = Instant::now();
-        lease.renew(info.position);
         Ok(STANDARD.encode(bytes))
     }
     pub fn release(&mut self, id: Uuid) -> Result<()> {
         if self.current.as_ref().is_some_and(|(s, _, _, _)| s.id == id) {
             self.clear()?;
         }
+        self.catching_up.retain(|_, transfer| transfer.id != id);
         Ok(())
     }
-    pub fn renew(&mut self, tenant: Uuid, epoch: Uuid) {
-        if let Some((info, touched, _, lease)) = &mut self.current
-            && info.tenant.id == tenant
-            && info.epoch == epoch
-            && touched.elapsed() < Duration::from_secs(300)
-        {
-            *touched = Instant::now();
-            lease.renew(info.position);
+    pub fn progress(&mut self, request: &super::LogRequest, head: u64) -> Result<()> {
+        self.expire()?;
+        if self.current.as_ref().is_some_and(|(info, _, _, _)| {
+            info.tenant.id == request.tenant
+                && info.epoch == request.epoch
+                && info.tenant.generation == request.generation
+                && request.after >= info.position
+        }) {
+            let (info, _, path, lease) = self.current.take().unwrap();
+            // A validated log request proves that the receiver has installed the
+            // checkpoint. Only the WAL pin survives; the copy and sole export
+            // slot no longer depend on a release ID held in receiver memory.
+            self.catching_up.insert(
+                request.tenant,
+                Catchup {
+                    id: info.id,
+                    epoch: info.epoch,
+                    generation: info.tenant.generation,
+                    lease,
+                },
+            );
+            fs::remove_dir_all(path)?;
+            sync_dir(&self.root)?;
         }
+        if let Some(transfer) = self.catching_up.remove(&request.tenant)
+            && transfer.epoch == request.epoch
+            && transfer.generation == request.generation
+            && request.after < head
+            && transfer.lease.renew(request.after)
+        {
+            self.catching_up.insert(request.tenant, transfer);
+        }
+        Ok(())
+    }
+    pub fn expire(&mut self) -> Result<()> {
+        self.catching_up
+            .retain(|_, transfer| transfer.lease.valid());
+        if self.current.as_ref().is_some_and(|(_, touched, _, lease)| {
+            touched.elapsed() >= Duration::from_secs(300) || !lease.valid()
+        }) {
+            self.clear()?;
+        }
+        Ok(())
     }
     fn clear(&mut self) -> Result<()> {
         if let Some((_, _, path, _lease)) = self.current.take() {

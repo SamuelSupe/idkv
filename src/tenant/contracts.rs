@@ -3,6 +3,19 @@ use crate::{Error, ReadContext, Result, WriteOptions, WriteResult};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+pub(super) fn history_token(info: &crate::TenantInfo, epoch: Option<uuid::Uuid>) -> String {
+    format!(
+        "{}:{}:{}",
+        info.id,
+        if info.history.is_nil() {
+            info.generation
+        } else {
+            info.history
+        },
+        epoch.unwrap_or_default()
+    )
+}
+
 #[derive(Serialize, Deserialize)]
 pub(super) struct Receipt {
     pub digest: String,
@@ -17,17 +30,7 @@ impl TenantHandle {
     /// Pair this token with `_rev`. The token changes on restore or role-history
     /// change; numeric revisions alone are not safe across those boundaries.
     pub fn history(&self) -> String {
-        let info = &self.engine().info;
-        format!(
-            "{}:{}:{}",
-            info.id,
-            if info.history.is_nil() {
-                info.generation
-            } else {
-                info.history
-            },
-            self.engine().replication_epoch().unwrap_or_default()
-        )
+        history_token(&self.engine().info, self.engine().replication_epoch())
     }
 
     pub fn read_context(&self) -> ReadContext {

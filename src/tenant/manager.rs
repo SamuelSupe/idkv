@@ -272,6 +272,22 @@ impl Store {
     pub(crate) fn contains_tenant(&self, id: Uuid) -> bool {
         self.owner.inner.registry.read().tenants.contains_key(&id)
     }
+    pub(crate) fn tenant_history(&self, id: Uuid) -> Result<String> {
+        let info = self
+            .owner
+            .inner
+            .registry
+            .read()
+            .tenants
+            .get(&id)
+            .map(|r| r.info.clone())
+            .ok_or_else(|| Error::missing("tenant"))?;
+        let state = self.replication_state();
+        Ok(super::contracts::history_token(
+            &info,
+            state.enabled.then_some(state.epoch),
+        ))
+    }
     pub(crate) fn reserve_http_input(
         &self,
         tenant: Option<Uuid>,
@@ -404,6 +420,9 @@ impl Store {
             .collect()
     }
     pub fn tenant(&self, id: Uuid) -> Result<TenantHandle> {
+        self.tenant_with_open_marker(id).map(|(tenant, _)| tenant)
+    }
+    fn tenant_with_open_marker(&self, id: Uuid) -> Result<(TenantHandle, Option<Instant>)> {
         let slot = self.slot(id);
         let mut slot = slot.lock();
         let inner = &self.owner.inner;
@@ -420,7 +439,8 @@ impl Store {
         if let Some(error) = &slot.failure {
             return Err(error.clone());
         }
-        if slot.core.is_none() {
+        let opened = slot.core.is_none();
+        if opened {
             let info = registration.info;
             let budget = Budget {
                 global: inner.memory.clone(),
@@ -459,8 +479,19 @@ impl Store {
             }
         }
         let core = slot.core.as_ref().unwrap().clone();
-        *core.last_used.lock() = Instant::now();
-        Ok(TenantHandle { core })
+        let touched = Instant::now();
+        *core.last_used.lock() = touched;
+        Ok((TenantHandle { core }, opened.then_some(touched)))
+    }
+    fn close_unmodified_tenant(&self, id: Uuid, runtime: Uuid, touched: Instant) -> Result<()> {
+        let slot = self.slot(id);
+        let mut slot = slot.lock();
+        if slot.core.as_ref().is_some_and(|core| {
+            core.engine.runtime_id == runtime && *core.last_used.lock() == touched
+        }) {
+            self.close_slot(&mut slot)?;
+        }
+        Ok(())
     }
     fn close_slot(&self, slot: &mut Slot) -> Result<()> {
         if let Some(error) = &slot.failure
@@ -672,6 +703,30 @@ fn maintain_tenant(inner: &Arc<Inner>, slot: &Arc<Mutex<Slot>>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_temporary_position_reader_does_not_close_a_reused_or_reopened_engine() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        let id = store.create_tenant("cold-position-reader").unwrap().id;
+        let (handle, opened) = store.tenant_with_open_marker(id).unwrap();
+        let runtime = handle.engine().runtime_id;
+        let touched = opened.unwrap();
+        drop(handle);
+        std::thread::sleep(Duration::from_millis(1));
+        drop(store.tenant(id).unwrap());
+        store.close_unmodified_tenant(id, runtime, touched).unwrap();
+        assert_eq!(store.status(id).unwrap()["open"], true);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while store.close_tenant(id).is_err() {
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let (fresh, _) = store.tenant_with_open_marker(id).unwrap();
+        assert_ne!(fresh.engine().runtime_id, runtime);
+        drop(fresh);
+        store.close_unmodified_tenant(id, runtime, touched).unwrap();
+        assert_eq!(store.status(id).unwrap()["open"], true);
+    }
     #[test]
     fn deleted_tenant_history_does_not_consume_live_tenant_capacity() {
         let dir = tempfile::tempdir().unwrap();

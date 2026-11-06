@@ -109,13 +109,16 @@ impl Store {
                 return Ok(seq);
             }
         }
-        let handle = self.tenant(id)?;
+        let (handle, opened) = self.tenant_with_open_marker(id)?;
         let seq = handle.engine().seq();
+        let runtime = handle.engine().runtime_id;
         slot.lock().last_seq = Some(seq);
         drop(handle);
         // Reading positions must not retain every cold engine (and its open
         // descriptors) for a node-wide fence or status request.
-        let _ = self.close_tenant(id);
+        if let Some(touched) = opened {
+            let _ = self.close_unmodified_tenant(id, runtime, touched);
+        }
         Ok(seq)
     }
 
@@ -320,6 +323,39 @@ impl Store {
                 "REPLICATION_CONFLICT",
                 "source role or history changed",
             ));
+        }
+        let registration = self
+            .owner
+            .inner
+            .registry
+            .read()
+            .tenants
+            .get(&request.tenant)
+            .cloned()
+            .ok_or_else(|| Error::missing("tenant"))?;
+        if !matches!(registration.lifecycle, Lifecycle::Active)
+            || registration.info.generation != request.generation
+        {
+            return Err(Error::new(
+                "REPLICATION_CONFLICT",
+                "tenant identity or lifecycle changed",
+            ));
+        }
+        let slot = self.slot(request.tenant);
+        {
+            let guard = slot.lock();
+            if let Some(error) = &guard.failure {
+                return Err(error.clone());
+            }
+            if guard.core.is_none() && guard.last_seq == Some(request.after) {
+                return Ok(LogPage {
+                    epoch: request.epoch,
+                    through: request.after,
+                    source_position: request.after,
+                    frames: vec![],
+                    cursor: request.cursor.clone(),
+                });
+            }
         }
         self.tenant(request.tenant)?.engine().log_page(request)
     }

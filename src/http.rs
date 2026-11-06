@@ -510,9 +510,7 @@ async fn dispatch_async(
                 handle.wait_context(history, *seq, 5000)?;
             }
         }
-        let before = tenant
-            .map(|id| store.tenant(id).map(|t| t.history()))
-            .transpose()?;
+        let before = tenant.map(|id| store.tenant_history(id)).transpose()?;
         if let (Some((history, _)), Some(before)) = (&minimum, &before)
             && history != before
         {
@@ -575,7 +573,7 @@ async fn dispatch_async(
         };
         if read_only
             && let (Some(id), Some(history)) = (tenant, before.as_ref())
-            && store.tenant(id)?.history() != *history
+            && store.tenant_history(id)? != *history
         {
             return Err(Error::new(
                 "HISTORY_CONFLICT",
@@ -588,7 +586,7 @@ async fn dispatch_async(
         let response_history = if read_only {
             before.clone()
         } else {
-            tenant.and_then(|id| store.tenant(id).ok().map(|t| t.history()))
+            tenant.and_then(|id| store.tenant_history(id).ok())
         };
         let encoded = body::encode(&store, tenant, value, read_only)?;
         drop(input_memory);

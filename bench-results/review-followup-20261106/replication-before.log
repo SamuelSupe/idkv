@@ -1,0 +1,22 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.66s
+     Running tests/replication.rs (/var/tmp/tkv-20261104-target/debug/deps/replication-9a982e8f8cdf365a)
+
+running 1 test
+test untracked_export_hands_off_its_slot_and_advances_the_retained_log ... FAILED
+
+failures:
+
+---- untracked_export_hands_off_its_slot_and_advances_the_retained_log stdout ----
+
+thread 'untracked_export_hands_off_its_slot_and_advances_the_retained_log' panicked at tests/replication.rs:460:71:
+called `Result::unwrap()` on an `Err` value: Error { code: "BUSY", message: "another replica checkpoint transfer is active", location: None }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    untracked_export_hands_off_its_slot_and_advances_the_retained_log
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 21 filtered out; finished in 0.11s
+
+error: test failed, to rerun pass `--test replication`

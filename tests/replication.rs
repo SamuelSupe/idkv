@@ -410,7 +410,7 @@ async fn checkpoint_transfer_pins_wal_beyond_the_retention_byte_window() {
         .sa
         .snapshot(state.cluster, state.epoch, info.id)
         .unwrap();
-    for n in 0..32u64 {
+    for n in 0..20u64 {
         tenant
             .engine()
             .transact(|tx| tx.put(format!("Z{n:04}").into_bytes(), vec![42; 64 << 10]))
@@ -435,6 +435,141 @@ async fn checkpoint_transfer_pins_wal_beyond_the_retention_byte_window() {
         .unwrap();
     tenant.engine().flush().unwrap();
     assert_eq!(pair.sa.export_log(&request).err().unwrap().code, "LOG_GONE");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn stalled_export_has_a_bounded_wal_window_and_cannot_pin_the_slot_forever() {
+    let pair = Pair::with_options(Options {
+        l0_stop: 128,
+        ..options()
+    })
+    .await;
+    let info = pair.a.create_tenant("stalled-export").unwrap();
+    let other = pair.a.create_tenant("unblocked-export").unwrap();
+    let tenant = pair.a.tenant(info.id).unwrap();
+    let state = pair.a.replication_state();
+    let snapshot = pair
+        .sa
+        .snapshot(state.cluster, state.epoch, info.id)
+        .unwrap();
+    for n in 0..36u64 {
+        tenant
+            .engine()
+            .transact(|tx| tx.put(format!("Z{n:04}").into_bytes(), vec![n as u8; 64 << 10]))
+            .unwrap();
+        tenant.engine().flush().unwrap();
+    }
+    assert_eq!(
+        pair.sa.snapshot_chunk(snapshot.id, 0, 0).unwrap_err().code,
+        "SNAPSHOT_EXPIRED"
+    );
+    let next = pair
+        .sa
+        .snapshot(state.cluster, state.epoch, other.id)
+        .unwrap();
+    assert!(
+        !pair
+            .a
+            .root()
+            .join("replication-work/export")
+            .join(snapshot.id.to_string())
+            .exists()
+    );
+    let bytes: u64 = std::fs::read_dir(tenant.engine().path().join("wal"))
+        .unwrap()
+        .map(|p| p.unwrap().metadata().unwrap().len())
+        .sum();
+    assert!(bytes <= 2 << 20);
+    let view = tenant.engine().snapshot().unwrap();
+    for n in 0..36u64 {
+        assert_eq!(
+            view.get(format!("Z{n:04}").as_bytes(), &mut ReadStats::default())
+                .unwrap()
+                .unwrap()
+                .as_slice(),
+            vec![n as u8; 64 << 10]
+        );
+    }
+    assert!(tenant.engine().writable());
+    pair.sa.release_snapshot(next.id).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn untracked_export_hands_off_its_slot_and_advances_the_retained_log() {
+    let pair = Pair::with_options(Options {
+        l0_stop: 128,
+        ..options()
+    })
+    .await;
+    let info = pair.a.create_tenant("untracked-export").unwrap();
+    let other = pair.a.create_tenant("next-export").unwrap();
+    let tenant = pair.a.tenant(info.id).unwrap();
+    let state = pair.a.replication_state();
+    let snapshot = pair
+        .sa
+        .snapshot(state.cluster, state.epoch, info.id)
+        .unwrap();
+    let mut request = tenant_kv::replication::LogRequest {
+        protocol: tenant_kv::replication::PROTOCOL,
+        cluster: state.cluster,
+        epoch: state.epoch,
+        tenant: info.id,
+        generation: info.generation,
+        after: snapshot.position,
+        cursor: None,
+    };
+    for n in 0..4u64 {
+        tenant
+            .engine()
+            .transact(|tx| tx.put(format!("Z{n:04}").into_bytes(), vec![42; 64 << 10]))
+            .unwrap();
+        tenant.engine().flush().unwrap();
+    }
+    pair.sa.export_log(&request).unwrap();
+    // No release ID is remembered by the receiver, as after a restart. Log
+    // progress must free the copy/slot without waiting for complete catch-up.
+    let next = pair
+        .sa
+        .snapshot(state.cluster, state.epoch, other.id)
+        .unwrap();
+    assert!(
+        !pair
+            .a
+            .root()
+            .join("replication-work/export")
+            .join(snapshot.id.to_string())
+            .exists()
+    );
+    for n in 4..48u64 {
+        tenant
+            .engine()
+            .transact(|tx| tx.put(format!("Z{n:04}").into_bytes(), vec![42; 64 << 10]))
+            .unwrap();
+        tenant.engine().flush().unwrap();
+        request.after = tenant.engine().seq() - 2;
+        request.cursor = None;
+        pair.sa.export_log(&request).unwrap();
+    }
+    let bytes: u64 = std::fs::read_dir(tenant.engine().path().join("wal"))
+        .unwrap()
+        .map(|p| p.unwrap().metadata().unwrap().len())
+        .sum();
+    assert!(
+        bytes <= 2 << 20,
+        "continued progress retained {bytes} bytes"
+    );
+    assert_eq!(
+        tenant
+            .engine()
+            .snapshot()
+            .unwrap()
+            .get(b"Z0000", &mut ReadStats::default())
+            .unwrap()
+            .unwrap()
+            .len(),
+        64 << 10
+    );
+    pair.sa.release_snapshot(next.id).unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

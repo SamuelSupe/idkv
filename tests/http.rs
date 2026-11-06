@@ -130,6 +130,67 @@ async fn call(
 }
 
 #[tokio::test]
+async fn management_history_headers_do_not_reopen_closed_tenants() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(dir.path(), Options::default()).unwrap();
+    let id = store.create_tenant("management-history").unwrap().id;
+    let token = "management-history-admin-123456";
+    let app = http::app(
+        store.clone(),
+        AuthConfig {
+            tokens: vec![Token {
+                subject: "management".into(),
+                sha256: http::token_hash(token),
+                tenant: None,
+                role: Role::Admin,
+            }],
+        },
+    )
+    .unwrap();
+    let base = format!("/v1/tenants/{id}");
+    store.tenant(id).unwrap().create_collection("docs").unwrap();
+    let (status, value) = call(
+        &app,
+        "POST",
+        &format!("{base}/close"),
+        Some(token),
+        json!({}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{value}");
+    assert_eq!(
+        store.status(id).unwrap()["open"],
+        false,
+        "close reopened the engine while encoding its response"
+    );
+    let (status, value) = call(&app, "GET", &base, Some(token), json!({})).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(value["open"], false);
+    assert_eq!(store.status(id).unwrap()["open"], false);
+    let (status, value) = call(&app, "PATCH", &base, Some(token), json!({
+        "memory_bytes":Options::default().tenant_memory_bytes, "disk_bytes":Options::default().tenant_disk_bytes,
+    })).await;
+    assert_eq!(status, StatusCode::OK, "{value}");
+    assert_eq!(store.status(id).unwrap()["open"], false);
+    let backup = store.backup(id).unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while store.close_tenant(id).is_err() {
+        assert!(std::time::Instant::now() < deadline);
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    let (status, value) = call(
+        &app,
+        "POST",
+        &format!("{base}/restore"),
+        Some(token),
+        json!({"backup":backup}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{value}");
+    assert_eq!(store.status(id).unwrap()["open"], false);
+}
+
+#[tokio::test]
 async fn document_history_never_controls_server_history_headers() {
     let dir = tempfile::tempdir().unwrap();
     let store = Store::open(dir.path(), Options::default()).unwrap();

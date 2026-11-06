@@ -208,7 +208,7 @@ impl Engine {
                     n + fs::metadata(self.path.join("wal").join(format!("{}.wal", w.id)))?.len(),
                 )
             })?;
-            let floor = {
+            let mut floor = {
                 let mut leases = self.log_retention.lock();
                 leases.retain(|_, (_, expires)| {
                     expires.is_none_or(|expires| expires > Instant::now())
@@ -223,7 +223,13 @@ impl Engine {
                     .unwrap()
                     .start_seq;
                 if floor.is_some_and(|floor| next > floor.saturating_add(1)) {
-                    break;
+                    if retained_bytes <= retention.saturating_mul(2) {
+                        break;
+                    }
+                    // A stalled checkpoint/catch-up must not consume the primary's
+                    // entire write quota. Handles cannot resurrect invalidated pins.
+                    self.log_retention.lock().clear();
+                    floor = None;
                 }
                 let old = manifest.retained_wals.remove(0);
                 retained_bytes -=
@@ -233,7 +239,7 @@ impl Engine {
             if let Err(error) = publish(&self.path, &manifest) {
                 let mut writer = self.writer.lock();
                 writer.poison = Some(Error::new("COMMIT_UNKNOWN", error.to_string()));
-                self.durable.notify_all();
+                self.notify_durable();
                 return Err(error);
             }
             let mut writer = self.writer.lock();
@@ -381,7 +387,7 @@ impl Engine {
             if let Err(error) = publish(&self.path, &manifest) {
                 let mut writer = self.writer.lock();
                 writer.poison = Some(Error::new("COMMIT_UNKNOWN", error.to_string()));
-                self.durable.notify_all();
+                self.notify_durable();
                 return Err(error);
             }
             self.writer.lock().manifest = manifest;
@@ -506,7 +512,7 @@ impl Engine {
             if let Err(error) = publish(&self.path, &manifest) {
                 let mut writer = self.writer.lock();
                 writer.poison = Some(Error::new("COMMIT_UNKNOWN", error.to_string()));
-                self.durable.notify_all();
+                self.notify_durable();
                 return Err(error);
             }
             self.writer.lock().manifest = manifest;

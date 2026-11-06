@@ -1,0 +1,57 @@
+{
+  "binary_sha256": "537a50f11dfcb90e40a5a0b2781470f024a2e9e6f98fc74c5bddf366ba611c03",
+  "result": "passed",
+  "before_restart": [
+    {
+      "node": 0,
+      "tenant": "6fb15964-6d68-4c94-b7d7-7a8593d4e5e5",
+      "documents": 100,
+      "sha256": "49dae72bfad80f564b3c5884f560def86e0dce8861167d26bc6c84c1f25153e0",
+      "acknowledged_mismatches": 0
+    },
+    {
+      "node": 1,
+      "tenant": "6fb15964-6d68-4c94-b7d7-7a8593d4e5e5",
+      "documents": 100,
+      "sha256": "49dae72bfad80f564b3c5884f560def86e0dce8861167d26bc6c84c1f25153e0",
+      "acknowledged_mismatches": 0
+    }
+  ],
+  "exported_position": 7,
+  "after_restart": [
+    {
+      "node": 0,
+      "tenant": "6fb15964-6d68-4c94-b7d7-7a8593d4e5e5",
+      "documents": 100,
+      "sha256": "3ab284d16742fbd7c57554259cb56a2bc6f9fa9466f84ecf552d99bd634f531e",
+      "acknowledged_mismatches": 0
+    },
+    {
+      "node": 1,
+      "tenant": "6fb15964-6d68-4c94-b7d7-7a8593d4e5e5",
+      "documents": 100,
+      "sha256": "3ab284d16742fbd7c57554259cb56a2bc6f9fa9466f84ecf552d99bd634f531e",
+      "acknowledged_mismatches": 0
+    }
+  ],
+  "other_export_after_restart": "BUSY",
+  "wal_bytes": 15423994,
+  "export_copy_exists": true,
+  "other_export_after_writes": "BUSY",
+  "final_validation": [
+    {
+      "node": 0,
+      "tenant": "6fb15964-6d68-4c94-b7d7-7a8593d4e5e5",
+      "documents": 100,
+      "sha256": "6c91eb2c492eb253b25424d317346ae947ac3359588cca4dbba0ec19268c3dc3",
+      "acknowledged_mismatches": 0
+    },
+    {
+      "node": 1,
+      "tenant": "6fb15964-6d68-4c94-b7d7-7a8593d4e5e5",
+      "documents": 100,
+      "sha256": "6c91eb2c492eb253b25424d317346ae947ac3359588cca4dbba0ec19268c3dc3",
+      "acknowledged_mismatches": 0
+    }
+  ]
+}

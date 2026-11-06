@@ -1,0 +1,18 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.51s
+     Running tests/http.rs (/var/tmp/tkv-20261104-target/debug/deps/http-c17bf30ef4f7a3cf)
+
+running 1 test
+test management_history_headers_do_not_reopen_closed_tenants ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.11s
+
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.78s
+     Running tests/replication.rs (/var/tmp/tkv-20261104-target/debug/deps/replication-9a982e8f8cdf365a)
+
+running 1 test
+test untracked_export_hands_off_its_slot_and_advances_the_retained_log ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 21 filtered out; finished in 0.21s
+

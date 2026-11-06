@@ -36,13 +36,29 @@ pub use write::Transaction;
 pub(crate) struct LogRetention {
     engine: Arc<Engine>,
     id: Uuid,
+    deadline: Instant,
 }
 impl LogRetention {
-    pub(crate) fn renew(&self, position: u64) {
-        self.engine.log_retention.lock().insert(
-            self.id,
-            (position, Some(Instant::now() + Duration::from_secs(300))),
-        );
+    pub(crate) fn valid(&self) -> bool {
+        self.engine
+            .log_retention
+            .lock()
+            .get(&self.id)
+            .is_some_and(|(_, expires)| expires.is_some_and(|expires| expires > Instant::now()))
+    }
+    pub(crate) fn renew(&self, position: u64) -> bool {
+        let mut leases = self.engine.log_retention.lock();
+        let Some((floor, expires)) = leases.get_mut(&self.id) else {
+            return false;
+        };
+        let now = Instant::now();
+        if now >= self.deadline || expires.is_some_and(|expires| expires <= now) {
+            leases.remove(&self.id);
+            return false;
+        }
+        *floor = (*floor).max(position);
+        *expires = Some((now + Duration::from_secs(300)).min(self.deadline));
+        true
     }
 }
 impl Drop for LogRetention {
@@ -226,6 +242,8 @@ pub struct Engine {
     committed: AtomicU64,
     catalog_seq: AtomicU64,
     durable: Condvar,
+    progress: Mutex<()>,
+    progress_wake: Condvar,
     maintenance: Mutex<()>,
     cache: Arc<Cache>,
     snapshots: Mutex<BTreeMap<Uuid, Weak<Lease>>>,
@@ -369,6 +387,8 @@ impl Engine {
             committed: AtomicU64::new(staged),
             catalog_seq: AtomicU64::new(staged),
             durable: Condvar::new(),
+            progress: Mutex::new(()),
+            progress_wake: Condvar::new(),
             maintenance: Mutex::new(()),
             cache,
             snapshots: Mutex::new(BTreeMap::new()),
@@ -403,11 +423,16 @@ impl Engine {
         self.committed.load(Ordering::Acquire)
     }
     pub(crate) fn wait_progress(&self, observed: u64, timeout: Duration) {
-        let mut writer = self.writer.lock();
+        let mut progress = self.progress.lock();
         if self.seq() == observed {
-            self.durable
-                .wait_for(&mut writer, timeout.min(Duration::from_millis(10)));
+            self.progress_wake
+                .wait_for(&mut progress, timeout.min(Duration::from_millis(10)));
         }
+    }
+    fn notify_durable(&self) {
+        self.durable.notify_all();
+        let _progress = self.progress.lock();
+        self.progress_wake.notify_all();
     }
     pub fn writable(&self) -> bool {
         !self.closed.load(Ordering::Acquire)
@@ -439,8 +464,11 @@ impl Engine {
         let lease = LogRetention {
             engine: self.clone(),
             id: Uuid::new_v4(),
+            deadline: Instant::now() + Duration::from_secs(3600),
         };
-        self.log_retention.lock().insert(lease.id, (0, None));
+        self.log_retention
+            .lock()
+            .insert(lease.id, (0, Some(lease.deadline)));
         lease
     }
     fn pin(self: &Arc<Self>, view: View, seq: u64, seconds: u64) -> Result<Snapshot> {

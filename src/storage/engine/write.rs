@@ -25,8 +25,20 @@ impl Engine {
         self: &Arc<Self>,
         f: impl FnOnce(&mut Transaction<'_>) -> Result<T>,
         check: &dyn Fn() -> Result<()>,
+        limit: Option<Duration>,
     ) -> Result<T> {
-        self.transact_inner(f, false, false, Some(check))
+        let deadline = limit.map(|limit| Instant::now() + limit);
+        let bounded = || {
+            check()?;
+            if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                return Err(Error::new(
+                    "DEADLINE_EXCEEDED",
+                    "index write admission deadline",
+                ));
+            }
+            Ok(())
+        };
+        self.transact_inner(f, false, false, Some(&bounded))
             .map(|(result, _)| result)
     }
     fn transact_inner<T>(
@@ -47,6 +59,9 @@ impl Engine {
             }
             let waiting = Instant::now();
             let writer = self.writer.lock();
+            if let Some(check) = check {
+                check()?;
+            }
             self.metrics
                 .write_lock_wait_ns
                 .fetch_add(waiting.elapsed().as_nanos() as u64, Ordering::Relaxed);
@@ -121,7 +136,7 @@ impl Engine {
         if let Err(error) = writer.wal.append(bytes, &self.io, self.info.id) {
             if error.code == "COMMIT_UNKNOWN" {
                 writer.poison = Some(error.clone());
-                self.durable.notify_all();
+                self.notify_durable();
             } else {
                 self.disk.fetch_sub(reserved_disk, Ordering::AcqRel);
             }
@@ -156,7 +171,7 @@ impl Engine {
                 self.catalog_seq.store(catalog_through, Ordering::Release);
                 self.committed.store(through, Ordering::Release);
             }
-            self.durable.notify_all();
+            self.notify_durable();
         }
         if let Some(error) = &writer.poison {
             return Err(error.clone());
@@ -204,7 +219,7 @@ impl Engine {
             let error = Error::new("COMMIT_UNKNOWN", error.to_string());
             writer.poison = Some(error.clone());
             writer.syncing = false;
-            self.durable.notify_all();
+            self.notify_durable();
             return Err(error);
         }
         self.metrics.fsyncs.fetch_add(1, Ordering::Relaxed);
@@ -212,7 +227,7 @@ impl Engine {
             .store(writer.catalog_staged, Ordering::Release);
         self.committed.store(writer.staged, Ordering::Release);
         writer.syncing = false;
-        self.durable.notify_all();
+        self.notify_durable();
         Ok(())
     }
     pub(super) fn reserve_disk(&self, bytes: u64, maintenance: bool) -> Result<()> {
@@ -427,6 +442,17 @@ mod tests {
             engine.flush().unwrap();
         }
         assert_eq!(engine.table_counts()[&0], 4);
+        let ran = AtomicBool::new(false);
+        let denied = engine.transact_waiting(
+            |_| {
+                ran.store(true, Ordering::Release);
+                Ok(())
+            },
+            &|| Ok(()),
+            Some(Duration::from_millis(20)),
+        );
+        assert_eq!(denied.unwrap_err().code, "DEADLINE_EXCEEDED");
+        assert!(!ran.load(Ordering::Acquire));
         let snapshot = engine.snapshot().unwrap();
         let (checked_tx, checked_rx) = std::sync::mpsc::channel();
         let (ran_tx, ran_rx) = std::sync::mpsc::channel();
@@ -441,6 +467,7 @@ mod tests {
                     let _ = checked_tx.send(());
                     snapshot.check()
                 },
+                None,
             )
         });
         checked_rx.recv_timeout(Duration::from_secs(5)).unwrap();
@@ -457,6 +484,40 @@ mod tests {
                 .get(b"Znew", &mut ReadStats::default())
                 .unwrap()
                 .is_some()
+        );
+    }
+
+    #[test]
+    fn consistency_deadline_does_not_wait_for_the_writer_mutex() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::Store::open(dir.path(), Options::default()).unwrap();
+        let tenant = store
+            .tenant(store.create_tenant("wait-deadline").unwrap().id)
+            .unwrap();
+        let history = tenant.history();
+        let target = tenant.engine().seq() + 1;
+        let engine = tenant.engine().clone();
+        let writer = engine.writer.lock();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let thread = std::thread::spawn(move || {
+            let result = tenant
+                .read_with(&crate::ReadOptions {
+                    timeout_ms: Some(20),
+                    ..Default::default()
+                })
+                .unwrap()
+                .wait_context(&history, target);
+            tx.send(result).unwrap();
+        });
+        let completed = rx.recv_timeout(Duration::from_millis(250));
+        drop(writer);
+        thread.join().unwrap();
+        assert_eq!(
+            completed
+                .expect("read deadline waited for a replica fsync")
+                .unwrap_err()
+                .code,
+            "DEADLINE_EXCEEDED"
         );
     }
     #[test]

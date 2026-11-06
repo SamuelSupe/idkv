@@ -39,7 +39,7 @@ struct Progress {
     cursors: HashMap<Uuid, super::LogCursor>,
     initializing: HashMap<Uuid, tokio::task::JoinHandle<Result<()>>>,
     retry_at: HashMap<Uuid, Instant>,
-    transfers: HashMap<Uuid, Uuid>,
+    confirmed: HashMap<Uuid, u64>,
 }
 struct Inner {
     store: Store,
@@ -137,7 +137,7 @@ impl Service {
                     cursors: HashMap::new(),
                     initializing: HashMap::new(),
                     retry_at: HashMap::new(),
-                    transfers: HashMap::new(),
+                    confirmed: HashMap::new(),
                 }),
             }),
         })
@@ -183,7 +183,17 @@ impl Service {
     pub fn start(&self) -> tokio::task::JoinHandle<()> {
         let service = self.clone();
         tokio::spawn(async move {
+            let mut expiration = Instant::now();
             loop {
+                if expiration.elapsed() >= Duration::from_secs(1) {
+                    let expiring = service.clone();
+                    let result =
+                        tokio::task::spawn_blocking(move || expiring.expire_exports()).await;
+                    if let Ok(Err(error)) = result {
+                        service.inner.progress.lock().error = Some(error.to_string());
+                    }
+                    expiration = Instant::now();
+                }
                 if service.inner.store.replication_state().role == Role::Replica {
                     let result = {
                         let _cycle = service.inner.cycle.lock().await;
@@ -329,6 +339,7 @@ impl Service {
         {
             let mut progress = self.inner.progress.lock();
             progress.cursors.retain(|id, _| active.contains(id));
+            progress.confirmed.retain(|id, _| active.contains(id));
             progress.retry_at.retain(|id, _| active.contains(id));
         }
         let mut failure = blocked.values().next().cloned().or_else(|| {
@@ -438,8 +449,7 @@ impl Service {
             .map_err(|_| Error::new("INTERNAL", "replica position worker failed"))??;
         // An asynchronous checkpoint can install a position newer than this
         // cycle's catalog. The authenticated log endpoint checks the live head.
-        if after == position.seq {
-            self.finish_transfer(position.info.id).await?;
+        if after == position.seq && self.inner.progress.lock().confirmed.get(&id) == Some(&after) {
             return Ok(TenantSync::Idle);
         }
         let request = LogRequest {
@@ -468,6 +478,18 @@ impl Service {
             }
             Err(error) => Err(error),
             Ok(page) => {
+                // A restart probes each durable position once to finish any
+                // source-side handoff. A valid empty head page needs no engine
+                // open or replay on an otherwise cold replica.
+                if page.epoch == source.epoch
+                    && page.frames.is_empty()
+                    && page.through == after
+                    && page.source_position == after
+                {
+                    self.inner.progress.lock().confirmed.insert(id, after);
+                    return Ok(TenantSync::Idle);
+                }
+                let confirmed = (after == page.source_position).then_some(after);
                 let pending = if page.through < page.source_position {
                     TenantSync::Pending(page.source_position)
                 } else {
@@ -492,8 +514,8 @@ impl Service {
                         .cursors
                         .insert(position.info.id, cursor);
                 }
-                if matches!(pending, TenantSync::Idle) {
-                    self.finish_transfer(position.info.id).await?;
+                if let Some(confirmed) = confirmed {
+                    self.inner.progress.lock().confirmed.insert(id, confirmed);
                 }
                 Ok(pending)
             }
@@ -506,29 +528,24 @@ impl Service {
         }
         let service = self.clone();
         let source = source.clone();
+        progress.confirmed.remove(&tenant);
         progress.initializing.insert(
             tenant,
             tokio::spawn(async move { service.initialize(&source, tenant).await }),
         );
     }
-    pub(super) fn hold_transfer(&self, tenant: Uuid, id: Uuid) {
-        self.inner.progress.lock().transfers.insert(tenant, id);
+    pub fn export_log(&self, request: &LogRequest) -> Result<LogPage> {
+        let page = self.inner.store.export_logs(request)?;
+        if let Some(mut exports) = self.inner.exports.try_lock() {
+            exports.progress(request, page.source_position)?;
+        }
+        Ok(page)
     }
-    pub(super) async fn finish_transfer(&self, tenant: Uuid) -> Result<()> {
-        let id = self.inner.progress.lock().transfers.get(&tenant).copied();
-        if let Some(id) = id {
-            let _: Received<Value> = self
-                .request("/v1/replication/snapshot/release", Some(json!({"id":id})))
-                .await?;
-            self.inner.progress.lock().transfers.remove(&tenant);
+    fn expire_exports(&self) -> Result<()> {
+        if let Some(mut exports) = self.inner.exports.try_lock() {
+            exports.expire()?;
         }
         Ok(())
-    }
-    pub fn export_log(&self, request: &LogRequest) -> Result<LogPage> {
-        if let Some(mut exports) = self.inner.exports.try_lock() {
-            exports.renew(request.tenant, request.epoch);
-        }
-        self.inner.store.export_logs(request)
     }
     pub fn snapshot(
         &self,
@@ -591,7 +608,11 @@ impl Service {
         let state = tokio::task::spawn_blocking(move || store.follow_verified(&node))
             .await
             .map_err(|_| Error::new("INTERNAL", "follow worker failed"))??;
-        self.inner.progress.lock().cursors.clear();
+        {
+            let mut progress = self.inner.progress.lock();
+            progress.cursors.clear();
+            progress.confirmed.clear();
+        }
         Ok(state)
     }
     /// An interrupted switchover leaves the old primary durably fenced. Retry this
@@ -652,7 +673,11 @@ impl Service {
         let state = tokio::task::spawn_blocking(move || store.follow_verified(&node))
             .await
             .map_err(|_| Error::new("INTERNAL", "follow worker failed"))??;
-        self.inner.progress.lock().cursors.clear();
+        {
+            let mut progress = self.inner.progress.lock();
+            progress.cursors.clear();
+            progress.confirmed.clear();
+        }
         Ok(state)
     }
     pub async fn force_promote(

@@ -4,7 +4,7 @@ v0.10 提供[请求级读取控制](read-controls.md)：读取截止时间、扫
 
 HTTP 所有数据接口以 `/v1/tenants/{tenant_uuid}` 开头。`GET /openapi.json` 提供 OpenAPI 3.1，`tenant-kv openapi` 可导出同一份定义。HTTP 响应为 JSON，同步成功为 200，远端备份任务提交为 202；错误为 `{"error":{"code":"...","message":"..."}}`。
 
-响应头 `x-tkv-history` 只取服务内部的数据库历史，不从用户文档中的同名字段推断；文档可以合法保存任意 JSON `history` 值。
+响应头 `x-tkv-history` 从内部注册表及复制状态读取，不打开租户引擎，也不从用户文档中的同名字段推断；文档可以合法保存任意 JSON `history` 值。读取状态、关闭、修改配额或恢复后的响应编码不会为填充此头重新打开实例。
 
 ## 接口
 
@@ -30,7 +30,7 @@ HTTP 所有数据接口以 `/v1/tenants/{tenant_uuid}` 开头。`GET /openapi.js
 | `POST C/batch` | `{"operations":[{"op":"put","document":{}},{"op":"delete","key":"a"}]}` |
 | `POST C/multi_get` | `{"keys":["a","b","a"]}`；同序返回，未命中为 null |
 | `POST T/read_batch` | 同租户跨集合组合 Get/MultiGet/Query；同一快照、整批预算；见 [组合能力](kv-capabilities.md) |
-| `POST C/indexes` | IndexSpec；调用等待构建完成，其他请求可并发写入 |
+| `POST C/indexes` | IndexSpec；调用等待构建完成，其他请求可并发写入；每次 L0/内存表背压准入等待最多 5 秒，见运维文档 |
 | `GET C/indexes` | 状态为 BUILDING、READY 或 FAILED |
 | `GET / DELETE C/indexes/{index}` | 查看或删除索引 |
 | `POST C/lookups` | 创建固定 Lookup 定义 |
@@ -154,6 +154,8 @@ v0.9.1 的查询定位规则：
 
 下一页提交完全相同的 query 并添加返回的 cursor；limit 也必须相同。游标绑定租户、集合、查询、运行代次、复制历史和快照，成功继续后旧 token 被移除。默认租约从第一页起 60 秒，不随翻页续期；到期、重启、恢复或切换复制历史后返回 CURSOR_EXPIRED。可提前 DELETE 游标释放文件和版本引用。持久游标总数不超过 max_snapshots 的一半，每个主体不超过四分之一（取整，至少 1）；默认分别为 128 与 64，为点读及维护留出名额。max_snapshots 为 1 时不保留分页游标。HTTP 游标同时绑定 token 的稳定 subject，其他主体不能续页；嵌入式调用共享默认主体配额。
 
+游标总额由同一租户的所有主体共享，不按主体预留名额。默认配置下两个主体各保留 64 个游标后，第三个主体的新分页会被拒绝，直至游标释放或过期；点读仍可使用保留的快照名额。这是容量限制，不提供主体之间的分页公平保证。
+
 同一个 cursor 不可并发消费多次：仅一个续页调用成功，其余返回 CURSOR_EXPIRED。查询执行或输出超预算失败时，不消费原 token（租约仍按原时刻计算）。MultiGet 的响应限制包含全部文档、未命中的 null、逗号和数组括号，原生库接口和 HTTP 均不能依靠未命中项绕过该限制。
 
 `query.plan` 标识索引、覆盖、额外排序及全扫描。`query.stats` 给出候选文件、物理扫描条目、实际读取块、解压字节、缓存命中和正文读取次数。旧版本和墓碑也计入扫描预算。
@@ -172,7 +174,7 @@ v0.9.1 的查询定位规则：
 | LOG_GONE / SNAPSHOT_EXPIRED | 410 | 复制服务重新取得检查点 |
 | RESOURCE_EXHAUSTED / MATCH_LIMIT_EXCEEDED | 429 | 降低请求规模、等待背压或调整配额 |
 | CURSOR_EXPIRED | 410 | 从新快照重新查询 |
-| DEADLINE_EXCEEDED | 408 | 缩小查询范围 |
+| DEADLINE_EXCEEDED | 408 | 缩小查询范围；索引构建准入超时则检查维护积压及索引状态 |
 | CORRUPTION | 500 | 隔离租户并检查/恢复 |
 | COMMIT_UNKNOWN | 500 | 批次可能已提交；重新打开后核对 `_key`/`_rev`，避免盲目重试 |
 | UNAVAILABLE | 503 | 查询租户状态与维护错误 |

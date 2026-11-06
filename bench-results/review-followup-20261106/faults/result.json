@@ -1,0 +1,137 @@
+{
+  "result": "passed",
+  "cases": [
+    {
+      "case": "enospc",
+      "result": "passed",
+      "tenant": "6e4dd765-92d3-4170-8c57-d95cda914da3",
+      "before": {
+        "node": 0,
+        "tenant": "6e4dd765-92d3-4170-8c57-d95cda914da3",
+        "documents": 2000,
+        "sha256": "982e513df21fb5971d7ab40a97768152f222e52bf1b9acb919aa0e32c4adf612",
+        "acknowledged_mismatches": 0
+      },
+      "disk_full": {
+        "available_before": 220155904,
+        "available_after": 0,
+        "filler_bytes": 220151808,
+        "mount": "TARGET                                                      SOURCE     FSTYPE OPTIONS\n/var/tmp/idkv-review-followup-20261106-faults/enospc/volume /dev/loop0 ext4   rw,relatime\n"
+      },
+      "fault_response": {
+        "status": 500,
+        "body": {
+          "error": {
+            "code": "COMMIT_UNKNOWN",
+            "message": "IO_ERROR: No space left on device (os error 28)"
+          }
+        }
+      },
+      "poisoned_response": {
+        "status": 500,
+        "body": {
+          "error": {
+            "code": "COMMIT_UNKNOWN",
+            "message": "IO_ERROR: No space left on device (os error 28)"
+          }
+        }
+      },
+      "uncertain_batch_visible_before_retry": 0,
+      "restart_to_safe_retry_ms": 39.31035799905658,
+      "after": {
+        "node": 0,
+        "tenant": "6e4dd765-92d3-4170-8c57-d95cda914da3",
+        "documents": 2008,
+        "sha256": "1aaa210c39c8e38123dcf85fa7fa56209fb46f224665b75cbecb6c405006eed1",
+        "acknowledged_mismatches": 0
+      },
+      "failure_through_validation_ms": 110.52606199518777,
+      "confirmed_documents_preserved": 2000,
+      "confirmed_documents_missing": 0
+    },
+    {
+      "case": "wal-write-eio",
+      "result": "passed",
+      "tenant": "13b17ffa-c12d-4481-bd1b-736386ab720b",
+      "before": {
+        "node": 0,
+        "tenant": "13b17ffa-c12d-4481-bd1b-736386ab720b",
+        "documents": 2000,
+        "sha256": "982e513df21fb5971d7ab40a97768152f222e52bf1b9acb919aa0e32c4adf612",
+        "acknowledged_mismatches": 0
+      },
+      "fault_response": {
+        "status": 500,
+        "body": {
+          "error": {
+            "code": "COMMIT_UNKNOWN",
+            "message": "IO_ERROR: Input/output error (os error 5)"
+          }
+        }
+      },
+      "poisoned_response": {
+        "status": 500,
+        "body": {
+          "error": {
+            "code": "COMMIT_UNKNOWN",
+            "message": "IO_ERROR: Input/output error (os error 5)"
+          }
+        }
+      },
+      "uncertain_batch_visible_before_retry": 0,
+      "restart_to_safe_retry_ms": 37.043632997665554,
+      "after": {
+        "node": 0,
+        "tenant": "13b17ffa-c12d-4481-bd1b-736386ab720b",
+        "documents": 2008,
+        "sha256": "1aaa210c39c8e38123dcf85fa7fa56209fb46f224665b75cbecb6c405006eed1",
+        "acknowledged_mismatches": 0
+      },
+      "failure_through_validation_ms": 110.04764199606143,
+      "confirmed_documents_preserved": 2000,
+      "confirmed_documents_missing": 0
+    },
+    {
+      "case": "wal-sync-eio",
+      "result": "passed",
+      "tenant": "bd98d588-4368-44f7-9c26-d3fedd8e1ecc",
+      "before": {
+        "node": 0,
+        "tenant": "bd98d588-4368-44f7-9c26-d3fedd8e1ecc",
+        "documents": 2000,
+        "sha256": "982e513df21fb5971d7ab40a97768152f222e52bf1b9acb919aa0e32c4adf612",
+        "acknowledged_mismatches": 0
+      },
+      "fault_response": {
+        "status": 500,
+        "body": {
+          "error": {
+            "code": "COMMIT_UNKNOWN",
+            "message": "IO_ERROR: Input/output error (os error 5)"
+          }
+        }
+      },
+      "poisoned_response": {
+        "status": 500,
+        "body": {
+          "error": {
+            "code": "COMMIT_UNKNOWN",
+            "message": "IO_ERROR: Input/output error (os error 5)"
+          }
+        }
+      },
+      "uncertain_batch_visible_before_retry": 8,
+      "restart_to_safe_retry_ms": 28.18569599185139,
+      "after": {
+        "node": 0,
+        "tenant": "bd98d588-4368-44f7-9c26-d3fedd8e1ecc",
+        "documents": 2008,
+        "sha256": "1aaa210c39c8e38123dcf85fa7fa56209fb46f224665b75cbecb6c405006eed1",
+        "acknowledged_mismatches": 0
+      },
+      "failure_through_validation_ms": 132.9992190003395,
+      "confirmed_documents_preserved": 2000,
+      "confirmed_documents_missing": 0
+    }
+  ]
+}

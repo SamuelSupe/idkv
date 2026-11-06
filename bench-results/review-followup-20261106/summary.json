@@ -1,0 +1,40 @@
+{
+  "result": "passed",
+  "tests_passed": 130,
+  "acknowledged_batches": 10892,
+  "acknowledged_document_operations": 165790,
+  "acknowledged_mismatches": 0,
+  "phases": [
+    {
+      "phase": "baseline",
+      "light_p99_ms": 15.102,
+      "heavy_p99_ms": 16.688,
+      "verified_backups": 0,
+      "overlap_intervals": 0
+    },
+    {
+      "phase": "combined",
+      "light_p99_ms": 38.954,
+      "heavy_p99_ms": 39.261,
+      "verified_backups": 4,
+      "overlap_intervals": 13
+    },
+    {
+      "phase": "recovery",
+      "light_p99_ms": 33.34,
+      "heavy_p99_ms": 31.955,
+      "verified_backups": 0,
+      "overlap_intervals": 5
+    }
+  ],
+  "fault_cases": 3,
+  "fault_confirmed_documents_preserved": 6000,
+  "source_files_verified": 102,
+  "binary_sha256": "1b37211b55f4927e6862261e91eda70f8e828ff617e83a876f7c3fd00d9504be",
+  "restart_comparison": {
+    "before_wal_bytes": 15423994,
+    "after_wal_bytes": 935094,
+    "before_other_export": "BUSY",
+    "after_other_export": "OK"
+  }
+}
