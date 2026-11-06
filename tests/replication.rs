@@ -2209,3 +2209,172 @@ async fn client_fallback_never_bypasses_budgets_or_cursor_affinity_and_checks_ca
         server.abort();
     }
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn indexed_http_writes_replicate_with_the_same_small_quota() {
+    let pair = Pair::with_options(Options {
+        global_memory_bytes: 256 << 20,
+        tenant_memory_bytes: 19 << 20,
+        cache_bytes: 64 << 10,
+        memtable_bytes: 1 << 20,
+        ..options()
+    })
+    .await;
+    for (store, role) in [(&pair.a, Role::Primary), (&pair.b, Role::Replica)] {
+        store
+            .configure_replication(&Config {
+                cluster: store.replication_state().cluster,
+                role,
+                peer_url: "http://127.0.0.1:1".into(),
+                token_file: std::path::PathBuf::from("unused"),
+                poll_ms: 10,
+                log_retention_bytes: 64 << 20,
+            })
+            .unwrap();
+    }
+    let id = pair.a.create_tenant("audit-index-expansion").unwrap().id;
+    let source = pair.a.tenant(id).unwrap();
+    source.create_collection("docs").unwrap();
+    pair.catch_up(false).await;
+    for number in 0..16 {
+        source
+            .create_index(
+                "docs",
+                IndexSpec {
+                    name: format!("i{number}"),
+                    fields: vec![IndexField {
+                        field: "/n".into(),
+                        order: Order::Asc,
+                    }],
+                    unique: false,
+                    include: vec!["/payload".into()],
+                },
+            )
+            .unwrap();
+    }
+    pair.catch_up(false).await;
+    let response = reqwest::Client::new()
+        .put(format!(
+            "{}/v1/tenants/{id}/collections/docs/documents",
+            pair.ua
+        ))
+        .bearer_auth(ADMIN)
+        .json(&json!({"document":{"_key":"large", "n":1, "payload":"x".repeat(256<<10)}}))
+        .send()
+        .await
+        .unwrap();
+    let status = response.status();
+    let body = response.bytes().await.unwrap();
+    assert!(
+        status.is_success(),
+        "HTTP source rejected: {}",
+        String::from_utf8_lossy(&body)
+    );
+    let acknowledged: WriteResult = serde_json::from_slice(&body).unwrap();
+    source.engine().flush().unwrap();
+    pair.catch_up(false).await;
+    let actual = pair
+        .b
+        .tenant(id)
+        .unwrap()
+        .get("docs", "large")
+        .unwrap()
+        .unwrap();
+    assert_eq!(actual["_rev"], acknowledged.rev);
+    assert_eq!(Some(actual), source.get("docs", "large").unwrap());
+    drop(source);
+    stop_test_pair(pair).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn valid_small_quota_configuration_keeps_replicating_after_bootstrap() {
+    let settings = Options {
+        global_memory_bytes: 64 << 20,
+        tenant_memory_bytes: 3 << 20,
+        memtable_bytes: 1 << 20,
+        cache_bytes: 0,
+        ..options()
+    };
+    settings.validate().unwrap();
+    let pair = Pair::with_options(settings).await;
+    let id = pair.a.create_tenant("audit-quota-validation").unwrap().id;
+    let source = pair.a.tenant(id).unwrap();
+    source.create_collection("docs").unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !pair.b.tenants().iter().any(|t| t.id == id) {
+        let _ = pair.sb.sync_once().await;
+        assert!(Instant::now() < deadline);
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let ack = source
+        .put("docs", json!({"_key":"small", "n":1}), None)
+        .unwrap();
+    pair.catch_up(false).await;
+    let replica = pair.b.tenant(id).unwrap();
+    assert_eq!(replica.engine().seq(), ack.rev);
+    assert_eq!(
+        replica.get("docs", "small").unwrap(),
+        source.get("docs", "small").unwrap()
+    );
+    drop(replica);
+    drop(source);
+    stop_test_pair(pair).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_oversized_log_page_rebuilds_instead_of_retrying_forever() {
+    let pair = Pair::with_options(Options {
+        global_memory_bytes: 64 << 20,
+        tenant_memory_bytes: 3 << 20,
+        memtable_bytes: 1 << 20,
+        cache_bytes: 0,
+        ..options()
+    })
+    .await;
+    for (store, role) in [(&pair.a, Role::Primary), (&pair.b, Role::Replica)] {
+        store
+            .configure_replication(&Config {
+                cluster: store.replication_state().cluster,
+                role,
+                peer_url: "http://127.0.0.1:1".into(),
+                token_file: "unused".into(),
+                poll_ms: 10,
+                log_retention_bytes: 64 << 20,
+            })
+            .unwrap();
+    }
+    let id = pair.a.create_tenant("bounded-log-decode").unwrap().id;
+    let source = pair.a.tenant(id).unwrap();
+    source.create_collection("docs").unwrap();
+    pair.catch_up(false).await;
+    let initializations = pair.sb.status().unwrap().reinitializations;
+    let mut expected = Vec::new();
+    for n in 0..300 {
+        let key = format!("d{n:04}");
+        let receipt = source
+            .put("docs", json!({"_key":key,"value":"x".repeat(4096)}), None)
+            .unwrap();
+        expected.push((key, receipt.rev));
+    }
+    source.engine().flush().unwrap();
+    pair.catch_up(false).await;
+    assert!(pair.sb.status().unwrap().reinitializations > initializations);
+    let replica = pair.b.tenant(id).unwrap();
+    for (key, rev) in expected {
+        let actual = replica.get("docs", &key).unwrap().unwrap();
+        assert_eq!(actual["_rev"], rev);
+        assert_eq!(Some(actual), source.get("docs", &key).unwrap());
+    }
+    drop(replica);
+    drop(source);
+    stop_test_pair(pair).await;
+}
+
+async fn stop_test_pair(mut pair: Pair) {
+    pair.sa.stop_initializations().await;
+    pair.sb.stop_initializations().await;
+    for server in pair.servers.drain(..) {
+        server.abort();
+        let _ = server.await;
+    }
+}

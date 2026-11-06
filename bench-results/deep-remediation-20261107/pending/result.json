@@ -1,0 +1,77 @@
+{
+  "result": "passed",
+  "binary_sha256": "d51db2b2bdca1522e10af4378b41b129fa565787841dceb42f08bc9bd835e29e",
+  "before": {
+    "node": 0,
+    "tenant": "b72f900c-60a8-4aed-9cf2-b57a91ab2ff9",
+    "documents": 2000,
+    "sha256": "982e513df21fb5971d7ab40a97768152f222e52bf1b9acb919aa0e32c4adf612",
+    "acknowledged_mismatches": 0
+  },
+  "persisted_job_state": "checkpointing",
+  "full_disk": {
+    "available_before": 220151808,
+    "available_after": 0,
+    "filler_bytes": 220147712,
+    "mount": "TARGET                                                 SOURCE     FSTYPE OPTIONS\n/var/tmp/idkv-deep-remediation-pending-20261107/volume /dev/loop0 ext4   rw,relatime\n"
+  },
+  "full_disk_startup_ms": 27.821975003462285,
+  "while_full": {
+    "node": 0,
+    "tenant": "b72f900c-60a8-4aed-9cf2-b57a91ab2ff9",
+    "documents": 2000,
+    "sha256": "982e513df21fb5971d7ab40a97768152f222e52bf1b9acb919aa0e32c4adf612",
+    "acknowledged_mismatches": 0
+  },
+  "full_disk_job": {
+    "backup": "97814107-9f91-4d5d-b7c3-016a0fa4acb6",
+    "checkpoint_seq": null,
+    "created_ms": 1793998044531,
+    "error": "could not persist final job status; inspect remote completion before retry",
+    "id": "0bdd3434-3ae9-48a4-93fa-bc556d178b61",
+    "operation": {
+      "operation": "create"
+    },
+    "processed_files": 0,
+    "result": null,
+    "reused_bytes": 0,
+    "state": "interrupted",
+    "tenant": "b72f900c-60a8-4aed-9cf2-b57a91ab2ff9",
+    "updated_ms": 1793998044538,
+    "uploaded_bytes": 0
+  },
+  "full_disk_startup": "serving confirmed data; failed job isolated",
+  "retried_job": {
+    "backup": "97814107-9f91-4d5d-b7c3-016a0fa4acb6",
+    "checkpoint_seq": 33,
+    "created_ms": 1793998044531,
+    "error": null,
+    "id": "0bdd3434-3ae9-48a4-93fa-bc556d178b61",
+    "operation": {
+      "operation": "create"
+    },
+    "processed_files": 14,
+    "result": {
+      "backup": "97814107-9f91-4d5d-b7c3-016a0fa4acb6",
+      "checkpoint_ms": 1793998044784,
+      "checkpoint_seq": 33,
+      "files": 14,
+      "generation": "c5a2ddfe-d896-4222-ac24-ada0787ee37f",
+      "tenant": "b72f900c-60a8-4aed-9cf2-b57a91ab2ff9",
+      "total_bytes": 8463711
+    },
+    "reused_bytes": 0,
+    "state": "completed",
+    "tenant": "b72f900c-60a8-4aed-9cf2-b57a91ab2ff9",
+    "updated_ms": 1793998061233,
+    "uploaded_bytes": 8463711
+  },
+  "after_space_freed": {
+    "node": 0,
+    "tenant": "b72f900c-60a8-4aed-9cf2-b57a91ab2ff9",
+    "documents": 2000,
+    "sha256": "982e513df21fb5971d7ab40a97768152f222e52bf1b9acb919aa0e32c4adf612",
+    "acknowledged_mismatches": 0
+  },
+  "confirmed_documents_missing": 0
+}

@@ -211,7 +211,9 @@ impl BackupService {
                     job.processed_files = 0;
                     resume.push(job.id);
                 }
-                atomic_json(&path, &job)?;
+                // Normalize only in memory. Workers persist their execution
+                // state before side effects; a full disk must not prevent the
+                // data service from starting. Interrupted restores are never queued.
             }
             jobs.insert(job.id, job);
             if jobs.len() > config.max_jobs {

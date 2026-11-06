@@ -1,0 +1,12 @@
+   Compiling tenant-kv v0.10.1 (/var/tmp/idkv-audit-source-20261107)
+    Finished `release` profile [optimized] target(s) in 6.38s
+     Running tests/audit.rs (/var/tmp/tkv-20261104-target/release/deps/audit-8404322a7c2f323b)
+
+running 1 test
+AUDIT idle tables={1: 32}, entries=32, maintain_median_ms=0.015, samples_ms=[0.014916, 0.015000000000000001, 0.015000000000000001, 0.015042, 0.015208000000000001, 0.016125, 0.020041999999999997]
+AUDIT idle tables={1: 1024}, entries=1024, maintain_median_ms=0.376, samples_ms=[0.347917, 0.360458, 0.367541, 0.37637499999999996, 0.382375, 0.383583, 0.5347919999999999]
+AUDIT idle tables={1: 4096}, entries=4096, maintain_median_ms=1.683, samples_ms=[1.6452039999999999, 1.657662, 1.674037, 1.683371, 1.767204, 1.951244, 2.3374099999999998]
+test audit_idle_maintenance_rescans_all_files ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 18.43s
+

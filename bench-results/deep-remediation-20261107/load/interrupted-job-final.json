@@ -1,0 +1,29 @@
+{
+  "job": {
+    "id": "dee86504-de22-40b3-a831-2a2021d7df04",
+    "tenant": "469802a1-966d-49e7-bbad-2dc855ed6351",
+    "backup": "d8fbe037-bbe0-4980-910e-2f50867471f5",
+    "operation": {
+      "operation": "create"
+    },
+    "state": "completed",
+    "created_ms": 1793998381273,
+    "updated_ms": 1793998395548,
+    "uploaded_bytes": 103611439,
+    "reused_bytes": 894755,
+    "processed_files": 90,
+    "checkpoint_seq": 7277,
+    "result": {
+      "backup": "d8fbe037-bbe0-4980-910e-2f50867471f5",
+      "checkpoint_ms": 1793998381557,
+      "checkpoint_seq": 7277,
+      "files": 90,
+      "generation": "49fe7184-9343-49e5-8b45-0af1637dbd5f",
+      "tenant": "469802a1-966d-49e7-bbad-2dc855ed6351",
+      "total_bytes": 104506194
+    },
+    "error": null
+  },
+  "crc_validated": true,
+  "source_file_sha256": "6aba632fdc8a15b57eab45be715ac3d275084932991e30a9600689f5825838fe"
+}

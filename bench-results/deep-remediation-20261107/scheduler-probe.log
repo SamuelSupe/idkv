@@ -1,0 +1,10 @@
+   Compiling tenant-kv v0.10.1 (/var/tmp/idkv-deep-remediation-source-20261107)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.47s
+     Running unittests src/lib.rs (/var/tmp/tkv-20261104-target/debug/deps/tenant_kv-8f896ba5f66b1091)
+
+running 1 test
+AUDIT maintenance coordinator: tenants=160, workers=1, injected_per_job_delay_ms=20, observation_ms=4000, completed_jobs=169, served_tenants=160, never_served=0
+test tenant::manager::audit_scheduler::fixed_full_maintenance_queue_serves_all_tenants ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 43 filtered out; finished in 13.09s
+

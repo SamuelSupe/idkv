@@ -1,0 +1,109 @@
+{
+  "base_commit": "350603e51ac93df923c0246cc3926e9f70f2a796",
+  "maintenance": {
+    "filesystem": "Btrfs /var/tmp",
+    "profile": "release",
+    "samples_per_size": 7,
+    "before": [
+      {
+        "sst_files": 32,
+        "samples_ms": [
+          0.014916,
+          0.015000000000000001,
+          0.015000000000000001,
+          0.015042,
+          0.015208000000000001,
+          0.016125,
+          0.020041999999999997
+        ],
+        "median_ms": 0.015042
+      },
+      {
+        "sst_files": 1024,
+        "samples_ms": [
+          0.347917,
+          0.360458,
+          0.367541,
+          0.37637499999999996,
+          0.382375,
+          0.383583,
+          0.5347919999999999
+        ],
+        "median_ms": 0.37637499999999996
+      },
+      {
+        "sst_files": 4096,
+        "samples_ms": [
+          1.6452039999999999,
+          1.657662,
+          1.674037,
+          1.683371,
+          1.767204,
+          1.951244,
+          2.3374099999999998
+        ],
+        "median_ms": 1.683371
+      }
+    ],
+    "after": [
+      {
+        "sst_files": 32,
+        "samples_ms": [
+          0.00025,
+          0.00029099999999999997,
+          0.000292,
+          0.000292,
+          0.000292,
+          0.000292,
+          0.000792
+        ],
+        "median_ms": 0.000292
+      },
+      {
+        "sst_files": 1024,
+        "samples_ms": [
+          0.000166,
+          0.000167,
+          0.000167,
+          0.00020800000000000001,
+          0.000209,
+          0.000209,
+          0.000625
+        ],
+        "median_ms": 0.00020800000000000001
+      },
+      {
+        "sst_files": 4096,
+        "samples_ms": [
+          0.00020800000000000001,
+          0.00020800000000000001,
+          0.00020800000000000001,
+          0.00020800000000000001,
+          0.00020800000000000001,
+          0.000209,
+          0.000791
+        ],
+        "median_ms": 0.00020800000000000001
+      }
+    ],
+    "scope": "Common idle tick without new WAL/compaction work, warm filesystem metadata; the periodic full scan remains every 5s or near quota."
+  },
+  "scheduler": {
+    "workers": 1,
+    "tenants": 160,
+    "per_job_delay_ms": 20,
+    "warmup_ms": 3500,
+    "observation_ms": 4000,
+    "before": {
+      "completed_jobs": 170,
+      "served_tenants": 129,
+      "never_served_tenants": 31
+    },
+    "after": {
+      "completed_jobs": 169,
+      "served_tenants": 160,
+      "never_served_tenants": 0
+    },
+    "instrumentation": "Identical test-only delay/count hook, isolated source copy; production source uninstrumented."
+  }
+}

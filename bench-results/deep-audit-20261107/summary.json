@@ -1,0 +1,82 @@
+{
+  "base_commit": "350603e51ac93df923c0246cc3926e9f70f2a796",
+  "scope": "Review only; product source unchanged; probes intentionally assert the presence of reported defects.",
+  "findings": [
+    {
+      "id": "F1",
+      "priority": "P1",
+      "title": "A legal indexed write cannot replicate under the same tenant quota",
+      "evidence": "replication-http.log",
+      "quota_mib": 19,
+      "indexes": 16,
+      "document_payload_kib": 256,
+      "acknowledged_seq": 34,
+      "replica_seq": 33,
+      "retries_failed": 4,
+      "quota_mib_that_restored_progress": 32,
+      "source_api": "HTTP PUT",
+      "body_and_revision_equal_after_quota_increase": true
+    },
+    {
+      "id": "F2",
+      "priority": "P1",
+      "title": "An interrupted backup prevents full-disk startup of the entire server",
+      "evidence": "pending-full/result.json",
+      "pending_state": "checkpointing",
+      "disk_available_bytes": 0,
+      "confirmed_documents_preserved_after_freeing_space": 2000
+    },
+    {
+      "id": "F3",
+      "priority": "P1",
+      "title": "Bounded maintenance queue can indefinitely favor already scheduled tenants",
+      "evidence": "scheduler-probe.log",
+      "injected_per_job_delay_ms": 20,
+      "workers": 1,
+      "tenants": 160,
+      "observation_ms": 4000,
+      "completed_jobs": 170,
+      "served_tenants": 129,
+      "never_served_tenants": 31,
+      "instrumentation": "scheduler-instrumentation.patch; coordinator code unchanged"
+    },
+    {
+      "id": "F4",
+      "priority": "P2",
+      "title": "Validated resource settings are incompatible with replica quota validation",
+      "evidence": "replication-http.log",
+      "tenant_mib": 3,
+      "memtable_mib": 1,
+      "source_ack_seq": 2,
+      "replica_seq": 1
+    },
+    {
+      "id": "F5",
+      "priority": "P2",
+      "title": "Idle maintenance repeatedly scans all table metadata and database files",
+      "evidence": "maintenance-disk.log",
+      "filesystem": "Btrfs /var/tmp",
+      "release_build": true,
+      "samples_per_size": 7,
+      "measurements": [
+        {
+          "sst_files": 32,
+          "maintain_median_ms": 0.015
+        },
+        {
+          "sst_files": 1024,
+          "maintain_median_ms": 0.376
+        },
+        {
+          "sst_files": 4096,
+          "maintain_median_ms": 1.683
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "No production fixes applied.",
+    "No macOS run, long soak or real-device power-loss test.",
+    "Previously observed intermittent Store lock BUSY was not diagnosed by these probes."
+  ]
+}

@@ -19,13 +19,22 @@ impl Engine {
             }
             self.compact(false)?;
             if started.elapsed() >= Duration::from_millis(20)
-                || l0_pressure(&self.view.read().tables) < self.options.l0_trigger
+                || self.view.read().tables.l0_pressure < self.options.l0_trigger
             {
                 break;
             }
         }
         if let Some(_maintenance) = self.maintenance.try_lock() {
-            self.reconcile_disk_locked()?;
+            let scan_due = self.disk_inventory.lock().checked.elapsed() >= Duration::from_secs(5)
+                || self.disk.load(Ordering::Acquire) >= self.info.disk_bytes / 5 * 3;
+            if scan_due {
+                self.reconcile_disk_locked()?;
+            } else {
+                let other = self.disk_inventory.lock().non_wal_bytes;
+                let writer = self.writer.lock();
+                self.disk
+                    .store(other + writer.wal.file.metadata()?.len(), Ordering::Release);
+            }
         }
         Ok(())
     }
@@ -41,6 +50,10 @@ impl Engine {
             .checked_add(active_bytes)
             .ok_or_else(|| Error::limit("directory size overflow"))?;
         self.disk.store(bytes, Ordering::Release);
+        *self.disk_inventory.lock() = DiskInventory {
+            checked: Instant::now(),
+            non_wal_bytes: other_bytes,
+        };
         Ok(())
     }
     pub fn flush(&self) -> Result<()> {
@@ -286,6 +299,18 @@ impl Engine {
         };
         let (selected, destination, oldest) = {
             let view = self.view.read();
+            if !force
+                && view.tables.l0_pressure < self.options.l0_trigger
+                && !(1..=8usize).any(|level| {
+                    view.tables.level_bytes.get(level).copied().unwrap_or(0)
+                        > self
+                            .options
+                            .level_base_bytes
+                            .saturating_mul(10u64.saturating_pow(level as u32 - 1))
+                })
+            {
+                return Ok(());
+            }
             let l0: Vec<_> = view
                 .tables
                 .iter()
@@ -294,7 +319,7 @@ impl Engine {
                 .collect();
             let mut chosen = if force {
                 view.tables.files.clone()
-            } else if l0_pressure(&view.tables) >= self.options.l0_trigger {
+            } else if view.tables.l0_pressure >= self.options.l0_trigger {
                 let mut chosen = vec![l0.iter().min_by_key(|t| t.info.max_seq).unwrap().clone()];
                 loop {
                     let first = chosen.iter().map(|t| &t.info.first).min().unwrap().clone();
@@ -331,15 +356,15 @@ impl Engine {
                 let mut score = if chosen.is_empty() {
                     1.0
                 } else {
-                    l0_pressure(&view.tables) as f64 / self.options.l0_trigger as f64
+                    view.tables.l0_pressure as f64 / self.options.l0_trigger as f64
                 };
                 for level in 1..=8u32 {
-                    let size: u64 = view
+                    let size = view
                         .tables
-                        .iter()
-                        .filter(|t| t.info.level == level)
-                        .map(|t| t.info.size)
-                        .sum();
+                        .level_bytes
+                        .get(level as usize)
+                        .copied()
+                        .unwrap_or(0);
                     let limit = self
                         .options
                         .level_base_bytes
@@ -409,6 +434,7 @@ impl Engine {
             }
             self.writer.lock().manifest = manifest;
             self.view.write().tables = versions;
+            self.reconcile_disk_locked()?;
             return Ok(());
         }
         let estimated = selected
@@ -542,6 +568,7 @@ impl Engine {
             }
             drop(cursors);
             drop(deeper);
+            drop(selected);
             self.reconcile_disk_locked()?;
             Ok(())
         })();
@@ -649,6 +676,44 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn idle_disk_accounting_tracks_wal_growth_and_checks_drift_near_quota() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::Store::open(
+            dir.path(),
+            Options {
+                tenant_disk_bytes: 1 << 20,
+                ..Options::default()
+            },
+        )
+        .unwrap();
+        let id = store.create_tenant("idle-accounting").unwrap().id;
+        let engine = store.tenant(id).unwrap().engine().clone();
+        drop(store);
+        engine
+            .transact(|tx| tx.put(b"Zkey".to_vec(), b"value".to_vec()))
+            .unwrap();
+        let checked = engine.disk_inventory.lock().checked;
+        engine.maintain().unwrap();
+        assert_eq!(engine.disk_bytes(), directory_size(&engine.path).unwrap());
+        assert_eq!(
+            engine.disk_inventory.lock().checked,
+            checked,
+            "idle tick walked the directory"
+        );
+        let extra = engine.path.join("external-drift");
+        fs::write(&extra, vec![0; 800_000]).unwrap();
+        engine.disk_inventory.lock().checked = Instant::now() - Duration::from_secs(5);
+        engine.maintain().unwrap();
+        assert_eq!(engine.disk_bytes(), directory_size(&engine.path).unwrap());
+        fs::remove_file(extra).unwrap();
+        engine.maintain().unwrap();
+        assert_eq!(
+            engine.disk_bytes(),
+            directory_size(&engine.path).unwrap(),
+            "near-quota reconciliation waited five seconds to reclaim space"
+        );
+    }
 
     #[test]
     fn missing_checkpointed_wal_does_not_block_flush_or_lose_current_data() {

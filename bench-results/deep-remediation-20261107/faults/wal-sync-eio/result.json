@@ -1,0 +1,42 @@
+{
+  "case": "wal-sync-eio",
+  "result": "passed",
+  "tenant": "1733b324-4d5b-4cfa-8b58-dc954d0f597c",
+  "before": {
+    "node": 0,
+    "tenant": "1733b324-4d5b-4cfa-8b58-dc954d0f597c",
+    "documents": 2000,
+    "sha256": "982e513df21fb5971d7ab40a97768152f222e52bf1b9acb919aa0e32c4adf612",
+    "acknowledged_mismatches": 0
+  },
+  "fault_response": {
+    "status": 500,
+    "body": {
+      "error": {
+        "code": "COMMIT_UNKNOWN",
+        "message": "IO_ERROR: Input/output error (os error 5)"
+      }
+    }
+  },
+  "poisoned_response": {
+    "status": 500,
+    "body": {
+      "error": {
+        "code": "IO_ERROR",
+        "message": "Input/output error (os error 5)"
+      }
+    }
+  },
+  "uncertain_batch_visible_before_retry": 8,
+  "restart_to_safe_retry_ms": 40.65184498904273,
+  "after": {
+    "node": 0,
+    "tenant": "1733b324-4d5b-4cfa-8b58-dc954d0f597c",
+    "documents": 2008,
+    "sha256": "1aaa210c39c8e38123dcf85fa7fa56209fb46f224665b75cbecb6c405006eed1",
+    "acknowledged_mismatches": 0
+  },
+  "failure_through_validation_ms": 118.62393200863153,
+  "confirmed_documents_preserved": 2000,
+  "confirmed_documents_missing": 0
+}

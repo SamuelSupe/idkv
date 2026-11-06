@@ -447,7 +447,7 @@ fn restore_after_switch_is_never_replayed_over_new_writes() {
         .unwrap()
         .put("assets", json!({"_key":"a","owner":"post-crash"}), None)
         .unwrap();
-    let service = BackupService::open(store.clone(), cfg).unwrap();
+    let service = BackupService::open(store.clone(), cfg.clone()).unwrap();
     let interrupted = service
         .jobs(id)
         .into_iter()
@@ -455,6 +455,21 @@ fn restore_after_switch_is_never_replayed_over_new_writes() {
         .unwrap();
     assert_eq!(interrupted.state, JobState::Interrupted);
     assert!(service.retry(id, interrupted.id).is_err());
+    assert_eq!(
+        store
+            .tenant(id)
+            .unwrap()
+            .get("assets", "a")
+            .unwrap()
+            .unwrap()["owner"],
+        "post-crash"
+    );
+    drop(service);
+    let reopened = BackupService::open(store.clone(), cfg).unwrap();
+    assert_eq!(
+        reopened.job(id, interrupted.id).unwrap().state,
+        JobState::Interrupted
+    );
     assert_eq!(
         store
             .tenant(id)

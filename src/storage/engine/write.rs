@@ -70,7 +70,7 @@ impl Engine {
                 return Err(error.clone());
             }
             let view = self.view.read().clone();
-            let backlog = if l0_pressure(&view.tables) >= self.options.l0_stop {
+            let backlog = if view.tables.l0_pressure >= self.options.l0_stop {
                 Some("L0 backlog: retry after compaction")
             } else if view.mem.bytes.load(Ordering::Acquire) > self.options.memtable_bytes * 4 {
                 Some("memtable backlog: retry after flush")

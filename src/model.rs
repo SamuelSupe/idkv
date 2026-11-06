@@ -63,6 +63,15 @@ impl Default for Options {
     }
 }
 impl Options {
+    pub(crate) fn supports_quota(&self, memory: usize, disk: u64) -> bool {
+        memory <= self.global_memory_bytes
+            && memory
+                >= self
+                    .memtable_bytes
+                    .saturating_mul(2)
+                    .saturating_add(self.cache_bytes.min(memory / 3))
+            && disk >= 1 << 20
+    }
     pub fn validate(&self) -> crate::Result<()> {
         if self.global_memory_bytes > 1usize << 40
             || self.cache_bytes > 1usize << 40
@@ -100,7 +109,7 @@ impl Options {
             || self.max_scan == 0
             || self.query_ms == 0
             || self.max_response_bytes < 1 << 20
-            || self.tenant_memory_bytes > self.global_memory_bytes
+            || !self.supports_quota(self.tenant_memory_bytes, self.tenant_disk_bytes)
             || self.cache_bytes + self.memtable_bytes * 2 > self.tenant_memory_bytes
             || self.tenant_disk_bytes < 1 << 20
             || self.level_base_bytes == 0

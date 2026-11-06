@@ -1,0 +1,13 @@
+   Compiling tenant-kv v0.10.1 (/var/tmp/idkv-audit-source-20261107)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.31s
+     Running tests/replication.rs (/var/tmp/tkv-20261104-target/debug/deps/replication-9a982e8f8cdf365a)
+
+running 2 tests
+AUDIT Options.validate accepted tenant=3MiB/memtable=1MiB, source ACK=2, replica=1, catalog rejects unchanged quota on every cycle
+test audit_valid_options_are_rejected_by_replica_catalog_quota_validation ... ok
+AUDIT equal quota=19MiB, 16 covering indexes, acknowledged seq=34, replica seq=33, failures=["RESOURCE_EXHAUSTED", "RESOURCE_EXHAUSTED", "RESOURCE_EXHAUSTED", "RESOURCE_EXHAUSTED"], reinitializations=0
+AUDIT raising quota to 32MiB resumes replication to seq=34
+test audit_index_expansion_acknowledges_a_frame_the_equal_quota_replica_cannot_apply ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 25 filtered out; finished in 2.88s
+

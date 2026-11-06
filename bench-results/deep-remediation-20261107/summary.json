@@ -1,0 +1,279 @@
+{
+  "result": "passed",
+  "base_commit": "350603e51ac93df923c0246cc3926e9f70f2a796",
+  "fixed_findings": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5"
+  ],
+  "full_tests_passed": 151,
+  "acknowledged_mismatches": 0,
+  "qualification_phases": [
+    {
+      "phase": "baseline",
+      "requested_seconds": 30,
+      "actual_seconds": 30.01793280802667,
+      "operations": {
+        "index_query_20": {
+          "calls": 1472,
+          "calls_per_second": 49.066,
+          "p50_ms": 0.466,
+          "p95_ms": 1.171,
+          "p99_ms": 1.796,
+          "errors": {}
+        },
+        "light_writer": {
+          "calls": 600,
+          "calls_per_second": 19.999,
+          "p50_ms": 5.008,
+          "p95_ms": 8.646,
+          "p99_ms": 18.208,
+          "errors": {}
+        },
+        "lookup_20": {
+          "calls": 2938,
+          "calls_per_second": 97.929,
+          "p50_ms": 0.455,
+          "p95_ms": 1.174,
+          "p99_ms": 1.855,
+          "errors": {}
+        },
+        "get": {
+          "calls": 5864,
+          "calls_per_second": 195.446,
+          "p50_ms": 0.355,
+          "p95_ms": 0.912,
+          "p99_ms": 1.438,
+          "errors": {}
+        },
+        "heavy_writer": {
+          "calls": 1172,
+          "calls_per_second": 39.057,
+          "p50_ms": 6.795,
+          "p95_ms": 11.354,
+          "p99_ms": 22.917,
+          "errors": {}
+        }
+      },
+      "completed_verified_backups": 0,
+      "overlap_sample_intervals": 0,
+      "admission_retries": {}
+    },
+    {
+      "phase": "combined",
+      "requested_seconds": 120,
+      "actual_seconds": 120.07152345601935,
+      "operations": {
+        "light_writer": {
+          "calls": 2396,
+          "calls_per_second": 19.967,
+          "p50_ms": 4.827,
+          "p95_ms": 8.892,
+          "p99_ms": 15.798,
+          "errors": {}
+        },
+        "index_query_20": {
+          "calls": 5998,
+          "calls_per_second": 49.983,
+          "p50_ms": 0.402,
+          "p95_ms": 0.799,
+          "p99_ms": 1.344,
+          "errors": {}
+        },
+        "lookup_20": {
+          "calls": 11990,
+          "calls_per_second": 99.915,
+          "p50_ms": 0.388,
+          "p95_ms": 0.779,
+          "p99_ms": 1.307,
+          "errors": {}
+        },
+        "heavy_writer": {
+          "calls": 4775,
+          "calls_per_second": 39.79,
+          "p50_ms": 6.138,
+          "p95_ms": 11.005,
+          "p99_ms": 18.934,
+          "errors": {}
+        },
+        "get": {
+          "calls": 23945,
+          "calls_per_second": 199.528,
+          "p50_ms": 0.293,
+          "p95_ms": 0.622,
+          "p99_ms": 1.039,
+          "errors": {}
+        }
+      },
+      "completed_verified_backups": 4,
+      "overlap_sample_intervals": 13,
+      "admission_retries": {
+        "BUSY": 2
+      }
+    },
+    {
+      "phase": "recovery",
+      "requested_seconds": 30,
+      "actual_seconds": 30.0190732460469,
+      "operations": {
+        "index_query_20": {
+          "calls": 1500,
+          "calls_per_second": 49.998,
+          "p50_ms": 0.388,
+          "p95_ms": 0.696,
+          "p99_ms": 1.106,
+          "errors": {}
+        },
+        "get": {
+          "calls": 5995,
+          "calls_per_second": 199.825,
+          "p50_ms": 0.282,
+          "p95_ms": 0.552,
+          "p99_ms": 0.955,
+          "errors": {}
+        },
+        "lookup_20": {
+          "calls": 3000,
+          "calls_per_second": 99.992,
+          "p50_ms": 0.36,
+          "p95_ms": 0.686,
+          "p99_ms": 1.117,
+          "errors": {}
+        },
+        "heavy_writer": {
+          "calls": 1197,
+          "calls_per_second": 39.894,
+          "p50_ms": 5.897,
+          "p95_ms": 10.114,
+          "p99_ms": 18.029,
+          "errors": {}
+        },
+        "light_writer": {
+          "calls": 600,
+          "calls_per_second": 19.995,
+          "p50_ms": 4.481,
+          "p95_ms": 8.145,
+          "p99_ms": 13.039,
+          "errors": {}
+        }
+      },
+      "completed_verified_backups": 0,
+      "overlap_sample_intervals": 5,
+      "admission_retries": {
+        "BUSY": 571
+      }
+    }
+  ],
+  "restart_to_write_and_replica_caught_up_ms": 103.98072400130332,
+  "checks": {
+    "before_restart": [
+      {
+        "node": 0,
+        "tenant": "469802a1-966d-49e7-bbad-2dc855ed6351",
+        "documents": 20000,
+        "sha256": "e86a472aa12fcfa11f56e4f19afe6bae4527416ca10ccff3eb8e400804c22fba",
+        "acknowledged_mismatches": 0
+      },
+      {
+        "node": 0,
+        "tenant": "d773720e-af00-4372-94f2-e114ee4f74bc",
+        "documents": 200,
+        "sha256": "4d3e2eddfb74d71fa1ec9c3fc84e716f036782f86916414f803a70afc44d9725",
+        "acknowledged_mismatches": 0
+      },
+      {
+        "node": 1,
+        "tenant": "469802a1-966d-49e7-bbad-2dc855ed6351",
+        "documents": 20000,
+        "sha256": "e86a472aa12fcfa11f56e4f19afe6bae4527416ca10ccff3eb8e400804c22fba",
+        "acknowledged_mismatches": 0
+      },
+      {
+        "node": 1,
+        "tenant": "d773720e-af00-4372-94f2-e114ee4f74bc",
+        "documents": 200,
+        "sha256": "4d3e2eddfb74d71fa1ec9c3fc84e716f036782f86916414f803a70afc44d9725",
+        "acknowledged_mismatches": 0
+      }
+    ],
+    "after_restart": [
+      {
+        "node": 0,
+        "tenant": "469802a1-966d-49e7-bbad-2dc855ed6351",
+        "documents": 20000,
+        "sha256": "e86a472aa12fcfa11f56e4f19afe6bae4527416ca10ccff3eb8e400804c22fba",
+        "acknowledged_mismatches": 0
+      },
+      {
+        "node": 0,
+        "tenant": "d773720e-af00-4372-94f2-e114ee4f74bc",
+        "documents": 200,
+        "sha256": "4d3e2eddfb74d71fa1ec9c3fc84e716f036782f86916414f803a70afc44d9725",
+        "acknowledged_mismatches": 0
+      },
+      {
+        "node": 1,
+        "tenant": "469802a1-966d-49e7-bbad-2dc855ed6351",
+        "documents": 20000,
+        "sha256": "e86a472aa12fcfa11f56e4f19afe6bae4527416ca10ccff3eb8e400804c22fba",
+        "acknowledged_mismatches": 0
+      },
+      {
+        "node": 1,
+        "tenant": "d773720e-af00-4372-94f2-e114ee4f74bc",
+        "documents": 200,
+        "sha256": "4d3e2eddfb74d71fa1ec9c3fc84e716f036782f86916414f803a70afc44d9725",
+        "acknowledged_mismatches": 0
+      }
+    ],
+    "final_validation": [
+      {
+        "node": 0,
+        "tenant": "469802a1-966d-49e7-bbad-2dc855ed6351",
+        "documents": 20000,
+        "sha256": "96dc47c10062a4b75b065fe157e5e139f9ef809f7e0dfc55048e5095efc8f752",
+        "acknowledged_mismatches": 0
+      },
+      {
+        "node": 0,
+        "tenant": "d773720e-af00-4372-94f2-e114ee4f74bc",
+        "documents": 200,
+        "sha256": "d1dd8d50287e83ac472673d08c0e85aff186e2ac1a12972f2a788a937019395b",
+        "acknowledged_mismatches": 0
+      },
+      {
+        "node": 1,
+        "tenant": "469802a1-966d-49e7-bbad-2dc855ed6351",
+        "documents": 20000,
+        "sha256": "96dc47c10062a4b75b065fe157e5e139f9ef809f7e0dfc55048e5095efc8f752",
+        "acknowledged_mismatches": 0
+      },
+      {
+        "node": 1,
+        "tenant": "d773720e-af00-4372-94f2-e114ee4f74bc",
+        "documents": 200,
+        "sha256": "d1dd8d50287e83ac472673d08c0e85aff186e2ac1a12972f2a788a937019395b",
+        "acknowledged_mismatches": 0
+      }
+    ],
+    "restored_backup": {
+      "node": 2,
+      "tenant": "469802a1-966d-49e7-bbad-2dc855ed6351",
+      "documents": 20000,
+      "sha256": "96dc47c10062a4b75b065fe157e5e139f9ef809f7e0dfc55048e5095efc8f752",
+      "acknowledged_mismatches": 0
+    }
+  },
+  "performance_scope": "Maintenance before/after uses identical probes against base and fixed sources. Load phase latencies compare phases within the fixed version, not a causal version-level performance claim.",
+  "limitations": [
+    "Linux OrbStack VM only, no macOS runtime or long soak.",
+    "Scoped WAL EIO injection, not real-device writeback/power loss.",
+    "Previously intermittent Store lock BUSY root cause not diagnosed.",
+    "Periodic directory reconciliation remains; common idle-tick timing is not end-to-end latency."
+  ],
+  "admission_retries_total": {
+    "BUSY": 573
+  }
+}

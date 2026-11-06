@@ -1,0 +1,12 @@
+   Compiling tenant-kv v0.10.1 (/var/tmp/idkv-deep-remediation-source-20261107)
+    Finished `release` profile [optimized] target(s) in 46.47s
+     Running tests/idle_probe.rs (/var/tmp/tkv-20261104-target/release/deps/idle_probe-00919744d111dfeb)
+
+running 1 test
+AUDIT idle tables={1: 32}, entries=32, maintain_median_ms=0.000, samples_ms=[0.00025, 0.00029099999999999997, 0.000292, 0.000292, 0.000292, 0.000292, 0.000792]
+AUDIT idle tables={1: 1024}, entries=1024, maintain_median_ms=0.000, samples_ms=[0.000166, 0.000167, 0.000167, 0.00020800000000000001, 0.000209, 0.000209, 0.000625]
+AUDIT idle tables={1: 4096}, entries=4096, maintain_median_ms=0.000, samples_ms=[0.00020800000000000001, 0.00020800000000000001, 0.00020800000000000001, 0.00020800000000000001, 0.00020800000000000001, 0.000209, 0.000791]
+test audit_idle_maintenance_rescans_all_files ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 32.94s
+

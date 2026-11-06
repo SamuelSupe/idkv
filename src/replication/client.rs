@@ -566,16 +566,44 @@ impl Service {
                 };
                 let next_cursor = page.cursor.clone();
                 let store = store.clone();
-                let source = source.clone();
-                tokio::task::spawn_blocking(move || {
+                let apply_source = source.clone();
+                let applied = tokio::task::spawn_blocking(move || {
                     let handle = store.tenant(request.tenant)?;
                     if handle.engine().write_buffer_full() {
                         handle.engine().flush()?;
                     }
-                    handle.engine().apply_replica_page(&source, after, &page)
+                    let apply = || {
+                        handle
+                            .engine()
+                            .apply_replica_page(&apply_source, after, &page)
+                    };
+                    match apply() {
+                        Err(error) if error.code == "REPLICA_MEMORY_PRESSURE" => {
+                            // Decode failures occur before append. Release buffered
+                            // records once, without retrying uncertain WAL writes.
+                            handle.engine().flush()?;
+                            apply().map_err(|error| {
+                                if error.code == "REPLICA_MEMORY_PRESSURE" {
+                                    Error::new("REPLICA_SNAPSHOT_REQUIRED", error.to_string())
+                                } else {
+                                    error
+                                }
+                            })
+                        }
+                        result => result,
+                    }
                 })
                 .await
-                .map_err(|_| Error::new("INTERNAL", "replication apply worker failed"))??;
+                .map_err(|_| Error::new("INTERNAL", "replication apply worker failed"))?;
+                if applied
+                    .as_ref()
+                    .is_err_and(|e| e.code == "REPLICA_SNAPSHOT_REQUIRED")
+                {
+                    self.inner.progress.lock().cursors.remove(&id);
+                    self.start_initialize(source, id, true);
+                    return Ok(TenantSync::Idle);
+                }
+                applied?;
                 if let Some(cursor) = next_cursor {
                     self.inner
                         .progress

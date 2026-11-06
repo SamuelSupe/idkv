@@ -3,6 +3,21 @@ use crate::replication::{LogCursor, LogPage, LogRequest, PAGE_BYTES, Source};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 impl Engine {
+    fn reserve_replica_decode(&self, bytes: usize, held: usize) -> Result<Reservation> {
+        if held.saturating_add(bytes) > self.budget.tenant.limit() {
+            return Err(Error::new(
+                "REPLICA_SNAPSHOT_REQUIRED",
+                "log page decode exceeds tenant memory quota; install a checkpoint",
+            ));
+        }
+        self.cache.reserve(&self.budget, bytes).map_err(|error| {
+            if self.budget.tenant.used().saturating_add(bytes) > self.budget.tenant.limit() {
+                Error::new("REPLICA_MEMORY_PRESSURE", error.to_string())
+            } else {
+                error
+            }
+        })
+    }
     pub(crate) fn log_page(&self, request: &LogRequest) -> Result<LogPage> {
         self.ensure_durable()?;
         if request.tenant != self.info.id || request.generation != self.info.generation {
@@ -150,15 +165,21 @@ impl Engine {
         if encoded_bytes > (wal::MAX_BATCH + PAGE_BYTES + 24).div_ceil(3) * 4 {
             return Err(Error::limit("replication page size"));
         }
-        let _decode_memory = self
-            .budget
-            .reserve(encoded_bytes.saturating_mul(2) + 4096)?;
+        // The wire response already has a global reservation. Charge this
+        // tenant for its raw decode buffer, not two more copies of base64.
+        let decode_memory = self.reserve_replica_decode(
+            encoded_bytes / 4 * 3
+                + 4096
+                + page.frames.len() * std::mem::size_of::<(u64, usize, Vec<Record>, Reservation)>(),
+            0,
+        )?;
+        let mut held = decode_memory.size();
         self.ensure_durable()?;
         let mut writer = self.writer.lock();
         if let Some(error) = &writer.poison {
             return Err(error.clone());
         }
-        if l0_pressure(&self.view.read().tables) >= self.options.l0_stop {
+        if self.view.read().tables.l0_pressure >= self.options.l0_stop {
             return Err(Error::limit("replica L0 backlog; retry after compaction"));
         }
         if writer.staged != after {
@@ -167,7 +188,7 @@ impl Engine {
                 "replication position changed; retry from durable position",
             ));
         }
-        let mut prepared = Vec::new();
+        let mut prepared = Vec::with_capacity(page.frames.len());
         let mut bytes = Vec::with_capacity(encoded_bytes / 4 * 3);
         let mut expected = after;
         let mut disk_bytes = 0u64;
@@ -184,9 +205,11 @@ impl Engine {
             if Some(seq) != expected.checked_add(1) || seq > page.through {
                 return Err(Error::corrupt("replication sequence gap"));
             }
-            let mut memory = self.budget.reserve(wal::decoded_memory(&frame[24..])?)?;
+            let mut memory =
+                self.reserve_replica_decode(wal::decoded_memory(&frame[24..])?, held)?;
             let records = wal::decode(&frame[24..], seq)?;
             memory.shrink(records.iter().map(Record::size).sum::<usize>() * 2);
+            held += memory.size();
             expected = seq;
             disk_bytes += frame.len() as u64 + 4096;
             prepared.push((seq, frame.len(), records, memory));
@@ -198,8 +221,7 @@ impl Engine {
             return Ok(());
         }
         let _insert_memory = self
-            .budget
-            .reserve(REPLICA_INSERT_CHUNK * std::mem::size_of::<Record>())?;
+            .reserve_replica_decode(REPLICA_INSERT_CHUNK * std::mem::size_of::<Record>(), held)?;
         // These writes are already committed on the source. Replay must share
         // maintenance headroom so the foreground threshold cannot block the
         // very cleanup records needed to reclaim space. The total quota remains.

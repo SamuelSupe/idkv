@@ -440,9 +440,9 @@ impl Store {
 
     fn update_replica_quota(&self, source: &Source, info: &TenantInfo) -> Result<()> {
         let _permission = self.owner.inner.node.replica_write(source)?;
-        if info.memory_bytes < self.options().memtable_bytes * 4
-            || info.memory_bytes > self.options().global_memory_bytes
-            || info.disk_bytes < 1 << 20
+        if !self
+            .options()
+            .supports_quota(info.memory_bytes, info.disk_bytes)
         {
             return Err(Error::limit(
                 "replicated quota is incompatible with this node",

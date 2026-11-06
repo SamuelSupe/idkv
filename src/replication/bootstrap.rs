@@ -80,7 +80,10 @@ impl Service {
                     .ok_or_else(|| Error::limit("checkpoint size"))?;
             }
             if total > info.tenant.disk_bytes
-                || info.tenant.memory_bytes > self.store().options().global_memory_bytes
+                || !self
+                    .store()
+                    .options()
+                    .supports_quota(info.tenant.memory_bytes, info.tenant.disk_bytes)
             {
                 return Err(Error::limit("checkpoint exceeds replica quota"));
             }

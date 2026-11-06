@@ -207,22 +207,14 @@ impl Store {
         let weak = Arc::downgrade(&inner);
         let worker_stop = stop.clone();
         let coordinator = thread::spawn(move || {
+            let mut next = 0;
             while !worker_stop.load(Ordering::Acquire) {
                 thread::sleep(Duration::from_millis(100));
                 let Some(inner) = weak.upgrade() else {
                     break;
                 };
-                let slots: Vec<_> = inner.slots.lock().values().cloned().collect();
-                for slot in slots {
-                    let Some(mut guard) = slot.try_lock() else {
-                        continue;
-                    };
-                    if guard.core.is_some() && !guard.queued {
-                        guard.queued = true;
-                        if sender.try_send(slot.clone()).is_err() {
-                            guard.queued = false;
-                        }
-                    }
+                if !enqueue_maintenance(&inner, &sender, &mut next) {
+                    break;
                 }
             }
         });
@@ -600,10 +592,7 @@ impl Store {
     }
     pub fn set_quota(&self, id: Uuid, memory_bytes: usize, disk_bytes: u64) -> Result<TenantInfo> {
         let _permission = self.owner.inner.node.write()?;
-        if memory_bytes < self.options().memtable_bytes * 4
-            || memory_bytes > self.options().global_memory_bytes
-            || disk_bytes < 1 << 20
-        {
+        if !self.options().supports_quota(memory_bytes, disk_bytes) {
             return Err(Error::invalid("quota bounds"));
         }
         let slot = self.slot(id);
@@ -714,6 +703,40 @@ impl Store {
     }
 }
 
+fn enqueue_maintenance(
+    inner: &Inner,
+    sender: &std::sync::mpsc::SyncSender<Arc<Mutex<Slot>>>,
+    next: &mut usize,
+) -> bool {
+    let slots: Vec<_> = inner.slots.lock().values().cloned().collect();
+    if slots.is_empty() {
+        return true;
+    }
+    let start = *next % slots.len();
+    for offset in 0..slots.len() {
+        let index = (start + offset) % slots.len();
+        let slot = &slots[index];
+        let Some(mut guard) = slot.try_lock() else {
+            continue;
+        };
+        if guard.core.is_none() || guard.queued {
+            continue;
+        }
+        guard.queued = true;
+        match sender.try_send(slot.clone()) {
+            Ok(()) => *next = (index + 1) % slots.len(),
+            Err(error) => {
+                guard.queued = false;
+                // Retry this tenant first instead of repeatedly filling the
+                // bounded queue from the beginning of the same HashMap order.
+                *next = index;
+                return matches!(error, std::sync::mpsc::TrySendError::Full(_));
+            }
+        }
+    }
+    true
+}
+
 fn maintain_tenant(inner: &Arc<Inner>, slot: &Arc<Mutex<Slot>>) {
     let Some(mut guard) = slot.try_lock() else {
         return;
@@ -774,6 +797,32 @@ fn maintain_tenant(inner: &Arc<Inner>, slot: &Arc<Mutex<Slot>>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_full_maintenance_queue_keeps_scheduling_later_tenants() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        store.owner.stop.store(true, Ordering::Release);
+        for worker in store.owner.workers.lock().drain(..) {
+            worker.join().unwrap();
+        }
+        for n in 0..160 {
+            let id = store.create_tenant(&format!("fair-{n}")).unwrap().id;
+            drop(store.tenant(id).unwrap());
+        }
+        let (sender, receiver) = std::sync::mpsc::sync_channel(128);
+        let mut next = 0;
+        let mut served = std::collections::HashSet::new();
+        for _ in 0..64 {
+            assert!(enqueue_maintenance(&store.owner.inner, &sender, &mut next));
+            for _ in 0..5 {
+                let slot = receiver.try_recv().unwrap();
+                let mut slot = slot.lock();
+                served.insert(slot.core.as_ref().unwrap().engine.info.id);
+                slot.queued = false;
+            }
+        }
+        assert_eq!(served.len(), 160, "repeated work starved later tenants");
+    }
     #[test]
     fn io_open_failures_are_cached_briefly_and_recover_without_manual_close() {
         use std::os::unix::fs::PermissionsExt;

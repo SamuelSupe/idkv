@@ -162,6 +162,8 @@ struct View {
 struct VersionSet {
     files: Vec<Arc<Table>>,
     levels: Vec<Vec<Arc<Table>>>,
+    level_bytes: Vec<u64>,
+    l0_pressure: usize,
     _memory: Reservation,
 }
 impl std::ops::Deref for VersionSet {
@@ -173,21 +175,26 @@ impl std::ops::Deref for VersionSet {
 impl VersionSet {
     fn new(files: Vec<Arc<Table>>, budget: &Budget) -> Result<Arc<Self>> {
         validate_levels(&files)?;
-        let memory = budget.reserve(files.len() * 64 + 256)?;
         let max_level = files.iter().map(|t| t.info.level).max().unwrap_or(0) as usize;
         if max_level > 16 {
             return Err(Error::corrupt("LSM level limit"));
         }
+        let memory = budget.reserve(files.len() * 64 + 256 + (max_level + 1) * 8)?;
         let mut levels = vec![Vec::new(); max_level + 1];
+        let mut level_bytes = vec![0u64; max_level + 1];
         for table in &files {
             levels[table.info.level as usize].push(table.clone());
+            level_bytes[table.info.level as usize] += table.info.size;
         }
         for level in &mut levels {
             level.sort_by(|a, b| a.info.first.cmp(&b.info.first));
         }
+        let l0_pressure = l0_pressure(&files);
         Ok(Arc::new(Self {
             files,
             levels,
+            level_bytes,
+            l0_pressure,
             _memory: memory,
         }))
     }
@@ -227,6 +234,10 @@ struct Writer {
     syncing: bool,
     poison: Option<Error>,
 }
+struct DiskInventory {
+    checked: Instant,
+    non_wal_bytes: u64,
+}
 
 pub struct Engine {
     pub info: TenantInfo,
@@ -251,6 +262,7 @@ pub struct Engine {
     snapshots: Mutex<BTreeMap<Uuid, Weak<Lease>>>,
     log_retention: Mutex<BTreeMap<Uuid, (u64, Option<Instant>)>>,
     disk: AtomicU64,
+    disk_inventory: Mutex<DiskInventory>,
     metrics: Metrics,
     closed: AtomicBool,
     recovery_required: AtomicBool,
@@ -371,6 +383,7 @@ impl Engine {
             cleanup_unreferenced(&path, &manifest, &budget)?;
         }
         let disk = directory_size(&path)?;
+        let non_wal_bytes = disk - active.as_ref().unwrap().file.metadata()?.len();
         let versions = VersionSet::new(tables, &budget)?;
         Ok(Arc::new(Self {
             info,
@@ -405,6 +418,10 @@ impl Engine {
             snapshots: Mutex::new(BTreeMap::new()),
             log_retention: Mutex::new(BTreeMap::new()),
             disk: AtomicU64::new(disk),
+            disk_inventory: Mutex::new(DiskInventory {
+                checked: Instant::now(),
+                non_wal_bytes,
+            }),
             metrics: Metrics::default(),
             closed: AtomicBool::new(false),
             recovery_required: AtomicBool::new(false),

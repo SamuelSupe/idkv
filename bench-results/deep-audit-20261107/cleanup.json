@@ -1,0 +1,9 @@
+{
+  "result": "passed",
+  "utc": "2026-11-06T18:33:01.679627+00:00",
+  "scope_prefix": "/var/tmp/idkv-audit-20261107-",
+  "remaining_server_processes": [],
+  "credential_files": [],
+  "loop_devices": [],
+  "mounts": []
+}

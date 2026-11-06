@@ -1,0 +1,12 @@
+   Compiling tenant-kv v0.10.1 (/var/tmp/idkv-audit-source-20261107)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.07s
+     Running tests/replication.rs (/var/tmp/tkv-20261104-target/debug/deps/replication-9a982e8f8cdf365a)
+
+running 1 test
+AUDIT equal quota=19MiB, 16 covering indexes, acknowledged seq=34, replica seq=33, failures=["RESOURCE_EXHAUSTED", "RESOURCE_EXHAUSTED", "RESOURCE_EXHAUSTED", "RESOURCE_EXHAUSTED"], reinitializations=0
+tenant 4f5e428c-75f2-4237-881e-a133fe5ae44b clean-close watermark: IO_ERROR: No such file or directory (os error 2)
+tenant 4f5e428c-75f2-4237-881e-a133fe5ae44b clean-close watermark: IO_ERROR: No such file or directory (os error 2)
+test audit_index_expansion_acknowledges_a_frame_the_equal_quota_replica_cannot_apply ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 25 filtered out; finished in 2.06s
+

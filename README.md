@@ -156,3 +156,5 @@ python3 scripts/replication_demo.py --binary target/release/tenant-kv --root /va
 可通过 `--config config.json` 覆盖 `Options` 的任意配置字段；未指定字段保留默认值。配置边界及预算含义见运维文档。
 
 针对外部报告的逐项核实、并发隔离与数据安全修复及回归边界，见[报告核实与修复](docs/review-remediation-20261106.md)。
+
+深度审查确认的复制、满盘启动、维护公平性、配额一致性和空闲开销问题，见[修复与验证](docs/deep-remediation-20261107.md)。
