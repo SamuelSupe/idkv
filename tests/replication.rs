@@ -62,6 +62,7 @@ struct Pair {
 #[derive(Default)]
 struct SnapshotGate {
     contexts: std::sync::atomic::AtomicUsize,
+    snapshots: std::sync::atomic::AtomicUsize,
     blocked: std::sync::atomic::AtomicBool,
     entered: tokio::sync::Notify,
     release: tokio::sync::Notify,
@@ -118,11 +119,13 @@ impl Pair {
                             gate.contexts
                                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         }
-                        if request.uri().path() == "/v1/replication/snapshot"
-                            && gate.blocked.load(std::sync::atomic::Ordering::Acquire)
-                        {
-                            gate.entered.notify_one();
-                            gate.release.notified().await;
+                        if request.uri().path() == "/v1/replication/snapshot" {
+                            gate.snapshots
+                                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            if gate.blocked.load(std::sync::atomic::Ordering::Acquire) {
+                                gate.entered.notify_one();
+                                gate.release.notified().await;
+                            }
                         }
                         next.run(request).await
                     }
@@ -311,6 +314,100 @@ async fn streams_atomic_indexes_deletes_and_switches_both_directions() {
         .unwrap();
     pair.catch_up(false).await;
     assert!(replica.get("assets", "d").unwrap().is_some());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn checkpoint_install_waits_for_readers_without_retransferring_and_other_tenants_progress() {
+    use std::sync::atomic::Ordering;
+    let gate = std::sync::Arc::new(SnapshotGate::default());
+    let pair = Pair::with_snapshot_gate(options(), Role::Replica, Some(gate.clone())).await;
+    let id = pair.a.create_tenant("reader-race").unwrap().id;
+    let tenant = pair.a.tenant(id).unwrap();
+    tenant.create_collection("docs").unwrap();
+    pair.catch_up(false).await;
+    let baseline = gate.snapshots.load(Ordering::Relaxed);
+    let old_reader = pair.b.tenant(id).unwrap();
+    for round in 0..16 {
+        tenant
+            .put(
+                "docs",
+                json!({"_key":"hot","value":round,"payload":"x".repeat(128<<10)}),
+                None,
+            )
+            .unwrap();
+        tenant.engine().flush().unwrap();
+        tenant.engine().compact(true).unwrap();
+    }
+    let until = Instant::now() + Duration::from_secs(1);
+    while Instant::now() < until {
+        let result = pair.sb.sync_once().await;
+        assert!(result.is_ok() || result.err().unwrap().code == "BUSY");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert_eq!(
+        gate.snapshots.load(Ordering::Relaxed),
+        baseline,
+        "downloaded before checking active readers"
+    );
+    assert!(
+        pair.sb.status().unwrap().initialization_attempts < 8,
+        "initialization had no backoff"
+    );
+    drop(old_reader);
+    gate.blocked.store(true, Ordering::Release);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while gate.snapshots.load(Ordering::Relaxed) == baseline {
+        let result = pair.sb.sync_once().await;
+        assert!(result.is_ok() || result.err().unwrap().code == "BUSY");
+        assert!(Instant::now() < deadline);
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    gate.entered.notified().await;
+    let raced_reader = pair.b.tenant(id).unwrap();
+    gate.blocked.store(false, Ordering::Release);
+    gate.release.notify_waiters();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !pair.sb.status().unwrap().waiting_for_readers.contains(&id) {
+        pair.sb.sync_once().await.unwrap();
+        assert!(
+            Instant::now() < deadline,
+            "did not retain the downloaded checkpoint"
+        );
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let downloads = gate.snapshots.load(Ordering::Relaxed);
+    let attempts = pair.sb.status().unwrap().initialization_attempts;
+    let healthy = pair.a.create_tenant("unblocked-initialization").unwrap().id;
+    pair.a
+        .tenant(healthy)
+        .unwrap()
+        .create_collection("docs")
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        pair.sb.sync_once().await.unwrap();
+        if pair.b.tenants().iter().any(|t| t.id == healthy) {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "waiting reader blocked another tenant initialization"
+        );
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert_eq!(gate.snapshots.load(Ordering::Relaxed), downloads + 1);
+    assert_eq!(
+        pair.sb.status().unwrap().initialization_attempts,
+        attempts + 1
+    );
+    assert!(pair.sb.status().unwrap().waiting_for_readers.contains(&id));
+    drop(raced_reader);
+    pair.catch_up(false).await;
+    assert_eq!(
+        pair.b.tenant(id).unwrap().get("docs", "hot").unwrap(),
+        tenant.get("docs", "hot").unwrap()
+    );
+    assert!(!pair.sb.status().unwrap().waiting_for_readers.contains(&id));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

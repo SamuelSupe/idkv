@@ -203,11 +203,22 @@ impl Engine {
             if retention != 0 {
                 manifest.retained_wals.append(&mut obsolete);
             }
-            let mut retained_bytes = manifest.retained_wals.iter().try_fold(0u64, |n, w| {
-                Ok::<_, Error>(
-                    n + fs::metadata(self.path.join("wal").join(format!("{}.wal", w.id)))?.len(),
-                )
-            })?;
+            let mut retained_sizes = BTreeMap::new();
+            for wal in std::mem::take(&mut manifest.retained_wals) {
+                match fs::metadata(self.path.join("wal").join(format!("{}.wal", wal.id))) {
+                    Ok(metadata) => {
+                        retained_sizes.insert(wal.id, metadata.len());
+                        manifest.retained_wals.push(wal);
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                        // Only checkpointed history is optional. Invalidate old
+                        // exports so LOG_GONE cannot reinstall the same stale copy.
+                        self.log_retention.lock().clear();
+                    }
+                    Err(error) => return Err(error.into()),
+                }
+            }
+            let mut retained_bytes: u64 = retained_sizes.values().sum();
             let mut floor = {
                 let mut leases = self.log_retention.lock();
                 leases.retain(|_, (_, expires)| {
@@ -232,8 +243,7 @@ impl Engine {
                     floor = None;
                 }
                 let old = manifest.retained_wals.remove(0);
-                retained_bytes -=
-                    fs::metadata(self.path.join("wal").join(format!("{}.wal", old.id)))?.len();
+                retained_bytes -= retained_sizes[&old.id];
                 obsolete.push(old);
             }
             if let Err(error) = publish(&self.path, &manifest) {
@@ -250,7 +260,12 @@ impl Engine {
             drop(view);
             drop(writer);
             for wal in obsolete {
-                fs::remove_file(self.path.join("wal").join(format!("{}.wal", wal.id)))?;
+                if let Err(error) =
+                    fs::remove_file(self.path.join("wal").join(format!("{}.wal", wal.id)))
+                    && error.kind() != std::io::ErrorKind::NotFound
+                {
+                    return Err(error.into());
+                }
             }
             sync_dir(&self.path.join("wal"))?;
             self.reconcile_disk_locked()?;
@@ -632,6 +647,62 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn missing_checkpointed_wal_does_not_block_flush_or_lose_current_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::Store::open(dir.path(), Options::default()).unwrap();
+        store
+            .configure_replication(&crate::replication::Config {
+                cluster: Uuid::new_v4(),
+                role: crate::replication::Role::Primary,
+                peer_url: "http://127.0.0.1:1".into(),
+                token_file: dir.path().join("unused"),
+                poll_ms: 10,
+                log_retention_bytes: 1 << 20,
+            })
+            .unwrap();
+        let id = store.create_tenant("missing-retained-wal").unwrap().id;
+        let tenant = store.tenant(id).unwrap();
+        let engine = tenant.engine();
+        engine
+            .transact(|tx| tx.put(b"Zone".to_vec(), b"first".to_vec()))
+            .unwrap();
+        engine.flush().unwrap();
+        let missing = engine.writer.lock().manifest.retained_wals[0].id;
+        fs::remove_file(engine.path.join("wal").join(format!("{missing}.wal"))).unwrap();
+        engine
+            .transact(|tx| tx.put(b"Ztwo".to_vec(), b"second".to_vec()))
+            .unwrap();
+        engine.flush().unwrap();
+        assert!(
+            engine
+                .writer
+                .lock()
+                .manifest
+                .retained_wals
+                .iter()
+                .all(|w| w.id != missing)
+        );
+        drop(tenant);
+        store.close_tenant(id).unwrap();
+        let tenant = store.tenant(id).unwrap();
+        let view = tenant.engine().snapshot().unwrap();
+        assert_eq!(
+            view.get(b"Zone", &mut ReadStats::default())
+                .unwrap()
+                .unwrap()
+                .as_slice(),
+            b"first"
+        );
+        assert_eq!(
+            view.get(b"Ztwo", &mut ReadStats::default())
+                .unwrap()
+                .unwrap()
+                .as_slice(),
+            b"second"
+        );
+    }
 
     #[test]
     fn disk_reconciliation_accounts_for_concurrent_wal_growth() {

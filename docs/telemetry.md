@@ -43,6 +43,8 @@ v0.10.1 的详细引擎统计 `scheduler.cancelled_jobs` 记录出队时跳过�
 
 可以在从库对 `increase(tkv_replication_reinitializations_total[15m]) >= 3` 持续 5 分钟告警，并结合失败计数、last_error 及实际源/副本位置检查日志窗口和传输吞吐；阈值需按租户数和部署条件调整。首次安装反复失败时还应监测初始化尝试与失败计数，不能只看重建计数。此处提供告警表达式，不自动安装监控规则。
 
+复制状态另有 initializing 和 waiting_for_readers 两个租户 UUID 列表。已下载检查点等待句柄释放时保持同一个任务，不重复增加初始化尝试/失败计数；下载前因活动句柄检查失败则计为失败并指数退避。sync_once 返回 Ok 不代表后台初始化已经完成，应结合这些状态及实际位置判断。
+
 链路采样为 ParentBased + TraceIdRatioBased，`sample_ratio` 只控制根链路，范围 0–1；上游采样决定会被保留。日志独立于链路采样。HTTP 层不会导出请求/响应正文、DSL 文本、文档键、Authorization 或任意 baggage；日志 subject 来自管理员配置，不接受请求自报。启动/退出消息仍输出到标准错误，数据库请求事件通过此日志开关导出。
 
 队列大小限制为每信号 16–65,536 条，默认 1,024；导出批次最多 256 条，正常每 500 ms 发送。采集端不可用、超时或队列满不会阻塞数据库请求；遥测可能丢弃，操作日志不能代替要求不丢记录的持久审计系统。SDK 队列内存由 queue_size 控制，不包含在引擎 memory_bytes 计数中。导出超时为 100–10,000 ms。SIGINT/SIGTERM 后先停止接收并排空请求，再限时关闭 exporter。HTTP 中断记录为 499；后台已开始的写入仍可能提交，应使用原 operation_id 查询式重试。

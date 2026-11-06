@@ -174,3 +174,33 @@ async fn failed_preparation_releases_the_slot_for_a_new_export() {
     service.expire_exports().unwrap();
     assert!(service.inner.exports.lock().garbage.is_empty());
 }
+
+#[tokio::test]
+async fn unwinding_checkpoint_preparation_releases_the_reserved_export() {
+    let (_dir, store, service) = primary(Options::default());
+    let info = store.create_tenant("panic-preparation").unwrap();
+    let state = store.replication_state();
+    let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let super::super::snapshot::Start::Build(preparation) = service
+            .inner
+            .exports
+            .lock()
+            .begin(&store, state.cluster, state.epoch, info.id)
+            .unwrap()
+        else {
+            panic!("expected reservation")
+        };
+        let _pending = PendingExport {
+            exports: &service.inner.exports,
+            preparation: Some(preparation),
+        };
+        panic!("injected preparation panic");
+    }));
+    assert!(unwound.is_err());
+    let snapshot = service
+        .snapshot(state.cluster, state.epoch, info.id)
+        .unwrap();
+    service.release_snapshot(snapshot.id).unwrap();
+    service.expire_exports().unwrap();
+    assert!(service.inner.exports.lock().garbage.is_empty());
+}

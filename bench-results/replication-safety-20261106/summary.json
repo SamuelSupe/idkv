@@ -1,0 +1,41 @@
+{
+  "result": "passed",
+  "tests_passed": 139,
+  "acknowledged_batches": 10951,
+  "acknowledged_document_operations": 166837,
+  "acknowledged_mismatches": 0,
+  "phases": [
+    {
+      "phase": "baseline",
+      "light_p99_ms": 12.732,
+      "heavy_p99_ms": 17.57,
+      "verified_backups": 0,
+      "overlap_intervals": 0
+    },
+    {
+      "phase": "combined",
+      "light_p99_ms": 12.301,
+      "heavy_p99_ms": 17.581,
+      "verified_backups": 4,
+      "overlap_intervals": 13
+    },
+    {
+      "phase": "recovery",
+      "light_p99_ms": 22.85,
+      "heavy_p99_ms": 41.841,
+      "verified_backups": 0,
+      "overlap_intervals": 5
+    }
+  ],
+  "fault_cases": 3,
+  "fault_confirmed_documents_preserved": 6000,
+  "source_files_verified": 103,
+  "binary_sha256": "168a8c97359e8ecab16bb1c20030eef3099c20e496027897cb2d09e6f1ae272c",
+  "switchover_comparison": {
+    "before_same_seq": true,
+    "before_same_data": false,
+    "after_same_seq": true,
+    "after_same_data": true,
+    "after_documents_per_node": 109
+  }
+}

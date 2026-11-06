@@ -512,7 +512,7 @@ impl Store {
             }
         }
         if let Some(core) = &slot.core {
-            slot.last_seq = Some(core.engine.seq());
+            slot.last_seq = core.engine.replication_position().ok();
         }
         slot.core = None;
         slot.failure = None;
@@ -694,7 +694,10 @@ fn maintain_tenant(inner: &Arc<Inner>, slot: &Arc<Mutex<Slot>>) {
                 && core.last_used.lock().elapsed()
                     >= Duration::from_secs(inner.options.idle_seconds)
         }) {
-            slot.last_seq = slot.core.as_ref().map(|core| core.engine.seq());
+            slot.last_seq = slot
+                .core
+                .as_ref()
+                .and_then(|core| core.engine.replication_position().ok());
             slot.core = None;
         }
     }

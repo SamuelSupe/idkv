@@ -61,7 +61,7 @@ OpenDAL 远端备份由 `--backup-config` 启用；配置、任务轮询、S3 �
 
 备份先建立一致 checkpoint，固定文件集合及已打开的文件描述符，在维护锁外复制并 fsync 后进行完整性校验。后续写入不属于该备份点，合并删除源文件名不会使已固定描述符失效。返回的本地备份 UUID 位于 `backups/<tenant>/<backup>`。
 
-恢复仅接受同租户、同持久数据库身份的备份。先复制到 staging 并检查，在该租户无活跃操作时持久记录恢复 journal，再将旧目录移到 trash、staging 切换为当前目录。Active 注册状态同步后，在注册表和复制屏障锁外清理旧目录。锁内只固定当时已存在、无 journal 引用的回收路径，避免误删其他并发恢复的新目录。中途重启按 journal 完成切换。恢复发布状态不确定时，该租户返回 UNAVAILABLE，必须重开 Store 后恢复；不能通过关闭单租户清除这一隔离状态。复制和校验期间该租户仍可读写；最终发布需释放句柄和快照，否则返回 BUSY 并丢弃本次暂存。复制按 256 KiB 作业进入共享 I/O 队列。其他租户可继续操作。运行中的生命周期清理不会删除其他租户尚未发布的 staging；启动时才清理这些遗留目录。
+恢复仅接受同租户、同持久数据库身份的备份。先复制到 staging 并检查，在该租户无活跃操作时持久记录恢复 journal，再将旧目录移到 trash、staging 切换为当前目录。Active 注册状态同步后，在注册表和复制屏障锁外清理旧目录。锁内只固定当时已存在、无 journal 引用的回收路径，避免误删其他并发恢复的新目录。中途重启按 journal 完成切换。恢复发布状态不确定时，该租户返回 UNAVAILABLE，必须重开 Store 后恢复；不能通过关闭单租户清除这一隔离状态。复制和校验期间该租户仍可读写；普通本地恢复最终发布需释放句柄和快照，否则返回 BUSY 并丢弃本次暂存。复制重建则保留下载副本并后台重试安装，详见复制文档。复制按 256 KiB 作业进入共享 I/O 队列。其他租户可继续操作。运行中的生命周期清理不会删除其他租户尚未发布的 staging；启动时才清理这些遗留目录。
 
 删除租户先持久发布 Deleting、rename 到 trash 并发布 Deleted，递归清理移到注册表及复制屏障锁外执行。恢复的复制、校验同样不持有复制屏障；最终发布重新验证角色和源 epoch。
 
@@ -87,7 +87,7 @@ v0.5.2 在发布删除 journal 前先关闭内存中的写入入口。发布或�
 
 后台并行引起的轻租户写尾延迟定位、备份进度同步优化及相同负载前后比较，见[尾延迟优化记录](tail-latency-optimization.md)。备份实时进度通过服务 API 查看，阶段和终态持久化；逐文件计数不会单独触发文件/目录同步。
 
-COMMIT_UNKNOWN 后不能继续写入该引擎。停止该租户访问、释放句柄、关闭后重新打开，回放 WAL，并核对条件版本。WAL 完整记录 CRC 错误、SST 校验失败或文件缺失需要从有效备份恢复，不能当作未命中。
+COMMIT_UNKNOWN 后不能继续写入该引擎。停止该租户访问、释放句柄、关闭后重新打开，回放并同步 WAL，并核对条件版本。WAL 完整记录 CRC 错误、SST 校验失败或文件缺失需要从有效备份恢复，不能当作未命中。 该错误也阻止生成计划切换凭据；关闭时不缓存旧序号，后续重新打开并恢复后才能重新判断完整位置。已刷盘保留 WAL 被外部删除时，后续 flush 会移除该历史引用、使旧导出租约失效并继续维护；落后副本通过 LOG_GONE 重建。活跃 WAL、SST 缺失或完整帧 CRC 错误仍拒绝恢复，不把业务数据损坏当作可忽略历史。
 
 状态接口包含 commit_seq、memory_bytes、disk_bytes、各层文件数、活动快照数、维护错误，以及进程内累计的 document_bytes、wal_bytes、flush_bytes、compaction_read_bytes、compaction_write_bytes、commits、WAL fsyncs、write_lock_wait_ns，以及 scheduler.completed_jobs、cancelled_jobs、queue_wait_ns、queued_jobs。调度计数在 Store 生命周期内按租户累计；其余引擎指标在重开后清零。读取统计的 blocks_read 表示引擎文件读取，不保证绕过操作系统页缓存；decompressed_bytes 是解压后的字节数。写放大可用 `(wal_bytes + flush_bytes + compaction_write_bytes) / document_bytes` 估算，必须注明区间、索引数和合并是否追平。
 

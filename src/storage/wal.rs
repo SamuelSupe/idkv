@@ -123,8 +123,10 @@ impl Wal {
         }
         if offset != length {
             file.set_len(offset)?;
-            file.sync_all()?;
         }
+        // A complete tail can come from COMMIT_UNKNOWN and still exist only in
+        // the page cache. Persist it before recovery publishes its sequence.
+        file.sync_all()?;
         file.seek(SeekFrom::End(0))?;
         Ok(Self {
             info: info.clone(),

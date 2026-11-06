@@ -416,6 +416,71 @@ impl Transaction<'_> {
 mod tests {
     use super::*;
     #[test]
+    fn uncertain_wal_tail_cannot_be_fenced_or_cached_as_the_old_position() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::Store::open(dir.path(), Options::default()).unwrap();
+        let cluster = Uuid::new_v4();
+        store
+            .configure_replication(&crate::replication::Config {
+                cluster,
+                role: crate::replication::Role::Primary,
+                peer_url: "http://127.0.0.1:1".into(),
+                token_file: dir.path().join("unused"),
+                poll_ms: 10,
+                log_retention_bytes: 1 << 20,
+            })
+            .unwrap();
+        let tenant = store
+            .tenant(store.create_tenant("uncertain-tail").unwrap().id)
+            .unwrap();
+        let id = tenant.info().id;
+        let engine = tenant.engine();
+        let committed = engine.seq();
+        let seq = committed + 1;
+        let records = vec![Record {
+            key: b"Zunknown".to_vec(),
+            seq,
+            value: Some(Arc::new(Bytes::new(b"complete-frame".to_vec()))),
+            prefix_len: 0,
+        }];
+        let mut writer = engine.writer.lock();
+        writer
+            .wal
+            .append(wal::encode(seq, &records).unwrap(), &engine.io, id)
+            .unwrap();
+        writer.staged = seq;
+        writer.poison = Some(Error::new(
+            "COMMIT_UNKNOWN",
+            "simulated fsync failure after complete append",
+        ));
+        drop(writer);
+        assert_eq!(
+            store.fence_primary(Uuid::new_v4()).unwrap_err().code,
+            "COMMIT_UNKNOWN"
+        );
+        drop(tenant);
+        store.close_tenant(id).unwrap();
+        let state = store.replication_state();
+        let page = store
+            .export_logs(&crate::replication::LogRequest {
+                protocol: crate::replication::PROTOCOL,
+                cluster,
+                epoch: state.epoch,
+                tenant: id,
+                generation: store.tenants()[0].generation,
+                after: committed,
+                cursor: None,
+            })
+            .unwrap();
+        assert_eq!(
+            page.through, seq,
+            "cold fast path hid the recoverable frame"
+        );
+        let fence = store.fence_primary(Uuid::new_v4()).unwrap();
+        assert_eq!(fence.tenants[0].seq, seq);
+    }
+
+    #[test]
     fn index_admission_waits_for_compaction_before_running_the_transaction_once() {
         let dir = tempfile::tempdir().unwrap();
         let store = crate::Store::open(

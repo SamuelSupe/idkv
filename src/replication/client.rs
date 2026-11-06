@@ -33,6 +33,10 @@ pub struct Status {
     pub initialization_failures: u64,
     #[serde(default)]
     pub reinitializations: u64,
+    #[serde(default)]
+    pub initializing: Vec<Uuid>,
+    #[serde(default)]
+    pub waiting_for_readers: Vec<Uuid>,
 }
 #[derive(Clone, Serialize, Deserialize)]
 pub struct UnavailableTenant {
@@ -53,6 +57,8 @@ struct Progress {
     initialization_attempts: u64,
     initialization_failures: u64,
     reinitializations: u64,
+    initialization_backoff: HashMap<Uuid, Duration>,
+    waiting_for_readers: HashSet<Uuid>,
 }
 struct Inner {
     store: Store,
@@ -67,6 +73,21 @@ struct Inner {
 #[derive(Clone)]
 pub struct Service {
     inner: Arc<Inner>,
+}
+
+struct PendingExport<'a> {
+    exports: &'a Mutex<Exports>,
+    preparation: Option<super::snapshot::Preparation>,
+}
+impl Drop for PendingExport<'_> {
+    fn drop(&mut self) {
+        if let Some(preparation) = self.preparation.take() {
+            let _ = self.exports.lock().finish(
+                preparation,
+                Err(Error::new("INTERNAL", "checkpoint preparation interrupted")),
+            );
+        }
+    }
 }
 
 pub(super) struct Received<T> {
@@ -154,6 +175,8 @@ impl Service {
                     initialization_attempts: 0,
                     initialization_failures: 0,
                     reinitializations: 0,
+                    initialization_backoff: HashMap::new(),
+                    waiting_for_readers: HashSet::new(),
                 }),
             }),
         })
@@ -197,6 +220,8 @@ impl Service {
             initialization_attempts: progress.initialization_attempts,
             initialization_failures: progress.initialization_failures,
             reinitializations: progress.reinitializations,
+            initializing: progress.initializing.keys().copied().collect(),
+            waiting_for_readers: progress.waiting_for_readers.iter().copied().collect(),
         })
     }
     pub fn start(&self) -> tokio::task::JoinHandle<()> {
@@ -251,6 +276,7 @@ impl Service {
         for task in tasks {
             let _ = task.await;
         }
+        self.inner.progress.lock().waiting_for_readers.clear();
     }
     pub(super) async fn request<T: DeserializeOwned>(
         &self,
@@ -361,6 +387,9 @@ impl Service {
             progress.cursors.retain(|id, _| active.contains(id));
             progress.confirmed.retain(|id, _| active.contains(id));
             progress.retry_at.retain(|id, _| active.contains(id));
+            progress
+                .initialization_backoff
+                .retain(|id, _| active.contains(id));
         }
         let mut failure = blocked.values().next().cloned().or_else(|| {
             upstream.unavailable.first().map(|t| {
@@ -381,18 +410,28 @@ impl Service {
         };
         for id in finished {
             let task = self.inner.progress.lock().initializing.remove(&id).unwrap();
-            if let Err(error) = task.await.unwrap_or_else(|_| {
+            let result = task.await.unwrap_or_else(|_| {
                 Err(Error::new(
                     "INTERNAL",
                     "replica initialization worker failed",
                 ))
-            }) {
-                let mut progress = self.inner.progress.lock();
+            });
+            let mut progress = self.inner.progress.lock();
+            progress.waiting_for_readers.remove(&id);
+            if let Err(error) = result {
                 progress.initialization_failures += 1;
+                let delay = *progress
+                    .initialization_backoff
+                    .entry(id)
+                    .or_insert(Duration::from_millis(100));
+                progress.retry_at.insert(id, Instant::now() + delay);
                 progress
-                    .retry_at
-                    .insert(id, Instant::now() + Duration::from_millis(100));
+                    .initialization_backoff
+                    .insert(id, (delay * 2).min(Duration::from_secs(30)));
                 failure.get_or_insert(error);
+            } else {
+                progress.initialization_backoff.remove(&id);
+                progress.retry_at.remove(&id);
             }
         }
         let started = Instant::now();
@@ -605,9 +644,28 @@ impl Service {
         match start {
             super::snapshot::Start::Ready(info) => Ok(info),
             super::snapshot::Start::Build(preparation) => {
-                let result = preparation.create(&self.inner.store);
-                self.inner.exports.lock().finish(preparation, result)
+                let mut pending = PendingExport {
+                    exports: &self.inner.exports,
+                    preparation: Some(preparation),
+                };
+                let result = pending
+                    .preparation
+                    .as_ref()
+                    .unwrap()
+                    .create(&self.inner.store);
+                self.inner
+                    .exports
+                    .lock()
+                    .finish(pending.preparation.take().unwrap(), result)
             }
+        }
+    }
+    pub(super) fn waiting_for_readers(&self, tenant: Uuid, waiting: bool) {
+        let mut progress = self.inner.progress.lock();
+        if waiting {
+            progress.waiting_for_readers.insert(tenant);
+        } else {
+            progress.waiting_for_readers.remove(&tenant);
         }
     }
     pub fn snapshot_chunk(&self, id: Uuid, file: usize, offset: u64) -> Result<String> {
@@ -673,6 +731,8 @@ impl Service {
             let mut progress = self.inner.progress.lock();
             progress.cursors.clear();
             progress.confirmed.clear();
+            progress.initialization_backoff.clear();
+            progress.retry_at.clear();
         }
         Ok(state)
     }
@@ -738,6 +798,8 @@ impl Service {
             let mut progress = self.inner.progress.lock();
             progress.cursors.clear();
             progress.confirmed.clear();
+            progress.initialization_backoff.clear();
+            progress.retry_at.clear();
         }
         Ok(state)
     }

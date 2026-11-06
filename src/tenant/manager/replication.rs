@@ -103,14 +103,14 @@ impl Store {
                 return Err(error.clone());
             }
             if let Some(core) = &guard.core {
-                return Ok(core.engine.seq());
+                return core.engine.replication_position();
             }
             if let Some(seq) = guard.last_seq {
                 return Ok(seq);
             }
         }
         let (handle, opened) = self.tenant_with_open_marker(id)?;
-        let seq = handle.engine().seq();
+        let seq = handle.engine().replication_position()?;
         let runtime = handle.engine().runtime_id;
         slot.lock().last_seq = Some(seq);
         drop(handle);
@@ -357,7 +357,14 @@ impl Store {
                 });
             }
         }
-        self.tenant(request.tenant)?.engine().log_page(request)
+        let (handle, opened) = self.tenant_with_open_marker(request.tenant)?;
+        let runtime = handle.engine().runtime_id;
+        let page = handle.engine().log_page(request);
+        drop(handle);
+        if let Some(touched) = opened {
+            let _ = self.close_unmodified_tenant(request.tenant, runtime, touched);
+        }
+        page
     }
 
     pub(crate) fn install_replica(
@@ -372,6 +379,19 @@ impl Store {
             let _permission = self.owner.inner.node.replica_write(source)?;
             self.import_checkpoint_inner(path, info)
         }
+    }
+
+    pub(crate) fn check_replica_install(&self, source: &Source, id: Uuid) -> Result<()> {
+        let _permission = self.owner.inner.node.replica_write(source)?;
+        if !self.contains_tenant(id) {
+            return Ok(());
+        }
+        let slot = self.slot(id);
+        let mut slot = slot.lock();
+        if slot.restoring {
+            return Err(Error::new("BUSY", "tenant restore preparation is active"));
+        }
+        self.close_slot(&mut slot)
     }
 
     pub(crate) fn replica_catalog(
@@ -425,6 +445,9 @@ impl Store {
         }
         let slot = self.slot(info.id);
         let mut slot = slot.lock();
+        if slot.restoring {
+            return Err(Error::new("BUSY", "tenant restore preparation is active"));
+        }
         let mut registry = self.owner.inner.registry.write();
         let current = registry.tenants.get(&info.id).unwrap();
         if current.info.generation != info.generation
@@ -457,5 +480,56 @@ impl Store {
             info,
         )?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn replica_quota_updates_wait_until_restore_preparation_finishes() {
+        let a = tempfile::tempdir().unwrap();
+        let b = tempfile::tempdir().unwrap();
+        let primary = Store::open(a.path(), Options::default()).unwrap();
+        let replica = Store::open(b.path(), Options::default()).unwrap();
+        let cluster = Uuid::new_v4();
+        for (store, role) in [(&primary, Role::Primary), (&replica, Role::Replica)] {
+            store
+                .configure_replication(&Config {
+                    cluster,
+                    role,
+                    peer_url: "http://127.0.0.1:1".into(),
+                    token_file: a.path().join("unused"),
+                    poll_ms: 10,
+                    log_retention_bytes: 1 << 20,
+                })
+                .unwrap();
+        }
+        let source = replica.bind_source(&primary.replication_state()).unwrap();
+        let mut info = primary.create_tenant("quota-race").unwrap();
+        let checkpoint = a.path().join("checkpoint");
+        primary
+            .tenant(info.id)
+            .unwrap()
+            .engine()
+            .checkpoint(&checkpoint)
+            .unwrap();
+        replica
+            .install_replica(&source, &checkpoint, info.clone())
+            .unwrap();
+        let old_disk = info.disk_bytes;
+        info.disk_bytes *= 2;
+        replica.slot(info.id).lock().restoring = true;
+        assert_eq!(
+            replica
+                .update_replica_quota(&source, &info)
+                .unwrap_err()
+                .code,
+            "BUSY"
+        );
+        assert_eq!(replica.tenants()[0].disk_bytes, old_disk);
+        replica.slot(info.id).lock().restoring = false;
+        replica.update_replica_quota(&source, &info).unwrap();
+        assert_eq!(replica.tenants()[0].disk_bytes, info.disk_bytes);
     }
 }

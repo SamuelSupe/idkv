@@ -1,0 +1,26 @@
+{
+  "result": "passed",
+  "binary_sha256": "4fd0333ce5f8ad6764cac08afe5228df53d28324eaed75560c35bb8454ddf6b7",
+  "fault": "COMMIT_UNKNOWN",
+  "new_primary_ack_rev": 8,
+  "nodes": [
+    {
+      "node": 0,
+      "documents": 108,
+      "sha256": "5f62a8f9654d867665a963426ba036f02e6f5ed330cd719906f0c842642dacb0",
+      "acknowledged_mismatches": 1,
+      "uncertain_documents": 8,
+      "applied_seq": 8
+    },
+    {
+      "node": 1,
+      "documents": 101,
+      "sha256": "ed40ea18c588d717887f6fc046e78ea2e402e947c702b4c1527fb4ac8b92ab44",
+      "acknowledged_mismatches": 0,
+      "uncertain_documents": 0,
+      "applied_seq": 8
+    }
+  ],
+  "same_reported_position": true,
+  "same_data": false
+}

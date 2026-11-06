@@ -423,6 +423,13 @@ impl Engine {
     pub fn seq(&self) -> u64 {
         self.committed.load(Ordering::Acquire)
     }
+    pub(crate) fn replication_position(&self) -> Result<u64> {
+        let writer = self.writer.lock();
+        if let Some(error) = &writer.poison {
+            return Err(error.clone());
+        }
+        Ok(self.seq())
+    }
     pub(crate) fn wait_progress(&self, observed: u64, timeout: Duration) {
         let mut progress = self.progress.lock();
         if self.seq() == observed {

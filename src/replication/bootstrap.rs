@@ -47,6 +47,9 @@ impl Service {
             }
         };
         check_cancelled()?;
+        // Do not ask the source to copy an entire tenant which cannot currently
+        // be replaced. A later reader race is handled using the downloaded copy.
+        self.store().check_replica_install(source, tenant)?;
         let state = self.store().replication_state();
         let info: super::client::Received<super::snapshot::SnapshotInfo> = self
             .request(
@@ -151,11 +154,44 @@ impl Service {
                 }
                 drop(check);
                 check_cancelled()?;
-                store.install_replica(source, &path, tenant_info)?;
+                // The verified checkpoint is durable locally. Hand off the source
+                // slot now; only its WAL pin is needed while readers drain.
+                let mut probed = std::time::Instant::now();
+                let probe = || {
+                    self.request::<super::LogPage>(
+                        "/v1/replication/log",
+                        Some(json!({"protocol":super::PROTOCOL,"cluster":state.cluster,
+                    "epoch":source.epoch,"tenant":tenant,"generation":info.tenant.generation,
+                    "after":position})),
+                    )
+                };
+                probe().await?;
+                loop {
+                    check_cancelled()?;
+                    let installed = store
+                        .check_replica_install(source, tenant)
+                        .and_then(|_| store.install_replica(source, &path, tenant_info.clone()));
+                    match installed {
+                        Ok(()) => {
+                            self.waiting_for_readers(tenant, false);
+                            break;
+                        }
+                        Err(error) if error.code == "BUSY" => {
+                            self.waiting_for_readers(tenant, true);
+                            if probed.elapsed() >= std::time::Duration::from_secs(30) {
+                                probe().await?;
+                                probed = std::time::Instant::now();
+                            }
+                            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                        }
+                        Err(error) => return Err(error),
+                    }
+                }
             }
             Ok::<_, Error>(())
         }
         .await;
+        self.waiting_for_readers(tenant, false);
         if result.is_ok() {
             // The source hands off its export slot when it observes our durable
             // position, even if this process later restarts and forgets all IDs.
