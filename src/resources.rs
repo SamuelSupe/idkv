@@ -264,7 +264,9 @@ impl IoScheduler {
         f: impl FnOnce() -> Result<T> + Send + 'static,
     ) -> Result<IoTask<T>> {
         let mut q = self.inner.queue.lock();
-        if q.stopped || q.count >= 4096 {
+        // Reads have a bounded backlog. Durable work is already bounded by its
+        // submitting writers and must not be rejected by another tenant's reads.
+        if q.stopped || (abandoned.is_some() && q.count >= 4096) {
             return Err(Error::limit("I/O queue unavailable"));
         }
         let stats = q.stats.entry(tenant).or_default().clone();

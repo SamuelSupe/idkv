@@ -59,6 +59,13 @@ struct Pair {
     servers: Vec<tokio::task::JoinHandle<()>>,
     _dirs: Vec<tempfile::TempDir>,
 }
+#[derive(Default)]
+struct SnapshotGate {
+    contexts: std::sync::atomic::AtomicUsize,
+    blocked: std::sync::atomic::AtomicBool,
+    entered: tokio::sync::Notify,
+    release: tokio::sync::Notify,
+}
 impl Drop for Pair {
     fn drop(&mut self) {
         for server in &self.servers {
@@ -74,6 +81,13 @@ impl Pair {
         Self::with_replica_role(options, Role::Replica).await
     }
     async fn with_replica_role(options: Options, replica_role: Role) -> Self {
+        Self::with_snapshot_gate(options, replica_role, None).await
+    }
+    async fn with_snapshot_gate(
+        options: Options,
+        replica_role: Role,
+        gate: Option<std::sync::Arc<SnapshotGate>>,
+    ) -> Self {
         let da = tempfile::tempdir().unwrap();
         let db = tempfile::tempdir().unwrap();
         let a = Store::open(da.path(), options.clone()).unwrap();
@@ -93,7 +107,28 @@ impl Pair {
             config(db.path(), cluster, replica_role, ua.clone()),
         )
         .unwrap();
-        let appa = http::app_with_replication(a.clone(), auth(), None, Some(sa.clone())).unwrap();
+        let mut appa =
+            http::app_with_replication(a.clone(), auth(), None, Some(sa.clone())).unwrap();
+        if let Some(gate) = gate {
+            appa = appa.layer(axum::middleware::from_fn(
+                move |request: axum::extract::Request, next: axum::middleware::Next| {
+                    let gate = gate.clone();
+                    async move {
+                        if request.uri().path().ends_with("/context") {
+                            gate.contexts
+                                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        }
+                        if request.uri().path() == "/v1/replication/snapshot"
+                            && gate.blocked.load(std::sync::atomic::Ordering::Acquire)
+                        {
+                            gate.entered.notify_one();
+                            gate.release.notified().await;
+                        }
+                        next.run(request).await
+                    }
+                },
+            ));
+        }
         let appb = http::app_with_replication(b.clone(), auth(), None, Some(sb.clone())).unwrap();
         let servers = vec![
             tokio::spawn(async move {
@@ -276,6 +311,130 @@ async fn streams_atomic_indexes_deletes_and_switches_both_directions() {
         .unwrap();
     pair.catch_up(false).await;
     assert!(replica.get("assets", "d").unwrap().is_some());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn slow_checkpoint_initialization_does_not_hold_healthy_replication_cycles() {
+    let gate = std::sync::Arc::new(SnapshotGate::default());
+    let pair = Pair::with_snapshot_gate(options(), Role::Replica, Some(gate.clone())).await;
+    let good = pair.a.create_tenant("incremental").unwrap().id;
+    pair.a
+        .tenant(good)
+        .unwrap()
+        .create_collection("docs")
+        .unwrap();
+    pair.catch_up(false).await;
+    gate.blocked
+        .store(true, std::sync::atomic::Ordering::Release);
+    let slow = pair.a.create_tenant("slow-checkpoint").unwrap().id;
+    pair.a
+        .tenant(slow)
+        .unwrap()
+        .create_collection("docs")
+        .unwrap();
+    let cycle = tokio::time::timeout(Duration::from_secs(2), pair.sb.sync_once()).await;
+    let entered = tokio::time::timeout(Duration::from_secs(2), gate.entered.notified()).await;
+    pair.a
+        .tenant(good)
+        .unwrap()
+        .put("docs", json!({"_key":"ack","value":42}), None)
+        .unwrap();
+    let healthy = tokio::time::timeout(Duration::from_secs(2), pair.sb.sync_once()).await;
+    let observed = pair.b.tenant(good).unwrap().get("docs", "ack").unwrap();
+    gate.blocked
+        .store(false, std::sync::atomic::Ordering::Release);
+    gate.release.notify_waiters();
+    assert!(cycle.unwrap().is_ok());
+    assert!(entered.is_ok());
+    assert!(healthy.unwrap().is_ok());
+    assert_eq!(observed.unwrap()["value"], 42);
+    pair.catch_up(false).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn cloned_clients_reuse_primary_discovery_for_sequential_writes() {
+    let observed = std::sync::Arc::new(SnapshotGate::default());
+    let pair = Pair::with_snapshot_gate(options(), Role::Replica, Some(observed.clone())).await;
+    let id = pair.a.create_tenant("cached-writes").unwrap().id;
+    pair.a
+        .tenant(id)
+        .unwrap()
+        .create_collection("docs")
+        .unwrap();
+    pair.catch_up(false).await;
+    let client =
+        tenant_kv::client::Client::new(&[pair.ua.clone(), pair.ub.clone()], ADMIN.into(), id)
+            .unwrap();
+    for n in 0..5 {
+        client
+            .clone()
+            .write_batch(
+                "docs",
+                vec![WriteOp::Put {
+                    document: json!({"_key":n.to_string()}),
+                    if_rev: None,
+                }],
+                WriteOptions::default(),
+            )
+            .await
+            .unwrap();
+    }
+    assert_eq!(
+        observed.contexts.load(std::sync::atomic::Ordering::Relaxed),
+        1
+    );
+    pair.catch_up(false).await;
+    for n in 0..5 {
+        assert!(
+            pair.b
+                .tenant(id)
+                .unwrap()
+                .get("docs", &n.to_string())
+                .unwrap()
+                .is_some()
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn checkpoint_transfer_pins_wal_beyond_the_retention_byte_window() {
+    let pair = Pair::with_options(Options {
+        l0_stop: 128,
+        ..options()
+    })
+    .await;
+    let info = pair.a.create_tenant("pinned-transfer").unwrap();
+    let tenant = pair.a.tenant(info.id).unwrap();
+    let state = pair.a.replication_state();
+    let snapshot = pair
+        .sa
+        .snapshot(state.cluster, state.epoch, info.id)
+        .unwrap();
+    for n in 0..32u64 {
+        tenant
+            .engine()
+            .transact(|tx| tx.put(format!("Z{n:04}").into_bytes(), vec![42; 64 << 10]))
+            .unwrap();
+        tenant.engine().flush().unwrap();
+    }
+    let request = tenant_kv::replication::LogRequest {
+        protocol: tenant_kv::replication::PROTOCOL,
+        cluster: state.cluster,
+        epoch: state.epoch,
+        tenant: info.id,
+        generation: info.generation,
+        after: snapshot.position,
+        cursor: None,
+    };
+    let page = pair.sa.export_log(&request).unwrap();
+    assert!(page.through > snapshot.position);
+    pair.sa.release_snapshot(snapshot.id).unwrap();
+    tenant
+        .engine()
+        .transact(|tx| tx.put(b"Zlast".to_vec(), vec![43; 64 << 10]))
+        .unwrap();
+    tenant.engine().flush().unwrap();
+    assert_eq!(pair.sa.export_log(&request).err().unwrap().code, "LOG_GONE");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -612,6 +771,7 @@ async fn busy_catalog_tenant_does_not_stall_healthy_replication() {
     }
     pair.catch_up(false).await;
     let held = pair.b.tenant(busy).unwrap();
+    close(&pair.a, busy).await;
     pair.a.delete_tenant(busy).unwrap();
     pair.a
         .tenant(good)

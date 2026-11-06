@@ -87,7 +87,10 @@ impl crate::TenantHandle {
                     "replica has not applied the requested transaction",
                 ));
             }
-            std::thread::sleep(std::time::Duration::from_millis(2));
+            self.engine().wait_progress(
+                applied,
+                deadline.saturating_duration_since(std::time::Instant::now()),
+            );
         }
     }
 }

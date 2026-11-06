@@ -1,0 +1,31 @@
+{
+  "before_after_restart_hashes_equal": true,
+  "interrupted_job_state_at_crash": "checkpointing",
+  "same_job_after_restart": {
+    "id": "a535b869-ee9b-4e6e-b936-c7a46d8abf22",
+    "tenant": "fd833b62-65a6-44fe-a762-c66574a98d9e",
+    "backup": "0c62499d-e5e9-4c4c-acf3-e5239ed07e4d",
+    "operation": {
+      "operation": "create"
+    },
+    "state": "completed",
+    "created_ms": 1793942376197,
+    "updated_ms": 1793942391237,
+    "uploaded_bytes": 93418220,
+    "reused_bytes": 10322510,
+    "processed_files": 182,
+    "checkpoint_seq": 35009,
+    "result": {
+      "backup": "0c62499d-e5e9-4c4c-acf3-e5239ed07e4d",
+      "checkpoint_ms": 1793942376702,
+      "checkpoint_seq": 35009,
+      "files": 182,
+      "generation": "b7abfbd0-bb31-49a8-893a-b59a50c5dace",
+      "tenant": "fd833b62-65a6-44fe-a762-c66574a98d9e",
+      "total_bytes": 103740730
+    },
+    "error": null
+  },
+  "gc_drained": true,
+  "remaining_collections": 3
+}

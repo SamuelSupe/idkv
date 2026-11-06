@@ -11,11 +11,42 @@ use std::{
     fs::{self, OpenOptions},
     io::Write,
     path::PathBuf,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 use uuid::Uuid;
 
 impl Service {
     pub(super) async fn initialize(&self, source: &Source, tenant: Uuid) -> Result<()> {
+        let service = self.clone();
+        let source = source.clone();
+        let runtime = tokio::runtime::Handle::current();
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let _cancel = CancelTransfer(cancelled.clone());
+        // File creation, hashing, fsync and cleanup all run on this bounded
+        // transfer worker. HTTP futures still use the runtime's network driver.
+        tokio::task::spawn_blocking(move || {
+            runtime.block_on(service.receive_checkpoint(&source, tenant, &cancelled))
+        })
+        .await
+        .map_err(|_| Error::new("INTERNAL", "replica transfer worker failed"))?
+    }
+    async fn receive_checkpoint(
+        &self,
+        source: &Source,
+        tenant: Uuid,
+        cancelled: &AtomicBool,
+    ) -> Result<()> {
+        let check_cancelled = || {
+            if cancelled.load(Ordering::Acquire) {
+                Err(Error::new("CANCELLED", "replica transfer stopped"))
+            } else {
+                Ok(())
+            }
+        };
+        check_cancelled()?;
         let state = self.store().replication_state();
         let info: super::client::Received<super::snapshot::SnapshotInfo> = self
             .request(
@@ -62,6 +93,7 @@ impl Service {
                 return Err(Error::limit("checkpoint staging free space"));
             }
             for (index, file) in info.files.iter().enumerate() {
+                check_cancelled()?;
                 let mut output = OpenOptions::new()
                     .create_new(true)
                     .write(true)
@@ -69,6 +101,7 @@ impl Service {
                 let mut offset = 0u64;
                 let mut digest = Sha256::new();
                 while offset < file.size {
+                    check_cancelled()?;
                     let chunk: super::client::Received<Value> = self
                         .request(
                             "/v1/replication/snapshot/chunk",
@@ -100,14 +133,10 @@ impl Service {
             sync_dir(&path.join("sst"))?;
             sync_dir(&path.join("wal"))?;
             sync_dir(&path)?;
-            let store = self.store().clone();
-            let source = source.clone();
             let position = info.position;
             let tenant_info = info.tenant.clone();
-            tokio::task::spawn_blocking(move || {
-                // Installation is not cancelable once this worker starts. Its
-                // staging directory must outlive a canceled network task.
-                let _cleanup = _cleanup;
+            {
+                let store = self.store();
                 let (budget, io) = store.import_context();
                 let check = Engine::open(
                     path.clone(),
@@ -121,21 +150,42 @@ impl Service {
                     return Err(Error::corrupt("checkpoint position mismatch"));
                 }
                 drop(check);
-                store.install_replica(&source, &path, tenant_info)
-            })
-            .await
-            .map_err(|_| Error::new("INTERNAL", "replication checkpoint worker failed"))??;
+                check_cancelled()?;
+                store.install_replica(source, &path, tenant_info)?;
+            }
             Ok::<_, Error>(())
         }
         .await;
-        let released: Result<super::client::Received<Value>> = self
-            .request(
-                "/v1/replication/snapshot/release",
-                Some(json!({"id":info.id})),
-            )
-            .await;
-        result?;
-        released.map(|_| ())
+        if result.is_ok() {
+            // The snapshot position can be far behind the head after a large
+            // transfer. Keep its WAL lease until incremental catch-up completes.
+            self.hold_transfer(tenant, info.id);
+            let head: Result<super::client::Received<super::client::Status>> =
+                self.request("/v1/replication/status", None).await;
+            if let Ok(head) = head
+                && head.node.epoch == source.epoch
+                && head
+                    .tenants
+                    .iter()
+                    .any(|entry| entry.info.id == tenant && entry.seq <= info.position)
+            {
+                self.finish_transfer(tenant).await?;
+            }
+        } else {
+            let _: Result<super::client::Received<Value>> = self
+                .request(
+                    "/v1/replication/snapshot/release",
+                    Some(json!({"id":info.id})),
+                )
+                .await;
+        }
+        result
+    }
+}
+struct CancelTransfer(Arc<AtomicBool>);
+impl Drop for CancelTransfer {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Release);
     }
 }
 struct ImportCleanup(PathBuf);

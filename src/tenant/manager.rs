@@ -43,7 +43,9 @@ struct Registry {
 }
 mod lifecycle;
 mod replication;
-use lifecycle::{clean_lifecycle_debris, recover_lifecycle};
+use lifecycle::{
+    clean_lifecycle_debris, collect_lifecycle_debris, recover_lifecycle, remove_lifecycle_debris,
+};
 
 struct Slot {
     last_seq: Option<u64>,
@@ -206,7 +208,9 @@ impl Store {
                 };
                 let slots: Vec<_> = inner.slots.lock().values().cloned().collect();
                 for slot in slots {
-                    let mut guard = slot.lock();
+                    let Some(mut guard) = slot.try_lock() else {
+                        continue;
+                    };
                     if guard.core.is_some() && !guard.queued {
                         guard.queued = true;
                         if sender.try_send(slot.clone()).is_err() {
@@ -217,6 +221,32 @@ impl Store {
             }
         });
         workers.insert(0, coordinator);
+        let weak = Arc::downgrade(&inner);
+        let build_stop = stop.clone();
+        // Recovery builds have a separate, single bounded worker. A large index
+        // must not consume all flush/compaction workers for other tenants.
+        workers.push(thread::spawn(move || {
+            while !build_stop.load(Ordering::Acquire) {
+                thread::sleep(Duration::from_millis(100));
+                let Some(inner) = weak.upgrade() else { break };
+                if !inner.node.writable() {
+                    continue;
+                }
+                let slots: Vec<_> = inner.slots.lock().values().cloned().collect();
+                for slot in slots {
+                    if build_stop.load(Ordering::Acquire) {
+                        break;
+                    }
+                    let core = slot.try_lock().and_then(|slot| slot.core.clone());
+                    if let Some(core) = core {
+                        let handle = TenantHandle { core };
+                        if let Err(error) = handle.restart_interrupted_build(&build_stop) {
+                            *handle.engine().maintenance_error.lock() = Some(error.to_string());
+                        }
+                    }
+                }
+            }
+        }));
         Ok(Self {
             owner: Arc::new(Owner {
                 inner,
@@ -331,7 +361,13 @@ impl Store {
         {
             return Err(Error::new("ALREADY_EXISTS", "tenant name"));
         }
-        if registry.tenants.len() >= 16_384 {
+        if registry
+            .tenants
+            .values()
+            .filter(|r| !matches!(r.lifecycle, Lifecycle::Deleted))
+            .count()
+            >= 16_384
+        {
             return Err(Error::limit("tenant registry limit"));
         }
         let info = TenantInfo {
@@ -411,6 +447,7 @@ impl Store {
                         cursors: Mutex::new(HashMap::new()),
                         plans: Mutex::new(HashMap::new()),
                         builds: Mutex::new(HashSet::new()),
+                        recovery_catalog: std::sync::atomic::AtomicU64::new(u64::MAX),
                     }))
                 }
                 Err(error) => {
@@ -528,10 +565,13 @@ impl Store {
         Ok(info)
     }
     pub fn delete_tenant(&self, id: Uuid) -> Result<()> {
-        let _permission = self.owner.inner.node.write()?;
-        self.delete_tenant_inner(id)
+        self.delete_tenant_inner(id, self.owner.inner.node.write()?)
     }
-    fn delete_tenant_inner(&self, id: Uuid) -> Result<()> {
+    fn delete_tenant_inner(
+        &self,
+        id: Uuid,
+        permission: parking_lot::RwLockReadGuard<'_, ()>,
+    ) -> Result<()> {
         let slot = self.slot(id);
         let mut slot = slot.lock();
         if slot.restoring {
@@ -558,7 +598,7 @@ impl Store {
             crate::storage::errorpoint("tenant_delete_journal_published")?;
             recover_lifecycle(&inner.root, &mut registry)?;
             atomic_json(&inner.root.join("control/tenants.json"), &*registry)?;
-            clean_lifecycle_debris(&inner.root, &registry, false)
+            collect_lifecycle_debris(&inner.root, &registry, false)
         })();
         if result.is_err() {
             slot.failure = Some(Error::new(
@@ -566,7 +606,17 @@ impl Store {
                 "tenant deletion outcome is uncertain; restart Store to recover",
             ));
         }
-        result
+        drop(registry);
+        drop(slot);
+        drop(permission);
+        let cleanup = remove_lifecycle_debris(&inner.root, result?);
+        if cleanup.is_err() {
+            self.slot(id).lock().failure = Some(Error::new(
+                "UNAVAILABLE",
+                "tenant deletion cleanup failed; reopen Store to recover",
+            ));
+        }
+        cleanup
     }
     pub fn status(&self, id: Uuid) -> Result<serde_json::Value> {
         let inner = &self.owner.inner;
@@ -590,16 +640,15 @@ impl Store {
 }
 
 fn maintain_tenant(inner: &Arc<Inner>, slot: &Arc<Mutex<Slot>>) {
-    let core = slot.lock().core.clone();
+    let Some(guard) = slot.try_lock() else { return };
+    let core = guard.core.clone();
+    drop(guard);
     if let Some(core) = core {
         core.cursors.lock().retain(|_, c| c.valid());
         let handle = TenantHandle { core: core.clone() };
         let result = core.engine.maintain().and_then(|_| {
             if inner.node.writable() {
-                handle
-                    .retention_step()
-                    .and_then(|_| handle.gc_step())
-                    .and_then(|_| handle.restart_interrupted_build())
+                handle.retention_step().and_then(|_| handle.gc_step())
             } else {
                 Ok(())
             }
@@ -617,5 +666,43 @@ fn maintain_tenant(inner: &Arc<Inner>, slot: &Arc<Mutex<Slot>>) {
             slot.last_seq = slot.core.as_ref().map(|core| core.engine.seq());
             slot.core = None;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn deleted_tenant_history_does_not_consume_live_tenant_capacity() {
+        let dir = tempfile::tempdir().unwrap();
+        drop(Store::open(dir.path(), Options::default()).unwrap());
+        let path = dir.path().join("control/tenants.json");
+        let mut registry: Registry = read_json(&path).unwrap();
+        for _ in 0..16_384 {
+            let id = Uuid::new_v4();
+            registry.tenants.insert(
+                id,
+                Registration {
+                    info: TenantInfo {
+                        id,
+                        name: "deleted".into(),
+                        generation: Uuid::new_v4(),
+                        history: Uuid::new_v4(),
+                        memory_bytes: Options::default().tenant_memory_bytes,
+                        disk_bytes: Options::default().tenant_disk_bytes,
+                    },
+                    lifecycle: Lifecycle::Deleted,
+                },
+            );
+        }
+        atomic_json(&path, &registry).unwrap();
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        let tenant = store.create_tenant("new-live-tenant").unwrap();
+        store
+            .tenant(tenant.id)
+            .unwrap()
+            .create_collection("docs")
+            .unwrap();
+        assert_eq!(store.tenants().len(), 1);
     }
 }

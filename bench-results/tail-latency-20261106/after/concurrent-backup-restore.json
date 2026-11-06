@@ -1,0 +1,37 @@
+{
+  "result": "passed",
+  "mode": "after",
+  "backup": {
+    "backup": "3fc5d394-cda7-4ae7-9a12-95304672d25a",
+    "checkpoint_seq": 39031,
+    "created_ms": 1793941512976,
+    "error": null,
+    "id": "c8eedcfe-810d-492f-b3b9-ac8eb34a8025",
+    "operation": {
+      "operation": "create"
+    },
+    "processed_files": 216,
+    "result": {
+      "backup": "3fc5d394-cda7-4ae7-9a12-95304672d25a",
+      "checkpoint_ms": 1793941513468,
+      "checkpoint_seq": 39031,
+      "files": 216,
+      "generation": "d626653f-70d7-454f-823a-ce47d22baf09",
+      "tenant": "733b4415-92b3-44c2-ad65-e4676de1cfa1",
+      "total_bytes": 107397426
+    },
+    "reused_bytes": 1939770,
+    "state": "completed",
+    "tenant": "733b4415-92b3-44c2-ad65-e4676de1cfa1",
+    "updated_ms": 1793941528107,
+    "uploaded_bytes": 105457656
+  },
+  "validation": {
+    "node": 2,
+    "tenant": "733b4415-92b3-44c2-ad65-e4676de1cfa1",
+    "documents": 20000,
+    "sha256": "7291721890ca3a9a83f836b8f9c4061e5a2bf5c7b8d5d6819be2fba4e59b4396",
+    "acknowledged_mismatches": 0
+  },
+  "documents_changed_after_checkpoint": 20000
+}

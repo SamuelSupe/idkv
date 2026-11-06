@@ -1,0 +1,14 @@
+{
+  "utc": "2026-11-06T03:17:51.642225+00:00",
+  "platform": "Linux-7.2.12-orbstack-00394-gbecdd6130068-aarch64-with-glibc2.42",
+  "python": "3.13.7",
+  "binary_sha256": "46c963cc92d192bf2efd7752198ffb90dcf396989736b2f8eb1c5b78a10b72ca",
+  "restore_binary_sha256": "5db1b2cd130de8ed268945fde2002d1fd251ae74d6254bc57534e955965949b7",
+  "script_sha256": "d4ec78b4cc4b816087bec7d9f388810cd2bfed050a98f94dd800dbe0fe8160c9",
+  "root": "/var/tmp/idkv-recovery-drill-20261106-final3",
+  "documents": 20000,
+  "tail_documents": 1000,
+  "payload_bytes": 4096,
+  "filesystem": "Filesystem     Type   1K-blocks      Used Available Use% Mounted on\n/dev/vdb1      btrfs 1088487424 691163556 397323868  64% /\n",
+  "scope": "one Linux VM, separate loopback processes, fs backup on same virtual disk; no host/power/disk/cloud-S3 failure"
+}

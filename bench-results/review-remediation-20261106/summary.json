@@ -1,0 +1,34 @@
+{
+  "result": "passed",
+  "tests_passed": 125,
+  "acknowledged_batches": 10845,
+  "acknowledged_document_operations": 165154,
+  "acknowledged_mismatches": 0,
+  "phases": [
+    {
+      "phase": "baseline",
+      "light_p99_ms": 15.242,
+      "heavy_p99_ms": 18.327,
+      "verified_backups": 0,
+      "overlap_intervals": 0
+    },
+    {
+      "phase": "combined",
+      "light_p99_ms": 43.538,
+      "heavy_p99_ms": 31.978,
+      "verified_backups": 4,
+      "overlap_intervals": 13
+    },
+    {
+      "phase": "recovery",
+      "light_p99_ms": 26.379,
+      "heavy_p99_ms": 24.704,
+      "verified_backups": 0,
+      "overlap_intervals": 5
+    }
+  ],
+  "fault_cases": 3,
+  "fault_confirmed_documents_preserved": 6000,
+  "source_files_verified": 102,
+  "binary_sha256": "537a50f11dfcb90e40a5a0b2781470f024a2e9e6f98fc74c5bddf366ba611c03"
+}

@@ -4,6 +4,8 @@ v0.10 提供[请求级读取控制](read-controls.md)：读取截止时间、扫
 
 HTTP 所有数据接口以 `/v1/tenants/{tenant_uuid}` 开头。`GET /openapi.json` 提供 OpenAPI 3.1，`tenant-kv openapi` 可导出同一份定义。HTTP 响应为 JSON，同步成功为 200，远端备份任务提交为 202；错误为 `{"error":{"code":"...","message":"..."}}`。
 
+响应头 `x-tkv-history` 只取服务内部的数据库历史，不从用户文档中的同名字段推断；文档可以合法保存任意 JSON `history` 值。
+
 ## 接口
 
 以下 `T` 表示 `/v1/tenants/{tenant}`，`C` 表示 `T/collections/{collection}`。
@@ -150,7 +152,7 @@ v0.9.1 的查询定位规则：
 
 以上路径共享原扫描、时间、返回字节与临时内存预算；旧版本和删除标记仍计入扫描量。read_batch 中每个 Query 使用这些路径，整个批次保持同一快照和累计预算；不同 Query 尚未融合成一次存储扫描。
 
-下一页提交完全相同的 query 并添加返回的 cursor；limit 也必须相同。游标绑定租户、集合、查询、运行代次、复制历史和快照，成功继续后旧 token 被移除。默认租约从第一页起 60 秒，不随翻页续期；到期、重启、恢复或切换复制历史后返回 CURSOR_EXPIRED。可提前 DELETE 游标释放文件和版本引用。
+下一页提交完全相同的 query 并添加返回的 cursor；limit 也必须相同。游标绑定租户、集合、查询、运行代次、复制历史和快照，成功继续后旧 token 被移除。默认租约从第一页起 60 秒，不随翻页续期；到期、重启、恢复或切换复制历史后返回 CURSOR_EXPIRED。可提前 DELETE 游标释放文件和版本引用。持久游标总数不超过 max_snapshots 的一半，每个主体不超过四分之一（取整，至少 1）；默认分别为 128 与 64，为点读及维护留出名额。max_snapshots 为 1 时不保留分页游标。HTTP 游标同时绑定 token 的稳定 subject，其他主体不能续页；嵌入式调用共享默认主体配额。
 
 同一个 cursor 不可并发消费多次：仅一个续页调用成功，其余返回 CURSOR_EXPIRED。查询执行或输出超预算失败时，不消费原 token（租约仍按原时刻计算）。MultiGet 的响应限制包含全部文档、未命中的 null、逗号和数组括号，原生库接口和 HTTP 均不能依靠未命中项绕过该限制。
 

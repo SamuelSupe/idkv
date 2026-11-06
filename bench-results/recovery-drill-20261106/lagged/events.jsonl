@@ -1,0 +1,10 @@
+{"event": "started", "elapsed_ms": 0.003, "utc": "2026-11-06T03:18:15.592295+00:00"}
+{"event": "replica_paused", "elapsed_ms": 5108.146, "utc": "2026-11-06T03:18:20.700439+00:00", "applied_seq": 284}
+{"event": "primary_loss_injected", "elapsed_ms": 5220.21, "utc": "2026-11-06T03:18:20.812502+00:00", "last_primary_seq": 294, "last_replica_seq": 284}
+{"event": "isolated", "elapsed_ms": 5221.662, "utc": "2026-11-06T03:18:20.813953+00:00", "node": 0, "pid": 512081, "returncode": -9, "preserved_directory": "old-primary-quarantined", "endpoint_closed": true, "automatic_restart_supervisor": false}
+{"event": "failover_validated", "elapsed_ms": 5916.07, "utc": "2026-11-06T03:18:21.508361+00:00", "missing_documents": 1000, "timings_ms": {"external_isolation": 0.12, "force_promote_request": 2.285, "failure_to_read_write_ready": 8.163}}
+{"event": "old_node_rebuilt", "elapsed_ms": 8141.895, "utc": "2026-11-06T03:18:23.734188+00:00", "documents": 20100, "rebuild_ms": 787.744}
+{"event": "both_online_copies_unavailable", "elapsed_ms": 16548.339, "utc": "2026-11-06T03:18:32.140637+00:00", "backup": "3edc33dd-e102-4364-a055-9dccfdda7388"}
+{"event": "isolated", "elapsed_ms": 16548.562, "utc": "2026-11-06T03:18:32.140851+00:00", "node": 1, "pid": 512110, "returncode": -9, "preserved_directory": "failed-new-primary", "endpoint_closed": true, "automatic_restart_supervisor": false}
+{"event": "isolated", "elapsed_ms": 16548.618, "utc": "2026-11-06T03:18:32.140906+00:00", "node": 0, "pid": 512143, "returncode": -9, "preserved_directory": "failed-rebuilt-replica", "endpoint_closed": true, "automatic_restart_supervisor": false}
+{"event": "completed", "elapsed_ms": 21048.53, "utc": "2026-11-06T03:18:36.640828+00:00", "failover_loss": 1000, "backup_loss": 1000}

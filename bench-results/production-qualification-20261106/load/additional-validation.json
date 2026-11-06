@@ -1,0 +1,31 @@
+{
+  "interrupted_job_before_crash": "checkpointing",
+  "same_job_after_restart": {
+    "id": "655f2ec1-0827-4b47-987b-4474de6159b3",
+    "tenant": "73873a93-281e-4c75-b076-61360ea7c5e5",
+    "backup": "910921c3-0144-49d0-a705-6866e43f3465",
+    "operation": {
+      "operation": "create"
+    },
+    "state": "completed",
+    "created_ms": 1793938365952,
+    "updated_ms": 1793938380440,
+    "uploaded_bytes": 63346635,
+    "reused_bytes": 39704511,
+    "processed_files": 176,
+    "checkpoint_seq": 34616,
+    "result": {
+      "backup": "910921c3-0144-49d0-a705-6866e43f3465",
+      "checkpoint_ms": 1793938366197,
+      "checkpoint_seq": 34616,
+      "files": 176,
+      "generation": "d060e560-032b-4a0e-b29c-4773bd6aeba2",
+      "tenant": "73873a93-281e-4c75-b076-61360ea7c5e5",
+      "total_bytes": 103051146
+    },
+    "error": null
+  },
+  "before_after_restart_hashes_equal": true,
+  "remaining_collections": 3,
+  "final_positions_equal": true
+}

@@ -1,0 +1,9 @@
+{"event": "started", "elapsed_ms": 0.003, "utc": "2026-11-06T03:17:51.655911+00:00"}
+{"event": "primary_loss_injected", "elapsed_ms": 5915.637, "utc": "2026-11-06T03:17:57.571549+00:00", "last_primary_seq": 294, "last_replica_seq": 294}
+{"event": "isolated", "elapsed_ms": 5917.566, "utc": "2026-11-06T03:17:57.573474+00:00", "node": 0, "pid": 511913, "returncode": -9, "preserved_directory": "old-primary-quarantined", "endpoint_closed": true, "automatic_restart_supervisor": false}
+{"event": "failover_validated", "elapsed_ms": 6813.743, "utc": "2026-11-06T03:17:58.469655+00:00", "missing_documents": 0, "timings_ms": {"external_isolation": 0.189, "force_promote_request": 144.792, "failure_to_read_write_ready": 184.439}}
+{"event": "old_node_rebuilt", "elapsed_ms": 9990.153, "utc": "2026-11-06T03:18:01.646063+00:00", "documents": 21100, "rebuild_ms": 1574.33}
+{"event": "both_online_copies_unavailable", "elapsed_ms": 19159.669, "utc": "2026-11-06T03:18:10.815581+00:00", "backup": "921a8feb-82f5-4d86-bb7c-b04c96646660"}
+{"event": "isolated", "elapsed_ms": 19159.932, "utc": "2026-11-06T03:18:10.815838+00:00", "node": 1, "pid": 511942, "returncode": -9, "preserved_directory": "failed-new-primary", "endpoint_closed": true, "automatic_restart_supervisor": false}
+{"event": "isolated", "elapsed_ms": 19162.738, "utc": "2026-11-06T03:18:10.818644+00:00", "node": 0, "pid": 511975, "returncode": -9, "preserved_directory": "failed-rebuilt-replica", "endpoint_closed": true, "automatic_restart_supervisor": false}
+{"event": "completed", "elapsed_ms": 23854.958, "utc": "2026-11-06T03:18:15.510873+00:00", "failover_loss": 0, "backup_loss": 1000}

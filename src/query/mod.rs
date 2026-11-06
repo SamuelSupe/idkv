@@ -8,6 +8,7 @@ use crate::{model::*, storage::Snapshot};
 use uuid::Uuid;
 
 pub(crate) struct Cursor {
+    principal: Option<std::sync::Arc<str>>,
     pub(crate) snapshot: Snapshot,
     pub(crate) publication: Option<(String, Uuid)>,
     replication_epoch: Option<Uuid>,

@@ -10,6 +10,96 @@ use tenant_kv::{
 };
 use tower::ServiceExt;
 
+#[cfg(unix)]
+#[tokio::test]
+async fn server_exposes_not_ready_before_closing_its_listener_on_sigterm() {
+    struct Child(std::process::Child);
+    impl Drop for Child {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let auth_path = dir.path().join("auth.json");
+    std::fs::write(
+        &auth_path,
+        serde_json::to_vec(&AuthConfig {
+            tokens: vec![Token {
+                subject: "shutdown-test".into(),
+                sha256: http::token_hash("shutdown-test-secret-123456"),
+                tenant: None,
+                role: Role::Admin,
+            }],
+        })
+        .unwrap(),
+    )
+    .unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    drop(listener);
+    let mut child = Child(
+        std::process::Command::new(env!("CARGO_BIN_EXE_tenant-kv"))
+            .arg("serve")
+            .arg("--root")
+            .arg(dir.path().join("data"))
+            .arg("--auth")
+            .arg(auth_path)
+            .arg("--listen")
+            .arg(address.to_string())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(1))
+        .build()
+        .unwrap();
+    let url = format!("http://{address}/ready");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(8);
+    loop {
+        if client
+            .get(&url)
+            .send()
+            .await
+            .is_ok_and(|r| r.status().is_success())
+        {
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline);
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert!(
+        std::process::Command::new("kill")
+            .args(["-TERM", &child.0.id().to_string()])
+            .status()
+            .unwrap()
+            .success()
+    );
+    let mut observed = false;
+    while child.0.try_wait().unwrap().is_none() {
+        if let Ok(response) = client.get(&url).send().await
+            && response.status() == StatusCode::SERVICE_UNAVAILABLE
+        {
+            assert_eq!(response.json::<Value>().await.unwrap()["draining"], true);
+            observed = true;
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline);
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert!(observed, "the listener closed before publishing not-ready");
+    loop {
+        if let Some(status) = child.0.try_wait().unwrap() {
+            assert!(status.success());
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline);
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+}
+
 async fn call(
     app: &axum::Router,
     method: &str,
@@ -37,6 +127,177 @@ async fn call(
     let status = response.status();
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
     (status, serde_json::from_slice(&bytes).unwrap())
+}
+
+#[tokio::test]
+async fn document_history_never_controls_server_history_headers() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(dir.path(), Options::default()).unwrap();
+    let t = store
+        .tenant(store.create_tenant("history-header").unwrap().id)
+        .unwrap();
+    t.create_collection("docs").unwrap();
+    let secret = "history-header-reader-123456";
+    let app = http::app(
+        store.clone(),
+        AuthConfig {
+            tokens: vec![Token {
+                subject: "reader".into(),
+                sha256: http::token_hash(secret),
+                tenant: Some(t.id()),
+                role: Role::Read,
+            }],
+        },
+    )
+    .unwrap();
+    for (key, history) in [("forged", "forged-token"), ("invalid", "历史\n")] {
+        t.put("docs", json!({"_key":key,"history":history}), None)
+            .unwrap();
+        let base = format!("/v1/tenants/{}/collections/docs", t.id());
+        for (method, path, body) in [
+            ("GET", format!("{base}/documents/{key}"), json!(null)),
+            ("POST", format!("{base}/multi_get"), json!({"keys":[key]})),
+            (
+                "POST",
+                format!("/v1/tenants/{}/dsl", t.id()),
+                json!({"statement":"get docs $key","params":{"key":key}}),
+            ),
+        ] {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri(path)
+                        .header("authorization", format!("Bearer {secret}"))
+                        .header("content-type", "application/json")
+                        .body(Body::from(if method == "GET" {
+                            vec![]
+                        } else {
+                            serde_json::to_vec(&body).unwrap()
+                        }))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(response.headers()["x-tkv-history"], t.history());
+            let bytes = response.into_body().collect().await.unwrap().to_bytes();
+            let value: Value = serde_json::from_slice(&bytes).unwrap();
+            assert!(
+                value
+                    .to_string()
+                    .contains(&serde_json::to_string(history).unwrap())
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn cursor_quotas_leave_point_reads_and_other_principals_available() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(
+        dir.path(),
+        Options {
+            max_snapshots: 8,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let t = store
+        .tenant(store.create_tenant("cursor-reserve").unwrap().id)
+        .unwrap();
+    t.create_collection("docs").unwrap();
+    for i in 0..3 {
+        t.put("docs", json!({"_key":i.to_string()}), None).unwrap();
+    }
+    let tokens = [
+        "cursor-reader-a-123456",
+        "cursor-reader-b-123456",
+        "cursor-reader-c-123456",
+    ];
+    let app = http::app(
+        store.clone(),
+        AuthConfig {
+            tokens: tokens
+                .iter()
+                .map(|secret| Token {
+                    subject: secret.to_string(),
+                    sha256: http::token_hash(secret),
+                    tenant: Some(t.id()),
+                    role: Role::Read,
+                })
+                .collect(),
+        },
+    )
+    .unwrap();
+    let base = format!("/v1/tenants/{}/collections/docs", t.id());
+    let mut first = None;
+    for secret in &tokens[..2] {
+        for _ in 0..2 {
+            let (status, value) = call(
+                &app,
+                "POST",
+                &format!("{base}/query"),
+                Some(secret),
+                json!({"limit":1}),
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK, "{value}");
+            first.get_or_insert(value["cursor"].as_str().unwrap().to_string());
+        }
+        assert_eq!(
+            call(
+                &app,
+                "POST",
+                &format!("{base}/query"),
+                Some(secret),
+                json!({"limit":1})
+            )
+            .await
+            .0,
+            StatusCode::TOO_MANY_REQUESTS
+        );
+    }
+    assert_eq!(
+        call(
+            &app,
+            "POST",
+            &format!("{base}/query"),
+            Some(tokens[2]),
+            json!({"limit":1})
+        )
+        .await
+        .0,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    for secret in tokens {
+        assert_eq!(
+            call(
+                &app,
+                "GET",
+                &format!("{base}/documents/0"),
+                Some(secret),
+                json!({})
+            )
+            .await
+            .0,
+            StatusCode::OK
+        );
+    }
+    t.release_cursor(first.as_ref().unwrap()).unwrap();
+    assert_eq!(
+        call(
+            &app,
+            "POST",
+            &format!("{base}/query"),
+            Some(tokens[2]),
+            json!({"limit":1})
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
 }
 #[tokio::test]
 async fn authenticated_http_workflow_and_cross_tenant_cursor_denial() {

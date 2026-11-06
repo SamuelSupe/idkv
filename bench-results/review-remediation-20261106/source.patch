@@ -1,0 +1,3389 @@
+diff --git a/README.md b/README.md
+index db079de..02813ca 100644
+--- a/README.md
++++ b/README.md
+@@ -121,6 +121,9 @@ python3 scripts/replication_demo.py --binary target/release/tenant-kv --root /va
+ | v0.5.1 复制优化、资源边界与运行验证 | [docs/v0.5.1-validation.md](docs/v0.5.1-validation.md) |
+ | v0.5.2 严重缺陷修复、主键读取优化与运行验证 | [docs/v0.5.2-validation.md](docs/v0.5.2-validation.md) |
+ | 配额、备份恢复和故障处理 | [docs/operations.md](docs/operations.md) |
++| 主节点丢失、外部隔离、故障升主、重建与备份恢复演练 | [docs/recovery-drill.md](docs/recovery-drill.md) |
++| 当前版本并行负载、磁盘不足、WAL I/O 故障与重启资格验证 | [docs/production-qualification.md](docs/production-qualification.md) |
++| 后台备份进度同步与轻租户写入尾延迟优化 | [docs/tail-latency-optimization.md](docs/tail-latency-optimization.md) |
+ | OpenDAL 配置、备份协议与恢复 | [docs/backup.md](docs/backup.md) |
+ | v0.2 备份实现验证 | [docs/backup-validation.md](docs/backup-validation.md) |
+ | 实际测试结果、复现命令与限制 | [docs/validation.md](docs/validation.md) |
+@@ -141,3 +144,5 @@ python3 scripts/replication_demo.py --binary target/release/tenant-kv --root /va
+ | HTTP 与 OpenAPI | `src/http.rs`、`src/http/openapi.rs` |
+ 
+ 可通过 `--config config.json` 覆盖 `Options` 的任意配置字段；未指定字段保留默认值。配置边界及预算含义见运维文档。
++
++针对外部报告的逐项核实、并发隔离与数据安全修复及回归边界，见[报告核实与修复](docs/review-remediation-20261106.md)。
+diff --git a/docs/api.md b/docs/api.md
+index 5137e00..5fa5f8a 100644
+--- a/docs/api.md
++++ b/docs/api.md
+@@ -4,6 +4,8 @@ v0.10 提供[请求级读取控制](read-controls.md)：读取截止时间、扫
+ 
+ HTTP 所有数据接口以 `/v1/tenants/{tenant_uuid}` 开头。`GET /openapi.json` 提供 OpenAPI 3.1，`tenant-kv openapi` 可导出同一份定义。HTTP 响应为 JSON，同步成功为 200，远端备份任务提交为 202；错误为 `{"error":{"code":"...","message":"..."}}`。
+ 
++响应头 `x-tkv-history` 只取服务内部的数据库历史，不从用户文档中的同名字段推断；文档可以合法保存任意 JSON `history` 值。
++
+ ## 接口
+ 
+ 以下 `T` 表示 `/v1/tenants/{tenant}`，`C` 表示 `T/collections/{collection}`。
+@@ -150,7 +152,7 @@ v0.9.1 的查询定位规则：
+ 
+ 以上路径共享原扫描、时间、返回字节与临时内存预算；旧版本和删除标记仍计入扫描量。read_batch 中每个 Query 使用这些路径，整个批次保持同一快照和累计预算；不同 Query 尚未融合成一次存储扫描。
+ 
+-下一页提交完全相同的 query 并添加返回的 cursor；limit 也必须相同。游标绑定租户、集合、查询、运行代次、复制历史和快照，成功继续后旧 token 被移除。默认租约从第一页起 60 秒，不随翻页续期；到期、重启、恢复或切换复制历史后返回 CURSOR_EXPIRED。可提前 DELETE 游标释放文件和版本引用。
++下一页提交完全相同的 query 并添加返回的 cursor；limit 也必须相同。游标绑定租户、集合、查询、运行代次、复制历史和快照，成功继续后旧 token 被移除。默认租约从第一页起 60 秒，不随翻页续期；到期、重启、恢复或切换复制历史后返回 CURSOR_EXPIRED。可提前 DELETE 游标释放文件和版本引用。持久游标总数不超过 max_snapshots 的一半，每个主体不超过四分之一（取整，至少 1）；默认分别为 128 与 64，为点读及维护留出名额。max_snapshots 为 1 时不保留分页游标。HTTP 游标同时绑定 token 的稳定 subject，其他主体不能续页；嵌入式调用共享默认主体配额。
+ 
+ 同一个 cursor 不可并发消费多次：仅一个续页调用成功，其余返回 CURSOR_EXPIRED。查询执行或输出超预算失败时，不消费原 token（租约仍按原时刻计算）。MultiGet 的响应限制包含全部文档、未命中的 null、逗号和数组括号，原生库接口和 HTTP 均不能依靠未命中项绕过该限制。
+ 
+diff --git a/docs/backup.md b/docs/backup.md
+index 4abb371..3b41c0a 100644
+--- a/docs/backup.md
++++ b/docs/backup.md
+@@ -81,10 +81,14 @@ curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+ 
+ 状态为 queued、checkpointing、uploading、verifying、restoring、pruning、completed、failed、interrupted。进度的 uploaded_bytes、reused_bytes、processed_files 按当前尝试计数，重启恢复/显式重试时清零。completed 的 create 结果包含 checkpoint_seq、checkpoint_ms、文件数和总字节。checkpoint_ms 是捕获检查点的时间记录，不是按时间精确回放 WAL 的索引。
+ 
++任务阶段、检查点清单和终态结果持久化后才发布；逐文件进度只更新内存，在下一阶段或终态时一同保存，避免每个文件的计数更新都同步磁盘。通过任务 HTTP/API 查看实时进度，不依赖内部任务 JSON 文件的计数实时变化。续传根据检查点清单、已上传对象和完成标记恢复，重启后仍按原规则重置本次进度。实现与验证见[后台备份进度与写入尾延迟优化](tail-latency-optimization.md)。
++
+ 同租户一次仅执行一个远端操作。活动任务、目录锁或未释放的句柄可导致 BUSY；备份未配置为 UNAVAILABLE。后台故障反映在任务的 error 中，不能仅看轮询 HTTP 200。远端错误使用 BACKUP_STORAGE_ERROR，资源限制为 RESOURCE_EXHAUSTED，内容校验失败为 CORRUPTION。
+ 
+ ## 恢复与新机器导入
+ 
++从完整备份恢复到新 Store 的实际流程、检查点后成功写入的损失核对及恢复计时，见[故障恢复演练](recovery-drill.md)。该演练的 fs 仓库保存在同一虚拟磁盘，只验证两个在线进程不可用后的恢复路径，不覆盖整盘丢失或真实云 S3。
++
+ 现有租户恢复只接受同 UUID、同持久 generation；不依赖打开当前引擎，因此可以恢复 CURRENT/Manifest 损坏的租户。先下载至私有目录，验证长度、SHA-256、文件白名单、租户归属、SST 内容和 checkpoint_seq。再复用 Store 恢复 journal，校验后发布目录切换。发布重新检查当前注册状态、配额和独占锁；下载期间租户被删除会使恢复失败。发布前的校验失败不替换在线目录。
+ 
+ 恢复会回退到指定检查点，包括舍弃之后的写入。调用方必须停该租户新流量并释放句柄和快照；否则最终切换可能返回 BUSY。失败后检查任务原因，再提交新恢复任务。已开始的 restore/import 在重启后标记 interrupted，不自动重放，也不允许通过 retry 重放；目录 journal 会完成已经发布的切换。检查实际数据库后再决定后续操作。
+diff --git a/docs/identity.md b/docs/identity.md
+index d845305..3864815 100644
+--- a/docs/identity.md
++++ b/docs/identity.md
+@@ -126,7 +126,7 @@ operation_id 在回执保留期内按租户去重，限 128 字节；不能把
+ 
+ 未配置租户保留策略时，当前历史分支的知识和收据保留到租户删除或恢复替换。v0.8 配置 retention_seconds 后，旧知识从被覆盖时起计时，回执从提交时起计时；当前知识头、实体与当前完整时间线不失效。边界基线保留规则见 [统一保留](retention.md)。磁盘配额不足时背压，不能无限存储。高频修改、长时间线需要评估写放大和容量，不能把短基准视为长期规模验证。
+ 
+-时钟检查对比进程内单调时钟与墙钟，并校验上次持久记录时间；超过 `clock_tolerance_ms` 返回 `CLOCK_SKEW`，容忍范围内的并列或微小回退受控递增。进程重启后没有外部可信时源，无法识别所有向前跳变；部署需要正常时间同步。
++时钟检查对比进程内单调时钟与墙钟，并校验上次持久记录时间；成功采样会刷新锚点，避免正常渐进校时相对于首次锚点累计漂移。失败采样不移动锚点，也不自动接受大跳变；应校正系统时间，必要时释放句柄后关闭重开租户，使锚点重建，仍受上次持久记录时间约束。超过 `clock_tolerance_ms` 返回 `CLOCK_SKEW`，容忍范围内的并列或微小回退受控递增。进程重启后没有外部可信时源，无法识别所有向前跳变；部署需要正常时间同步。
+ 
+ 备份自动包含这些普通物理文件；复制从库回放相同 WAL 时间、UUID 和收据，不重新选择生效时间。主从切换保留已复制知识；异步复制原有 RPO 约束仍然存在。**当前 v0.8 要求主从两端都升级到 v0.8，复制协议为 3；含回收数据的目录不能降级交给旧服务写入。** 旧版本不认识受管集合保护。WAL/SST 物理编码仍为 v1，协议版本检查明确拒绝旧节点混跑。
+ 
+diff --git a/docs/middleware.md b/docs/middleware.md
+index 54dca49..46d0c57 100644
+--- a/docs/middleware.md
++++ b/docs/middleware.md
+@@ -2,7 +2,7 @@
+ 
+ v0.10 增加[请求级读取控制和主从客户端读取 API](read-controls.md)。新读取客户端要求 X-TKV-Read-Controls: 1，旧节点会明确失败，先完成主从升级。存储及复制格式不变。
+ 
+-v0.10.1 的 Client 共享一秒的读取路由缓存，并合并同时发生的发现请求。缓存仅提供路由提示，实际读取仍由服务端校验原始最低位置；写入与游标的节点绑定规则不变。受控正文/索引读取在 I/O 排队等待期间也检查取消，未开始的废弃读取跳过执行。
++v0.10.1 的 Client 读取与批量写入共享一秒的路由缓存，并合并同时发生的发现请求。缓存仅提供路由提示，实际读取仍由服务端校验原始最低位置；写入遇到连接失败、READ_ONLY 或未知提交等可恢复错误会失效缓存，只有原有稳定 operation_id/history 条件允许自动重试。write_context/retry_context 仍执行实时发现；游标继续绑定原节点。受控正文/索引读取在 I/O 排队等待期间也检查取消，未开始的废弃读取跳过执行。
+ 
+ v0.9 在保持现有接口的基础上增加条件 Check、同快照 read_batch、通用数据集发布读取，见 [通用 KV 组合能力](kv-capabilities.md)。注册表 v4、复制协议 3、WAL/SST v1 不变；先升级主从再使用新 API。Rust WriteOp 的穷尽匹配需要处理新增 Check 分支。以下 v0.8 升级规则仍适用于从旧版本迁移。
+ 
+diff --git a/docs/operations.md b/docs/operations.md
+index 17ebc60..979fc5b 100644
+--- a/docs/operations.md
++++ b/docs/operations.md
+@@ -35,7 +35,9 @@
+ 
+ 缓存容量不能直接等同进程 RSS：引擎计入 memtable、块缓存及被引用块、版本目录、事务变更、查询候选和游标的预算；Rust 分配器、网络栈和调用方保留的返回值仍占进程内存。HTTP 请求正文及发送中的响应另计全局预算；JSON 树在解析前按结构估算并同时计入目标租户预算。冷租户恢复、解析与引擎操作在有界阻塞工作池执行。备份校验和恢复暂存实例与在线实例共用该租户内存计数器。部署时应为这些开销预留余量，并以 RSS/cgroup 和引擎预算双重观测。
+ 
+-租户缓存上限取配置值与租户配额三分之一的较小者。维护与数据块读取使用有界共享工作池；I/O 按租户轮询分配任务，单批独立块最多 8 个在途。此调度提供任务级公平，不构成磁盘 IOPS 或带宽的硬 SLA。正常达到 memtable 阈值由后台刷盘；积压到阈值 3 倍时前台等待刷盘，4 倍时拒绝继续增长。刷盘优先于同租户合并；各层积压按压力选取合并，持续积压对该租户写入返回背压。
++租户缓存上限取配置值与租户配额三分之一的较小者。维护与数据块读取使用有界共享工作池；I/O 按租户轮询分配任务，单批独立块最多 8 个在途。此调度提供任务级公平，不构成磁盘 IOPS 或带宽的硬 SLA。正常达到 memtable 阈值由后台刷盘；积压到阈值 3 倍时前台尝试刷盘，维护锁忙时立即交还后台，超过 4 倍时拒绝继续增长，避免排在整次合并之后。刷盘优先于同租户合并；各层积压按压力选取合并，持续积压对该租户写入返回背压。
++
++读 I/O 队列最多排队 4096 项；写入和持久化任务不受读队列水位拒绝，仍由调用侧并发和租户预算约束。未进入队列的 WAL 追加失败不标记 COMMIT_UNKNOWN；已经开始追加或同步失败仍隔离写入。内存不足时按需逐帧淘汰块缓存，保留其余可用帧。组提交在同步期间释放写锁，只发布同步开始前捕获的序号；后续暂存需要下一次同步。刷盘/合并的最终 Manifest 发布由维护锁串行化，文件同步放在写锁外；WAL 轮转的短发布阶段仍保持写入互斥。
+ 
+ v0.3 的 DSL AST 缓存另外计入同一租户/全局内存预算，最多 256 项、4 MiB 保守计费容量；查询目录缓存最多 128 个集合、4 MiB。它们不是预算外的内存，也不是进程 RSS 的硬上限。外部 Arc 持有已淘汰准备语句或执行中的目录引用时，预留量保持到最后引用释放，故总持有量可能高于缓存内条目容量，但不能绕过全局/租户预算。纯 `Prepared::parse` 的分配由嵌入式调用方承担；推荐 `TenantHandle::prepare_dsl` 取得计费准备语句。
+ 
+@@ -51,7 +53,7 @@ v0.10.1 校准磁盘用量时持有维护锁固定文件发布和 WAL 轮转，
+ 
+ v0.8.1 在恢复及失败输出清理时，一次建立 Manifest 文件名集合，避免对每个文件重复遍历全部引用。临时集合计入租户与全局内存预算；预算不足则采用原有逐项检查，不因这项可选优化阻断恢复。`cargo run --release --example recovery_perf -- ROOT seed 1000` 生成多 SST 测试库，随后用 `ROOT open 1000` 测量引擎重开并逐条核对数据；该例不清空操作系统页缓存，不能将结果当作设备冷缓存性能。
+ 
+-控制注册表保留已删除 UUID，不复用身份。租户名字可以重用但获得新 UUID。损坏租户打开失败缓存到该租户状态；修复文件后先关闭失败实例再重试打开，不应通过删除损坏文件强行启动空库。
++控制注册表保留已删除 UUID，不复用身份。16384 租户上限只计未删除注册，不计历史墓碑；墓碑仍增加注册表重写成本，16 MiB 元数据格式上限仍适用。租户名字可以重用但获得新 UUID。损坏租户打开失败缓存到该租户状态；修复文件后先关闭失败实例再重试打开，不应通过删除损坏文件强行启动空库。
+ 
+ ## 备份、恢复与迁移
+ 
+@@ -59,7 +61,11 @@ OpenDAL 远端备份由 `--backup-config` 启用；配置、任务轮询、S3 
+ 
+ 备份先建立一致 checkpoint，固定文件集合及已打开的文件描述符，在维护锁外复制并 fsync 后进行完整性校验。后续写入不属于该备份点，合并删除源文件名不会使已固定描述符失效。返回的本地备份 UUID 位于 `backups/<tenant>/<backup>`。
+ 
+-恢复仅接受同租户、同持久数据库身份的备份。先复制到 staging 并检查，在该租户无活跃操作时持久记录恢复 journal，再将旧目录移到 trash、staging 切换为当前目录。Active 注册状态同步后清理旧目录。中途重启按 journal 完成切换。恢复发布状态不确定时，该租户返回 UNAVAILABLE，必须重开 Store 后恢复；不能通过关闭单租户清除这一隔离状态。复制和校验期间该租户仍可读写；最终发布需释放句柄和快照，否则返回 BUSY 并丢弃本次暂存。复制按 256 KiB 作业进入共享 I/O 队列。其他租户可继续操作。运行中的生命周期清理不会删除其他租户尚未发布的 staging；启动时才清理这些遗留目录。
++恢复仅接受同租户、同持久数据库身份的备份。先复制到 staging 并检查，在该租户无活跃操作时持久记录恢复 journal，再将旧目录移到 trash、staging 切换为当前目录。Active 注册状态同步后，在注册表和复制屏障锁外清理旧目录。锁内只固定当时已存在、无 journal 引用的回收路径，避免误删其他并发恢复的新目录。中途重启按 journal 完成切换。恢复发布状态不确定时，该租户返回 UNAVAILABLE，必须重开 Store 后恢复；不能通过关闭单租户清除这一隔离状态。复制和校验期间该租户仍可读写；最终发布需释放句柄和快照，否则返回 BUSY 并丢弃本次暂存。复制按 256 KiB 作业进入共享 I/O 队列。其他租户可继续操作。运行中的生命周期清理不会删除其他租户尚未发布的 staging；启动时才清理这些遗留目录。
++
++删除租户先持久发布 Deleting、rename 到 trash 并发布 Deleted，递归清理移到注册表及复制屏障锁外执行。恢复的复制、校验同样不持有复制屏障；最终发布重新验证角色和源 epoch。
++
++重启索引重建使用独立的单线程有界工作者，避免耗尽刷盘/合并维护池；按目录提交序号跳过未变化 catalog，停止时在分批处理边界退出并保留可恢复的 BUILDING 状态。已经开始的构建遇到 L0/内存表积压时，在执行下一事务闭包前等待维护推进，不占写锁或复制屏障，并继续检查快照期限和停止；内存/磁盘配额、唯一冲突等其他失败仍按错误处理。维护协调器跳过正在打开/恢复的租户 slot。
+ 
+ 删除租户只删除在线数据库，备份仍保留；永久删除业务数据时，运维人员还需删除该租户备份并按底层设备的保留策略处理快照。应用没有实现设备级安全擦除。
+ 
+@@ -75,6 +81,12 @@ v0.5.2 在发布删除 journal 前先关闭内存中的写入入口。发布或
+ 
+ ## 故障与指标
+ 
++主节点丢失后的隔离、故障升主、旧节点重建及新 Store 备份恢复，见[故障恢复演练与操作流程](recovery-drill.md)。其中分别记录异步升主与检查点恢复的数据损失、实际读写恢复耗时和完整数据校验，包含可重复运行的 Linux 脚本。
++
++持续写入、合并、复制、备份与 GC 的并行运行，以及独立磁盘写满、WAL 写入/同步 EIO 和重启恢复的验证方法与边界，见[v0.10.1 生产资格验证](production-qualification.md)。其中区分预先拒绝的资源背压与不能盲目重试的未知提交结果。
++
++后台并行引起的轻租户写尾延迟定位、备份进度同步优化及相同负载前后比较，见[尾延迟优化记录](tail-latency-optimization.md)。备份实时进度通过服务 API 查看，阶段和终态持久化；逐文件计数不会单独触发文件/目录同步。
++
+ COMMIT_UNKNOWN 后不能继续写入该引擎。停止该租户访问、释放句柄、关闭后重新打开，回放 WAL，并核对条件版本。WAL 完整记录 CRC 错误、SST 校验失败或文件缺失需要从有效备份恢复，不能当作未命中。
+ 
+ 状态接口包含 commit_seq、memory_bytes、disk_bytes、各层文件数、活动快照数、维护错误，以及进程内累计的 document_bytes、wal_bytes、flush_bytes、compaction_read_bytes、compaction_write_bytes、commits、WAL fsyncs、write_lock_wait_ns，以及 scheduler.completed_jobs、cancelled_jobs、queue_wait_ns、queued_jobs。调度计数在 Store 生命周期内按租户累计；其余引擎指标在重开后清零。读取统计的 blocks_read 表示引擎文件读取，不保证绕过操作系统页缓存；decompressed_bytes 是解压后的字节数。写放大可用 `(wal_bytes + flush_bytes + compaction_write_bytes) / document_bytes` 估算，必须注明区间、索引数和合并是否追平。
+@@ -93,6 +105,6 @@ v0.6 的知识历史和操作收据保存在租户受管集合中，自动进入
+ 
+ ## v0.7 集成配置
+ 
+-每个 token 必须配置稳定 subject；轮换哈希时保持主体不变。配置在启动时加载。`/health` 用于存活，`/ready` 和 `/ready/write` 用于读/写就绪；SIGTERM 与 SIGINT 都触发停止接收、排空请求和 exporter 关闭。已有长时间索引/备份操作会影响排空时间，运维终止宽限期应覆盖相应操作。不要将 SIGKILL 当作优雅退出。
++每个 token 必须配置稳定 subject；轮换哈希时保持主体不变。配置在启动时加载。`/health` 用于存活，`/ready` 和 `/ready/write` 用于读/写就绪；SIGTERM 与 SIGINT 先将就绪置为 503，保持监听 2 秒供健康检查观察，然后停止接收连接并给予既有 HTTP 请求 30 秒排空；超时以非零状态终止进程。正常排空后停止复制传输并关闭 exporter。系统调用永久挂起、后台组件或 exporter 关闭耗时不属于 HTTP 排空期限，部署仍需进程管理器设置最终终止期限。不要将 SIGKILL 当作优雅退出。
+ 
+ 可独立启停 Prometheus 指标、OTLP 链路和日志，配置与资源边界见 [可观测性](telemetry.md)。v0.7 双节点升级与不可回退的注册表边界见 [中间件集成](middleware.md)。
+diff --git a/docs/read-controls.md b/docs/read-controls.md
+index d1c4ba0..4420bbb 100644
+--- a/docs/read-controls.md
++++ b/docs/read-controls.md
+@@ -84,7 +84,7 @@ if let Some(cursor) = page.cursor { client.release_cursor(&cursor).await?; }
+ 
+ 客户端新增 MultiGet、Query、Explain、Lookup、read_batch、published_dataset、read_published、query_published、lookup_published 和 release_cursor。`get(collection,key,minimum)` 保持原签名；需要读取控制时用 get_with_options。ReadPosition 可以从 WriteResult、ReadBatchResult 或 ReadContext 生成。需要把读取结果用于条件写时，使用 read_batch 返回的同快照 history 和文档 _rev，不要用新获取的 write_context 替换原读取的历史。
+ 
+-新读取优先使用从库。v0.10.1 在一个 Client 及其 clone 之间共享一秒的只读路由缓存；同时到来的冷请求合并为一次发现。复用 Client 才能持续命中缓存，每次重新创建 Client 会重新发现。发现阶段最多并发探测两个配置节点，每个探测不超过两秒及剩余预算的四分之一，为实际读取留下时间。等待其他调用刷新缓存同样受本次调用的截止时间和取消控制，没有常驻刷新任务。
++新读取优先使用从库。v0.10.1 在一个 Client 及其 clone 之间让读取与批量写入共享一秒的路由缓存；同时到来的冷请求合并为一次发现。复用 Client 才能持续命中缓存，每次重新创建 Client 会重新发现。发现阶段最多并发探测两个配置节点，每个探测不超过两秒及剩余预算的四分之一，为实际读取留下时间。等待其他调用刷新缓存同样受本次调用的截止时间和取消控制，没有常驻刷新任务。
+ 
+ 缓存中的角色、history 和已应用序号只用于选择地址。若缓存显示从库落后于最低位置，优先尝试主库，即使缓存中的主库序号也已过时；原始最低 history/seq 仍完整发送给服务端校验。缓存 history 与最低位置不符时重新发现，不能把旧位置改成新历史。每次数据响应仍检查读取控制能力。没有最低位置时允许读取从库本地已应用状态。
+ 
+@@ -95,3 +95,5 @@ if let Some(cursor) = page.cursor { client.release_cursor(&cursor).await?; }
+ 客户端返回 `tkv1.<origin-and-tenant-hash>.<server-cursor>` 形式的不透明游标。绑定当前租户和配置的节点 origin，不能注入任意 URL；原始游标仍由服务端校验查询、快照、租户及存储代次。普通、read_batch 和发布查询全部使用此包装。续页直接访问原节点，不做发现、回退或自动重试；节点不可用时返回错误，需要调用方决定是否重新开始整个查询。发布分页仍固定原数据集版本。
+ 
+ release_cursor 仅访问原节点，read 角色即可释放其授权租户内的游标；成功后不可继续分页；节点不可达时由租约回收。SDK 游标只用于 SDK，不能直接提交到原始 HTTP；相同租户与节点配置的新 Client 可以继续尚未过期的 SDK 游标。如果续页快照早于请求的最低序号，返回 409/SNAPSHOT_TOO_OLD，并保留原游标，不会用当前节点已追平来伪装原快照满足新位置。主从切换、恢复、服务重启仍会使旧快照失效。客户端不会自行升主。
++
++内存表扫描按固定快照序号二分选择每个 key 的可见版本，不逐个遍历较新的历史版本；快照之后新增且没有可见版本的 key 仍计一次扫描，避免绕过预算；SST 仍可能读取多个历史记录，实际访问的记录和 tombstone 继续受扫描预算约束。非索引排序的每页需要重新扫描并计算有界 top-K，应为高频分页配置相应索引。
+diff --git a/docs/replication.md b/docs/replication.md
+index fdb51ff..4aeb0c0 100644
+--- a/docs/replication.md
++++ b/docs/replication.md
+@@ -119,9 +119,11 @@ POST /v1/replication/force-promote
+ 
+ 这两个布尔值是管理员对实际操作和风险的明确声明，系统无法据此验证旧机器已经关机。故障升主创建新历史，可能缺少旧主已确认但未复制的事务。旧主不能自动回归：保留其文件用于核对，在新的空目录从新主重建副本。不要把双方额外事务自动合并。
+ 
++完整的隔离证据、旧节点新目录重建、丢失写入核对及实际恢复计时，见[故障恢复演练与操作流程](recovery-drill.md)。脚本分别验证已追平与暂停复制的场景，不将已追平场景的零丢失结果当作异步复制的 RPO 保证。
++
+ ## 资源、初始化与运维
+ 
+-默认轮询 50 ms；v0.5.1 在仍有积压且本轮成功时直接继续下一轮，追平或出错后才等待轮询间隔。每租户每轮最多拉取 256 个批次或约 1 MiB，所有租户轮到一次后再处理下一页；v0.6.1 在一次目录刷新后最多继续 8 轮，轮次边界检查已用时间，达到 10 ms 就重新刷新目录。单个请求或一整轮本身仍可能超过 10 ms，该值不是请求耗时上限。每个日志页仍独立验证源 epoch 和租户存储代次，并使用该页报告的最新源位置；单个较大原子批次仍受 64 MiB WAL 格式及预算限制。传输使用有界 JSON/base64 页面，尚未实现原生二进制长连接流水线。接收和回放按页顺序执行，当前没有独立无限接收队列。一次源日志请求最多固定 128 个文件描述符，头校验和读取在释放写锁后执行。v0.6.1 对当前 WAL 文件复用最多 64 KiB 的顺序读取缓冲，缓冲计入租户及全局预算；必需帧或输出编码需要内存时释放预读缓冲并从准确位置续读。读取严格限制在请求固定的文件前缀，逐帧校验仍然执行。
++默认轮询 50 ms；v0.5.1 在仍有积压且本轮成功时直接继续下一轮，追平或源节点级错误后才等待轮询间隔。租户级错误只对该租户退避 100 ms，健康租户有积压时继续推进。每租户每轮最多拉取 256 个批次或约 1 MiB，所有租户轮到一次后再处理下一页；v0.6.1 在一次目录刷新后最多继续 8 轮，轮次边界检查已用时间，达到 10 ms 就重新刷新目录。单个请求或一整轮本身仍可能超过 10 ms，该值不是请求耗时上限。每个日志页仍独立验证源 epoch 和租户存储代次，并使用该页报告的最新源位置；单个较大原子批次仍受 64 MiB WAL 格式及预算限制。传输使用有界 JSON/base64 页面，尚未实现原生二进制长连接流水线。接收和回放按页顺序执行，当前没有独立无限接收队列。一次源日志请求最多固定 128 个文件描述符，头校验和读取在释放写锁后执行。v0.6.1 对当前 WAL 文件复用最多 64 KiB 的顺序读取缓冲，缓冲计入租户及全局预算；必需帧或输出编码需要内存时释放预读缓冲并从准确位置续读。读取严格限制在请求固定的文件前缀，逐帧校验仍然执行。
+ 
+ 回放先验证整页，再合并为一次 WAL 追加和一次同步；每个原始事务仍保留自己的帧、序号及校验和。崩溃时可以恢复该页中的完整事务前缀，再请求其余部分，不将整页误作跨事务原子提交。普通文档变化不使从库的集合/索引元信息缓存失效；集合、索引和 Lookup 定义变化仍使缓存失效。从库回放也累计 commits、wal_bytes 和 document_bytes。v0.6.1 将已经暂存的记录直接移入内存表，免去记录的第二次键复制及值引用计数增加，保留新键与旧键的一次树查找；小事务仍以最多 8 条记录分段插入，大事务仍以最多 64 条分段，提交发布继续等待 WAL 同步。
+ 
+@@ -129,9 +131,11 @@ POST /v1/replication/force-promote
+ 
+ `log_retention_bytes` 默认每租户 256 MiB，可配 1 MiB–1 TiB，修改配置后重启服务生效，不改变持久角色；只限制已经刷盘的保留 WAL，活跃/未完成刷盘 WAL 仍受原有磁盘配额和背压约束。保留日志计入租户磁盘占用。刷盘发布新 Manifest 后才能删除淘汰日志；落后从库遇到 `LOG_GONE` 会重新安装检查点。
+ 
+-检查点在 `replication-work/` 暂存，包含业务数据，不放入 `control/`。源节点最多保留一个导出检查点，5 分钟无传输活动后失效；传输使用 1 MiB 分块和文件 SHA-256。导入验证文件白名单、身份、校验和、序号和 SST 后才发布。目标需要大约两份检查点的可用暂存空间及额外余量；源端检查点上限为租户磁盘配额。启动清理本服务未完成的暂存；网络中断后可能重新复制检查点，不承诺分片断点续传。
++缺失租户及 LOG_GONE 初始化在独立的有界传输任务执行，最多两个在途，不持有复制 cycle 锁；健康租户可继续增量复制。文件写入、校验、同步及角色发布运行于阻塞工作者。源端正在生成导出检查点时，重复快照请求立即返回 BUSY，不排队占住全部复制 HTTP 许可。
++
++检查点在 `replication-work/` 暂存，包含业务数据，不放入 `control/`。源节点最多保留一个导出检查点，生成期间固定 WAL，生成后 5 分钟无分块/追赶活动才失效；传输使用 1 MiB 分块和文件 SHA-256。导入验证文件白名单、身份、校验和、序号和 SST 后才发布。目标需要大约两份检查点的可用暂存空间及额外余量；源端检查点上限为租户磁盘配额。从检查点生成开始到安装后追平，源端固定所需 WAL，必要时暂时超过 log_retention_bytes，但仍受租户磁盘总配额约束，空间不足返回背压。追平释放或租约过期后恢复按字节回收。活跃导出会保持源引擎，关闭/删除可能返回 BUSY。启动清理本服务未完成的暂存；网络中断后可能重新复制检查点，不承诺分片断点续传。
+ 
+-未发生变化的租户只报告已知位置，不因轮询反复打开冷引擎。源端单个租户损坏会显示在 `unavailable`，其已有从库数据保留，健康租户仍可复制。v0.5.1 中一个租户因活动句柄等原因无法删除或更新配额时，会报告该轮错误并跳过该租户，仍同步其他健康租户；之后继续重试。移除租户时清理其复制定位缓存。计划切换要求整个候选节点的全部租户完整追平，不能忽略不可用租户。
++未发生变化的租户只报告已知位置，不因轮询反复打开冷引擎。源端单个租户损坏会显示在 `unavailable`，其已有从库数据保留，健康租户仍可复制。v0.5.1 中一个租户因活动句柄等原因无法删除或更新配额时，会记录错误并跳过该租户，仍同步其他健康租户；只有显式 sync_once 调用返回该轮租户错误，后台循环不会因此将健康租户限制为每个轮询间隔一页。移除租户时清理其复制定位缓存。计划切换要求整个候选节点的全部租户完整追平，不能忽略不可用租户。
+ 
+ v0.5.2 将尚未恢复的租户生命周期 journal 同样列入 `unavailable`，不会通过目录缺失向从库宣布已经删除。重启按持久状态解决后，才继续普通目录同步和计划切换。
+ 
+diff --git a/docs/v0.10.1-validation.md b/docs/v0.10.1-validation.md
+index bda5ff9..0d8d022 100644
+--- a/docs/v0.10.1-validation.md
++++ b/docs/v0.10.1-validation.md
+@@ -1,5 +1,7 @@
+ # v0.10.1 客户端路由与后台维护优化验证
+ 
++本版本后续的并行负载、真实 ENOSPC、WAL I/O 错误与重启检查单独记录在[生产资格验证](production-qualification.md)，故障升主流程见[恢复演练](recovery-drill.md)。以下优化对比的环境和数字保留原测量口径。
++
+ 验证日期：2026-11-06。本轮完成读取路由缓存、并发发现合并、排队读取取消，以及磁盘计费扫描移出写锁。Query JSON、DSL、WAL/SST、注册表和复制协议保持不变。项目在 GitHub 使用名称 `idkv`，现有 Rust 包、导入及命令名保持兼容。
+ 
+ ## 实现与正确性边界
+@@ -107,3 +109,5 @@ target/release/examples/replication_perf /tmp/idkv-replica-run 65536 4 1000
+ 每次使用新目录，旧新版本使用独立构建目录和相同参数。更快设备若采样不足，基准会失败，需继续增加积压或调整两版相同的到达率。
+ 
+ 取消是协作式机制，不能中断已进入的系统 I/O；部分元信息读取仍在调用边界检查。被取消的读取占据队列和预留内存直到出队，队列上限仍为 4,096。没有对百万/千万数据、NVMe 冷缓存、真实掉电、多日运行或真实云 S3 重新资格测试。数据量大于引擎预算，不等于超过主机物理内存。本轮不创建 GitHub Release。
++
++后续报告核实与并发修复的当前工作区验证见[2026-11-06 报告修复记录](review-remediation-20261106.md)。上述历史性能及资格结果对应各自当时的构建，不能直接代替后续修复后的性能结论。
+diff --git a/docs/validation.md b/docs/validation.md
+index 27650c1..e204951 100644
+--- a/docs/validation.md
++++ b/docs/validation.md
+@@ -2,6 +2,8 @@
+ 
+ 本页保留 v0.1 的基线运行与性能结果。v0.2 OpenDAL 备份的回归测试、S3 兼容验证和未测边界单独记录于 [backup-validation.md](backup-validation.md)，不得将本页基准视为开启备份后的性能结果。
+ 
++当前 v0.10.1 的持续并行负载、磁盘不足、WAL I/O 故障与重启资格检查另见[生产资格验证](production-qualification.md)；主节点故障升主与旧节点重建见[恢复演练](recovery-drill.md)。这些独立运行不把本页历史基线升级为当前版本的百万/千万条性能资格。
++
+ v0.3 DSL 与读取优化的测试和前后对比见 [dsl-validation.md](dsl-validation.md)。本页百万/千万条结果未在 v0.3 重跑，保留为历史基线。
+ 
+ 本报告记录已执行的检查和实际测量，不将初始性能目标或未运行场景视为验收通过。源码、复现程序、原始 JSON/日志与本报告一并交付。
+@@ -141,3 +143,5 @@ python3 scripts/http_bench.py http://127.0.0.1:8080 token.txt
+ ## 尚未验证的验收项
+ 
+ 真实掉电、设备级 torn write、fsync/磁盘满的系统级故障注入、100 GB 规模、不同索引数量/选择率的完整矩阵、数千冷租户、多租户同时大规模恢复与建索引、24 小时以上稳态、跨平台运行与升级迁移，均未完成专项验证。读写正确性、隔离与资源上限已有实现和对应边界测试，但不能把上述短时结果表述为生产环境长期有界运行已经验收。
++
++后续报告核实与并发修复的当前工作区验证见[2026-11-06 报告修复记录](review-remediation-20261106.md)。上述历史性能及资格结果对应各自当时的构建，不能直接代替后续修复后的性能结论。
+diff --git a/src/backup/jobs.rs b/src/backup/jobs.rs
+index eac1c67..bc03590 100644
+--- a/src/backup/jobs.rs
++++ b/src/backup/jobs.rs
+@@ -76,7 +76,7 @@ impl Inner {
+                 let manifest = self.manifest(job.tenant, backup)?;
+                 for file in &manifest.files {
+                     context.download(file, manifest.tenant.generation, None)?;
+-                    self.update(job.id, |j| j.processed_files += 1)?;
++                    self.progress(job.id, 0, 0)?;
+                 }
+                 Ok(serde_json::to_value(manifest.summary())?)
+             }
+@@ -204,14 +204,11 @@ impl Context<'_> {
+                 &checkpoint.join(&file.path),
+                 manifest.tenant.generation,
+             )?;
+-            self.inner.update(self.job.id, |j| {
+-                j.processed_files += 1;
+-                if uploaded {
+-                    j.uploaded_bytes += file.size;
+-                } else {
+-                    j.reused_bytes += file.size;
+-                }
+-            })?;
++            self.inner.progress(
++                self.job.id,
++                if uploaded { file.size } else { 0 },
++                if uploaded { 0 } else { file.size },
++            )?;
+         }
+         self.inner.publish_backup(&manifest)?;
+         Ok(serde_json::to_value(manifest.summary())?)
+@@ -270,7 +267,7 @@ impl Context<'_> {
+                 manifest.tenant.generation,
+                 Some(&checkpoint.join(&file.path)),
+             )?;
+-            self.inner.update(self.job.id, |j| j.processed_files += 1)?;
++            self.inner.progress(self.job.id, 0, 0)?;
+         }
+         for dir in [
+             checkpoint.join("sst"),
+diff --git a/src/backup/mod.rs b/src/backup/mod.rs
+index 227d3a7..9904f28 100644
+--- a/src/backup/mod.rs
++++ b/src/backup/mod.rs
+@@ -437,6 +437,22 @@ impl Inner {
+         state.jobs.insert(id, job);
+         Ok(())
+     }
++
++    fn progress(&self, id: Uuid, uploaded_bytes: u64, reused_bytes: u64) -> Result<()> {
++        let mut state = self.state.lock();
++        let job = state
++            .jobs
++            .get_mut(&id)
++            .ok_or_else(|| Error::missing("backup job"))?;
++        job.processed_files += 1;
++        job.uploaded_bytes += uploaded_bytes;
++        job.reused_bytes += reused_bytes;
++        job.updated_ms = now_ms();
++        // Progress resets on resume; only phase transitions and terminal results
++        // need durability. Per-file fsyncs compete with unrelated tenants' WALs.
++        crate::storage::failpoint("backup_progress");
++        Ok(())
++    }
+ }
+ pub(crate) fn remote_error(e: opendal::Error) -> Error {
+     let code = if e.kind() == opendal::ErrorKind::NotFound {
+diff --git a/src/bin/server.rs b/src/bin/server.rs
+index 576d69a..52a194c 100644
+--- a/src/bin/server.rs
++++ b/src/bin/server.rs
+@@ -50,12 +50,31 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
+             let listener = tokio::net::TcpListener::bind(&listen).await?;
+             let replication_worker = replication.as_ref().map(|service| service.start());
+             eprintln!("tenant-kv listening on {}", listener.local_addr()?);
+-            axum::serve(listener, router).with_graceful_shutdown(async move {
++            let (draining, drained) = tokio::sync::oneshot::channel();
++            let server = axum::serve(listener, router).with_graceful_shutdown(async move {
+                 shutdown_signal().await;
+                 runtime.drain();
++                let _ = draining.send(());
+                 eprintln!("tenant-kv draining requests");
+-            }).await?;
++                // Give health checks a visible not-ready interval before the
++                // listener closes. Existing accepted work then has a deadline.
++                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
++            }).into_future();
++            tokio::pin!(server);
++            tokio::select! {
++                result = &mut server => result?,
++                _ = drained => {
++                    match tokio::time::timeout(std::time::Duration::from_secs(32), &mut server).await {
++                        Ok(result) => result?,
++                        Err(_) => {
++                            eprintln!("tenant-kv request drain exceeded 30 seconds; terminating");
++                            std::process::exit(1);
++                        }
++                    }
++                }
++            }
+             if let Some(worker) = replication_worker { worker.abort(); let _ = worker.await; }
++            if let Some(service) = replication { service.stop_initializations().await; }
+             let result = tokio::task::spawn_blocking(move || telemetry.shutdown()).await?;
+             if let Err(error) = result { eprintln!("{error}"); }
+             eprintln!("tenant-kv shutdown complete");
+diff --git a/src/client.rs b/src/client.rs
+index 39b42e6..a5ea6b7 100644
+--- a/src/client.rs
++++ b/src/client.rs
+@@ -278,10 +278,16 @@ impl Client {
+         let tenant = self.tenant.to_string();
+         let body = json!({"operations":operations,"write_options":options});
+         let mut last = Error::new("READ_ONLY", "no writable primary");
++        let discovery_options = ClientReadOptions::default();
++        let runtime = reads::ReadRuntime {
++            options: &discovery_options,
++            deadline: std::time::Instant::now() + std::time::Duration::from_secs(8),
++        };
+         for _ in 0..attempts {
+-            let nodes = self.contexts().await?;
+-            let mut primary = nodes.into_iter().filter(|(_, context)| context.writable);
+-            let Some((node, _)) = primary.next() else {
++            let routes = self.read_routes(&runtime).await?;
++            let mut primary = routes.nodes.iter().filter(|(_, context)| context.writable);
++            let Some((index, _)) = primary.next() else {
++                self.routes.invalidate(&routes);
+                 return Err(last);
+             };
+             if primary.next().is_some() {
+@@ -292,7 +298,7 @@ impl Client {
+             }
+             match self
+                 .request(
+-                    node,
++                    &self.nodes[*index],
+                     &["v1", "tenants", &tenant, "collections", collection, "batch"],
+                     Some(body.clone()),
+                     None,
+@@ -310,6 +316,7 @@ impl Client {
+                             | "RESPONSE_UNAVAILABLE"
+                     ) =>
+                 {
++                    self.routes.invalidate(&routes);
+                     last = error
+                 }
+                 Err(error) => return Err(error),
+diff --git a/src/http.rs b/src/http.rs
+index 53c0b52..6b3d303 100644
+--- a/src/http.rs
++++ b/src/http.rs
+@@ -583,18 +583,13 @@ async fn dispatch_async(
+             ));
+         }
+         state.runtime.telemetry.record_read(&value);
+-        let response_history = value
+-            .get("history")
+-            .and_then(Value::as_str)
+-            .or_else(|| {
+-                value
+-                    .as_array()
+-                    .and_then(|a| a.first())
+-                    .and_then(|v| v.get("history"))
+-                    .and_then(Value::as_str)
+-            })
+-            .map(str::to_owned)
+-            .or_else(|| if read_only { before.clone() } else { None });
++        // JSON may be an arbitrary user document. History is manager-owned
++        // metadata and must never be inferred from the response payload.
++        let response_history = if read_only {
++            before.clone()
++        } else {
++            tenant.and_then(|id| store.tenant(id).ok().map(|t| t.history()))
++        };
+         let encoded = body::encode(&store, tenant, value, read_only)?;
+         drop(input_memory);
+         let body = axum::body::Body::from(axum::body::Bytes::from_owner(encoded));
+@@ -612,10 +607,10 @@ async fn dispatch_async(
+                 .headers_mut()
+                 .insert("x-tkv-read-controls", "1".parse().unwrap());
+         }
+-        if let Some(history) = response_history {
+-            response
+-                .headers_mut()
+-                .insert("x-tkv-history", history.parse().unwrap());
++        if let Some(history) =
++            response_history.and_then(|history| axum::http::HeaderValue::from_str(&history).ok())
++        {
++            response.headers_mut().insert("x-tkv-history", history);
+         }
+         Ok::<_, Error>(response)
+     })
+diff --git a/src/http/read_controls.rs b/src/http/read_controls.rs
+index 34eef17..3d8158a 100644
+--- a/src/http/read_controls.rs
++++ b/src/http/read_controls.rs
+@@ -81,12 +81,11 @@ pub(super) struct OperationContext<'a> {
+ }
+ impl OperationContext<'_> {
+     pub(super) fn reader<'a>(&self, tenant: &'a TenantHandle) -> Result<TenantReader<'a>> {
+-        Ok(TenantReader {
+-            tenant,
+-            budget: self
+-                .budget
+-                .cloned()
+-                .ok_or_else(|| Error::new("INTERNAL", "missing read budget"))?,
+-        })
++        let mut budget = self
++            .budget
++            .cloned()
++            .ok_or_else(|| Error::new("INTERNAL", "missing read budget"))?;
++        budget.principal = Some(self.principal.into());
++        Ok(TenantReader { tenant, budget })
+     }
+ }
+diff --git a/src/identity/time.rs b/src/identity/time.rs
+index 7caf7be..809d91e 100644
+--- a/src/identity/time.rs
++++ b/src/identity/time.rs
+@@ -26,26 +26,39 @@ fn wall() -> Result<i64> {
+         .map_err(|_| Error::new("CLOCK_SKEW", "system time overflow"))
+ }
+ pub(crate) struct ClockAnchor {
+-    wall: i64,
+-    monotonic: Instant,
++    sample: parking_lot::Mutex<(i64, Instant)>,
+ }
+ impl ClockAnchor {
+     pub(crate) fn new() -> Result<Self> {
+         Ok(Self {
+-            wall: wall()?,
+-            monotonic: Instant::now(),
++            sample: parking_lot::Mutex::new((wall()?, Instant::now())),
+         })
+     }
+     pub(crate) fn sample(&self, previous: i64, tolerance_ms: u64) -> Result<i64> {
++        let mut anchor = self.sample.lock();
+         let now = wall()?;
+-        let elapsed = i64::try_from(self.monotonic.elapsed().as_micros())
++        let monotonic = Instant::now();
++        Self::advance(&mut anchor, now, monotonic, previous, tolerance_ms)
++    }
++    fn advance(
++        anchor: &mut (i64, Instant),
++        now: i64,
++        monotonic: Instant,
++        previous: i64,
++        tolerance_ms: u64,
++    ) -> Result<i64> {
++        let elapsed = i64::try_from(monotonic.duration_since(anchor.1).as_micros())
+             .map_err(|_| Error::new("CLOCK_SKEW", "monotonic time overflow"))?;
+-        Self::validate(
++        let recorded = Self::validate(
+             now,
+-            self.wall.saturating_add(elapsed),
++            anchor.0.saturating_add(elapsed),
+             previous,
+             tolerance_ms,
+-        )
++        )?;
++        // Track normal clock discipline without forgiving a discontinuity: a
++        // failed sample never moves the anchor or the durable previous time.
++        *anchor = (now, monotonic);
++        Ok(recorded)
+     }
+     fn validate(now: i64, expected: i64, previous: i64, tolerance_ms: u64) -> Result<i64> {
+         let tolerance = tolerance_ms.saturating_mul(1000);
+@@ -91,4 +104,34 @@ mod tests {
+             );
+         }
+     }
++    #[test]
++    fn normal_clock_discipline_refreshes_the_anchor_but_jumps_still_fail_closed() {
++        let start = Instant::now();
++        let mut anchor = (1_000_000, start);
++        let mut previous = 1_000_000;
++        for tick in 1..20 {
++            previous = ClockAnchor::advance(
++                &mut anchor,
++                1_000_000 + tick * 1500,
++                start + std::time::Duration::from_micros(tick as u64 * 1000),
++                previous,
++                1,
++            )
++            .unwrap();
++        }
++        let unchanged = anchor;
++        assert_eq!(
++            ClockAnchor::advance(
++                &mut anchor,
++                2_000_000,
++                start + std::time::Duration::from_millis(20),
++                previous,
++                1
++            )
++            .unwrap_err()
++            .code,
++            "CLOCK_SKEW"
++        );
++        assert_eq!(anchor, unchanged);
++    }
+ }
+diff --git a/src/query/execute.rs b/src/query/execute.rs
+index f6f71f2..28157e3 100644
+--- a/src/query/execute.rs
++++ b/src/query/execute.rs
+@@ -106,6 +106,7 @@ impl TenantHandle {
+                 return Err(Error::new("CURSOR_EXPIRED", "replication history changed"));
+             }
+             if cursor.fingerprint != fingerprint
++                || cursor.principal != budget.principal
+                 || cursor.snapshot.tenant() != self.id()
+                 || cursor.snapshot.generation() != self.engine().runtime_id
+             {
+@@ -413,6 +414,7 @@ impl TenantHandle {
+         let next_cursor = if more {
+             let last = candidates.last().unwrap();
+             Some(Cursor {
++                principal: budget.principal.clone(),
+                 publication,
+                 replication_epoch,
+                 snapshot: snapshot.clone(),
+@@ -463,7 +465,12 @@ impl TenantHandle {
+             }
+             if next_cursor.is_some()
+                 && query.cursor.is_none()
+-                && cursors.len() >= self.engine().options.max_snapshots
++                && (cursors.len() >= self.engine().options.max_snapshots / 2
++                    || cursors
++                        .values()
++                        .filter(|c| c.principal == budget.principal)
++                        .count()
++                        >= (self.engine().options.max_snapshots / 4).max(1))
+             {
+                 return Err(Error::limit("cursor count limit"));
+             }
+diff --git a/src/query/mod.rs b/src/query/mod.rs
+index 221b037..3311b13 100644
+--- a/src/query/mod.rs
++++ b/src/query/mod.rs
+@@ -8,6 +8,7 @@ use crate::{model::*, storage::Snapshot};
+ use uuid::Uuid;
+ 
+ pub(crate) struct Cursor {
++    principal: Option<std::sync::Arc<str>>,
+     pub(crate) snapshot: Snapshot,
+     pub(crate) publication: Option<(String, Uuid)>,
+     replication_epoch: Option<Uuid>,
+diff --git a/src/read.rs b/src/read.rs
+index 1b6b114..0d2ac93 100644
+--- a/src/read.rs
++++ b/src/read.rs
+@@ -47,6 +47,7 @@ impl Default for ReadOptions {
+ 
+ #[derive(Clone)]
+ pub(crate) struct ReadBudget {
++    pub(crate) principal: Option<Arc<str>>,
+     pub(crate) deadline: Instant,
+     pub(crate) max_scan: usize,
+     pub(crate) allow_full_scan: bool,
+@@ -61,6 +62,7 @@ impl ReadBudget {
+             ));
+         }
+         let out = Self {
++            principal: None,
+             deadline: Instant::now()
+                 .checked_add(Duration::from_millis(
+                     options
+@@ -209,7 +211,11 @@ impl TenantReader<'_> {
+                     if Instant::now() >= wait_deadline {
+                         return Err(error);
+                     }
+-                    std::thread::sleep(Duration::from_millis(2))
++                    let engine = self.tenant.engine();
++                    engine.wait_progress(
++                        engine.seq(),
++                        wait_deadline.saturating_duration_since(Instant::now()),
++                    );
+                 }
+                 result => return result,
+             }
+diff --git a/src/replication/bootstrap.rs b/src/replication/bootstrap.rs
+index a989f6d..377a796 100644
+--- a/src/replication/bootstrap.rs
++++ b/src/replication/bootstrap.rs
+@@ -11,11 +11,42 @@ use std::{
+     fs::{self, OpenOptions},
+     io::Write,
+     path::PathBuf,
++    sync::{
++        Arc,
++        atomic::{AtomicBool, Ordering},
++    },
+ };
+ use uuid::Uuid;
+ 
+ impl Service {
+     pub(super) async fn initialize(&self, source: &Source, tenant: Uuid) -> Result<()> {
++        let service = self.clone();
++        let source = source.clone();
++        let runtime = tokio::runtime::Handle::current();
++        let cancelled = Arc::new(AtomicBool::new(false));
++        let _cancel = CancelTransfer(cancelled.clone());
++        // File creation, hashing, fsync and cleanup all run on this bounded
++        // transfer worker. HTTP futures still use the runtime's network driver.
++        tokio::task::spawn_blocking(move || {
++            runtime.block_on(service.receive_checkpoint(&source, tenant, &cancelled))
++        })
++        .await
++        .map_err(|_| Error::new("INTERNAL", "replica transfer worker failed"))?
++    }
++    async fn receive_checkpoint(
++        &self,
++        source: &Source,
++        tenant: Uuid,
++        cancelled: &AtomicBool,
++    ) -> Result<()> {
++        let check_cancelled = || {
++            if cancelled.load(Ordering::Acquire) {
++                Err(Error::new("CANCELLED", "replica transfer stopped"))
++            } else {
++                Ok(())
++            }
++        };
++        check_cancelled()?;
+         let state = self.store().replication_state();
+         let info: super::client::Received<super::snapshot::SnapshotInfo> = self
+             .request(
+@@ -62,6 +93,7 @@ impl Service {
+                 return Err(Error::limit("checkpoint staging free space"));
+             }
+             for (index, file) in info.files.iter().enumerate() {
++                check_cancelled()?;
+                 let mut output = OpenOptions::new()
+                     .create_new(true)
+                     .write(true)
+@@ -69,6 +101,7 @@ impl Service {
+                 let mut offset = 0u64;
+                 let mut digest = Sha256::new();
+                 while offset < file.size {
++                    check_cancelled()?;
+                     let chunk: super::client::Received<Value> = self
+                         .request(
+                             "/v1/replication/snapshot/chunk",
+@@ -100,14 +133,10 @@ impl Service {
+             sync_dir(&path.join("sst"))?;
+             sync_dir(&path.join("wal"))?;
+             sync_dir(&path)?;
+-            let store = self.store().clone();
+-            let source = source.clone();
+             let position = info.position;
+             let tenant_info = info.tenant.clone();
+-            tokio::task::spawn_blocking(move || {
+-                // Installation is not cancelable once this worker starts. Its
+-                // staging directory must outlive a canceled network task.
+-                let _cleanup = _cleanup;
++            {
++                let store = self.store();
+                 let (budget, io) = store.import_context();
+                 let check = Engine::open(
+                     path.clone(),
+@@ -121,21 +150,42 @@ impl Service {
+                     return Err(Error::corrupt("checkpoint position mismatch"));
+                 }
+                 drop(check);
+-                store.install_replica(&source, &path, tenant_info)
+-            })
+-            .await
+-            .map_err(|_| Error::new("INTERNAL", "replication checkpoint worker failed"))??;
++                check_cancelled()?;
++                store.install_replica(source, &path, tenant_info)?;
++            }
+             Ok::<_, Error>(())
+         }
+         .await;
+-        let released: Result<super::client::Received<Value>> = self
+-            .request(
+-                "/v1/replication/snapshot/release",
+-                Some(json!({"id":info.id})),
+-            )
+-            .await;
+-        result?;
+-        released.map(|_| ())
++        if result.is_ok() {
++            // The snapshot position can be far behind the head after a large
++            // transfer. Keep its WAL lease until incremental catch-up completes.
++            self.hold_transfer(tenant, info.id);
++            let head: Result<super::client::Received<super::client::Status>> =
++                self.request("/v1/replication/status", None).await;
++            if let Ok(head) = head
++                && head.node.epoch == source.epoch
++                && head
++                    .tenants
++                    .iter()
++                    .any(|entry| entry.info.id == tenant && entry.seq <= info.position)
++            {
++                self.finish_transfer(tenant).await?;
++            }
++        } else {
++            let _: Result<super::client::Received<Value>> = self
++                .request(
++                    "/v1/replication/snapshot/release",
++                    Some(json!({"id":info.id})),
++                )
++                .await;
++        }
++        result
++    }
++}
++struct CancelTransfer(Arc<AtomicBool>);
++impl Drop for CancelTransfer {
++    fn drop(&mut self) {
++        self.0.store(true, Ordering::Release);
+     }
+ }
+ struct ImportCleanup(PathBuf);
+diff --git a/src/replication/client.rs b/src/replication/client.rs
+index b1b014f..c0409a1 100644
+--- a/src/replication/client.rs
++++ b/src/replication/client.rs
+@@ -32,12 +32,14 @@ pub struct UnavailableTenant {
+ enum TenantSync {
+     Idle,
+     Pending(u64),
+-    Refresh,
+ }
+ struct Progress {
+     error: Option<String>,
+     cycles: u64,
+     cursors: HashMap<Uuid, super::LogCursor>,
++    initializing: HashMap<Uuid, tokio::task::JoinHandle<Result<()>>>,
++    retry_at: HashMap<Uuid, Instant>,
++    transfers: HashMap<Uuid, Uuid>,
+ }
+ struct Inner {
+     store: Store,
+@@ -133,6 +135,9 @@ impl Service {
+                     error: None,
+                     cycles: 0,
+                     cursors: HashMap::new(),
++                    initializing: HashMap::new(),
++                    retry_at: HashMap::new(),
++                    transfers: HashMap::new(),
+                 }),
+             }),
+         })
+@@ -182,10 +187,12 @@ impl Service {
+                 if service.inner.store.replication_state().role == Role::Replica {
+                     let result = {
+                         let _cycle = service.inner.cycle.lock().await;
+-                        service.sync_inner().await
++                        service.sync_inner(false).await
+                     };
+                     let pending = matches!(result, Ok(true));
+-                    service.inner.progress.lock().error = result.err().map(|e| e.to_string());
++                    if let Err(error) = &result {
++                        service.inner.progress.lock().error = Some(error.to_string());
++                    }
+                     if pending {
+                         // Each round gives every pending tenant a page before revisiting
+                         // a hot tenant. Sleep only at the head or after an error.
+@@ -197,6 +204,24 @@ impl Service {
+             }
+         })
+     }
++    /// Stop background checkpoint transfers after stopping the replication loop.
++    /// An installation already handed to a blocking worker finishes atomically.
++    pub async fn stop_initializations(&self) {
++        let tasks: Vec<_> = self
++            .inner
++            .progress
++            .lock()
++            .initializing
++            .drain()
++            .map(|(_, task)| task)
++            .collect();
++        for task in &tasks {
++            task.abort();
++        }
++        for task in tasks {
++            let _ = task.await;
++        }
++    }
+     pub(super) async fn request<T: DeserializeOwned>(
+         &self,
+         path: &str,
+@@ -268,29 +293,44 @@ impl Service {
+     }
+     pub async fn sync_once(&self) -> Result<()> {
+         let _cycle = self.inner.cycle.lock().await;
+-        self.sync_inner().await.map(|_| ())
++        self.sync_inner(true).await.map(|_| ())
+     }
+-    async fn sync_inner(&self) -> Result<bool> {
++    async fn sync_inner(&self, report_error: bool) -> Result<bool> {
+         if self.inner.store.replication_state().role != Role::Replica {
+             return Err(Error::new("CONFLICT", "node is not a replica"));
+         }
+         let upstream: Received<Status> = self.request("/v1/replication/status", None).await?;
+         super::compatible(upstream.node.protocol)?;
+         let store = self.inner.store.clone();
+-        let source = store.bind_source(&upstream.node)?;
++        let node = upstream.node.clone();
++        let binding = store.clone();
++        let source = tokio::task::spawn_blocking(move || binding.bind_source(&node))
++            .await
++            .map_err(|_| Error::new("INTERNAL", "source binding worker failed"))??;
+         let mut catalog = upstream.tenants.clone();
+         catalog.extend(upstream.unavailable.iter().map(|t| TenantPosition {
+             info: t.info.clone(),
+             seq: 0,
+         }));
+         catalog.sort_by_key(|p| p.info.id);
+-        let blocked = store.replica_catalog(&source, &catalog)?;
++        let catalog_store = store.clone();
++        let catalog_source = source.clone();
++        let blocked = tokio::task::spawn_blocking(move || {
++            catalog_store.replica_catalog(&catalog_source, &catalog)
++        })
++        .await
++        .map_err(|_| Error::new("INTERNAL", "replica catalog worker failed"))??;
++        let mut catalog = upstream.tenants.clone();
++        catalog.extend(upstream.unavailable.iter().map(|t| TenantPosition {
++            info: t.info.clone(),
++            seq: 0,
++        }));
+         let active: HashSet<_> = catalog.iter().map(|p| p.info.id).collect();
+-        self.inner
+-            .progress
+-            .lock()
+-            .cursors
+-            .retain(|id, _| active.contains(id));
++        {
++            let mut progress = self.inner.progress.lock();
++            progress.cursors.retain(|id, _| active.contains(id));
++            progress.retry_at.retain(|id, _| active.contains(id));
++        }
+         let mut failure = blocked.values().next().cloned().or_else(|| {
+             upstream.unavailable.first().map(|t| {
+                 Error::new(
+@@ -299,15 +339,50 @@ impl Service {
+                 )
+             })
+         });
++        let finished: Vec<_> = {
++            let progress = self.inner.progress.lock();
++            progress
++                .initializing
++                .iter()
++                .filter(|(_, task)| task.is_finished())
++                .map(|(id, _)| *id)
++                .collect()
++        };
++        for id in finished {
++            let task = self.inner.progress.lock().initializing.remove(&id).unwrap();
++            if let Err(error) = task.await.unwrap_or_else(|_| {
++                Err(Error::new(
++                    "INTERNAL",
++                    "replica initialization worker failed",
++                ))
++            }) {
++                self.inner
++                    .progress
++                    .lock()
++                    .retry_at
++                    .insert(id, Instant::now() + Duration::from_millis(100));
++                failure.get_or_insert(error);
++            }
++        }
+         let started = Instant::now();
+         let mut positions = upstream.tenants.clone();
+         for round in 0..8 {
+             let mut next = Vec::new();
+-            let mut refresh = false;
+             for mut position in positions {
+                 if blocked.contains_key(&position.info.id) {
+                     continue;
+                 }
++                {
++                    let progress = self.inner.progress.lock();
++                    if progress.initializing.contains_key(&position.info.id)
++                        || progress
++                            .retry_at
++                            .get(&position.info.id)
++                            .is_some_and(|at| *at > Instant::now())
++                    {
++                        continue;
++                    }
++                }
+                 match self
+                     .sync_tenant(&source, upstream.node.cluster, &position)
+                     .await
+@@ -319,22 +394,23 @@ impl Service {
+                         position.seq = head;
+                         next.push(position);
+                     }
+-                    Ok(TenantSync::Refresh) => refresh = true,
+                     Err(error) => {
++                        self.inner.progress.lock().retry_at.insert(
++                            position.info.id,
++                            Instant::now() + Duration::from_millis(100),
++                        );
+                         failure.get_or_insert(error);
+                     }
+                 }
+             }
+-            if let Some(error) = failure {
+-                return Err(error);
+-            }
+-            if next.is_empty()
+-                || refresh
+-                || round == 7
+-                || started.elapsed() >= Duration::from_millis(10)
+-            {
+-                self.inner.progress.lock().cycles += 1;
+-                return Ok(refresh || !next.is_empty());
++            if next.is_empty() || round == 7 || started.elapsed() >= Duration::from_millis(10) {
++                let mut progress = self.inner.progress.lock();
++                progress.cycles += 1;
++                progress.error = failure.as_ref().map(ToString::to_string);
++                if report_error && let Some(error) = failure {
++                    return Err(error);
++                }
++                return Ok(!next.is_empty());
+             }
+             // Every pending tenant receives one page per round. Refresh lifecycle
+             // and role information after at most eight rounds or 10 ms of work;
+@@ -352,17 +428,18 @@ impl Service {
+     ) -> Result<TenantSync> {
+         let store = self.inner.store.clone();
+         if !store.contains_tenant(position.info.id) {
+-            self.initialize(source, position.info.id).await?;
+-            return Ok(TenantSync::Refresh);
+-        }
+-        let after = store.replication_position(position.info.id)?;
+-        if after > position.seq {
+-            return Err(Error::new(
+-                "REPLICATION_CONFLICT",
+-                "replica contains transactions absent from source",
+-            ));
++            self.start_initialize(source, position.info.id);
++            return Ok(TenantSync::Idle);
+         }
++        let id = position.info.id;
++        let position_store = store.clone();
++        let after = tokio::task::spawn_blocking(move || position_store.replication_position(id))
++            .await
++            .map_err(|_| Error::new("INTERNAL", "replica position worker failed"))??;
++        // An asynchronous checkpoint can install a position newer than this
++        // cycle's catalog. The authenticated log endpoint checks the live head.
+         if after == position.seq {
++            self.finish_transfer(position.info.id).await?;
+             return Ok(TenantSync::Idle);
+         }
+         let request = LogRequest {
+@@ -386,8 +463,8 @@ impl Service {
+         match page {
+             Err(error) if error.code == "LOG_GONE" => {
+                 self.inner.progress.lock().cursors.remove(&position.info.id);
+-                self.initialize(source, position.info.id).await?;
+-                Ok(TenantSync::Refresh)
++                self.start_initialize(source, position.info.id);
++                Ok(TenantSync::Idle)
+             }
+             Err(error) => Err(error),
+             Ok(page) => {
+@@ -415,11 +492,42 @@ impl Service {
+                         .cursors
+                         .insert(position.info.id, cursor);
+                 }
++                if matches!(pending, TenantSync::Idle) {
++                    self.finish_transfer(position.info.id).await?;
++                }
+                 Ok(pending)
+             }
+         }
+     }
++    fn start_initialize(&self, source: &Source, tenant: Uuid) {
++        let mut progress = self.inner.progress.lock();
++        if progress.initializing.len() >= 2 || progress.initializing.contains_key(&tenant) {
++            return;
++        }
++        let service = self.clone();
++        let source = source.clone();
++        progress.initializing.insert(
++            tenant,
++            tokio::spawn(async move { service.initialize(&source, tenant).await }),
++        );
++    }
++    pub(super) fn hold_transfer(&self, tenant: Uuid, id: Uuid) {
++        self.inner.progress.lock().transfers.insert(tenant, id);
++    }
++    pub(super) async fn finish_transfer(&self, tenant: Uuid) -> Result<()> {
++        let id = self.inner.progress.lock().transfers.get(&tenant).copied();
++        if let Some(id) = id {
++            let _: Received<Value> = self
++                .request("/v1/replication/snapshot/release", Some(json!({"id":id})))
++                .await?;
++            self.inner.progress.lock().transfers.remove(&tenant);
++        }
++        Ok(())
++    }
+     pub fn export_log(&self, request: &LogRequest) -> Result<LogPage> {
++        if let Some(mut exports) = self.inner.exports.try_lock() {
++            exports.renew(request.tenant, request.epoch);
++        }
+         self.inner.store.export_logs(request)
+     }
+     pub fn snapshot(
+@@ -430,7 +538,8 @@ impl Service {
+     ) -> Result<super::snapshot::SnapshotInfo> {
+         self.inner
+             .exports
+-            .lock()
++            .try_lock()
++            .ok_or_else(|| Error::new("BUSY", "replication checkpoint preparation is active"))?
+             .create(&self.inner.store, cluster, epoch, tenant)
+     }
+     pub fn snapshot_chunk(&self, id: Uuid, file: usize, offset: u64) -> Result<String> {
+@@ -461,8 +570,13 @@ impl Service {
+                 .ok_or_else(|| {
+                     Error::new("CONFLICT", "source does not confirm this durable fence")
+                 })?;
+-            self.sync_inner().await?;
+-            match self.inner.store.promote_verified(fence) {
++            self.sync_inner(true).await?;
++            let store = self.inner.store.clone();
++            let fence = fence.clone();
++            let result = tokio::task::spawn_blocking(move || store.promote_verified(&fence))
++                .await
++                .map_err(|_| Error::new("INTERNAL", "promotion worker failed"))?;
++            match result {
+                 Err(error) if error.code == "REPLICA_LAG" && Instant::now() < deadline => {}
+                 result => return result,
+             }
+@@ -472,7 +586,11 @@ impl Service {
+         let _cycle = self.inner.cycle.lock().await;
+         let upstream: Received<Status> = self.request("/v1/replication/status", None).await?;
+         super::compatible(upstream.node.protocol)?;
+-        let state = self.inner.store.follow_verified(&upstream.node)?;
++        let store = self.inner.store.clone();
++        let node = upstream.node.clone();
++        let state = tokio::task::spawn_blocking(move || store.follow_verified(&node))
++            .await
++            .map_err(|_| Error::new("INTERNAL", "follow worker failed"))??;
+         self.inner.progress.lock().cursors.clear();
+         Ok(state)
+     }
+@@ -519,13 +637,21 @@ impl Service {
+                 ));
+             }
+         }
+-        let fence = self.inner.store.fence_primary(peer.node.node)?;
++        let store = self.inner.store.clone();
++        let target = peer.node.node;
++        let fence = tokio::task::spawn_blocking(move || store.fence_primary(target))
++            .await
++            .map_err(|_| Error::new("INTERNAL", "fence worker failed"))??;
+         let _: Received<NodeState> = self
+             .request("/v1/replication/promote", Some(json!({"fence":fence.id})))
+             .await?;
+         let peer: Received<Status> = self.request("/v1/replication/status", None).await?;
+         super::compatible(peer.node.protocol)?;
+-        let state = self.inner.store.follow_verified(&peer.node)?;
++        let store = self.inner.store.clone();
++        let node = peer.node.clone();
++        let state = tokio::task::spawn_blocking(move || store.follow_verified(&node))
++            .await
++            .map_err(|_| Error::new("INTERNAL", "follow worker failed"))??;
+         self.inner.progress.lock().cursors.clear();
+         Ok(state)
+     }
+@@ -536,8 +662,11 @@ impl Service {
+         accept_data_loss: bool,
+     ) -> Result<NodeState> {
+         let _cycle = self.inner.cycle.lock().await;
+-        self.inner
+-            .store
+-            .force_promote(&source, old_primary_fenced, accept_data_loss)
++        let store = self.inner.store.clone();
++        tokio::task::spawn_blocking(move || {
++            store.force_promote(&source, old_primary_fenced, accept_data_loss)
++        })
++        .await
++        .map_err(|_| Error::new("INTERNAL", "force promotion worker failed"))?
+     }
+ }
+diff --git a/src/replication/mod.rs b/src/replication/mod.rs
+index f31cdc9..95e25c9 100644
+--- a/src/replication/mod.rs
++++ b/src/replication/mod.rs
+@@ -87,7 +87,10 @@ impl crate::TenantHandle {
+                     "replica has not applied the requested transaction",
+                 ));
+             }
+-            std::thread::sleep(std::time::Duration::from_millis(2));
++            self.engine().wait_progress(
++                applied,
++                deadline.saturating_duration_since(std::time::Instant::now()),
++            );
+         }
+     }
+ }
+diff --git a/src/replication/snapshot.rs b/src/replication/snapshot.rs
+index fa7b146..3a25d83 100644
+--- a/src/replication/snapshot.rs
++++ b/src/replication/snapshot.rs
+@@ -32,7 +32,7 @@ pub struct SnapshotInfo {
+ }
+ pub(crate) struct Exports {
+     root: PathBuf,
+-    current: Option<(SnapshotInfo, Instant, PathBuf)>,
++    current: Option<(SnapshotInfo, Instant, PathBuf, crate::storage::LogRetention)>,
+ }
+ impl Exports {
+     pub fn open(store: &Store) -> Result<Self> {
+@@ -69,9 +69,11 @@ impl Exports {
+                 "checkpoint source changed",
+             ));
+         }
+-        if let Some((info, created, _)) = &self.current {
++        if let Some((info, created, _, lease)) = &mut self.current {
+             if created.elapsed() < Duration::from_secs(300) {
+                 if info.tenant.id == tenant && info.epoch == epoch {
++                    *created = Instant::now();
++                    lease.renew(info.position);
+                     return Ok(info.clone());
+                 }
+                 return Err(Error::new(
+@@ -83,6 +85,9 @@ impl Exports {
+         }
+         let handle = store.tenant(tenant)?;
+         let info = handle.info();
++        // Pin before checkpoint copying starts: writes and flushes continue while
++        // files are copied and must remain available after its captured position.
++        let lease = handle.engine().retain_replication_log();
+         let id = Uuid::new_v4();
+         let path = self.root.join(id.to_string());
+         let result = (|| {
+@@ -106,7 +111,8 @@ impl Exports {
+         })();
+         match result {
+             Ok(info) => {
+-                self.current = Some((info.clone(), Instant::now(), path));
++                lease.renew(info.position);
++                self.current = Some((info.clone(), Instant::now(), path, lease));
+                 Ok(info)
+             }
+             Err(error) => {
+@@ -116,10 +122,10 @@ impl Exports {
+         }
+     }
+     pub fn chunk(&mut self, id: Uuid, file: usize, offset: u64) -> Result<String> {
+-        let (info, created, path) = self
++        let (info, created, path, lease) = self
+             .current
+             .as_mut()
+-            .filter(|(s, _, _)| s.id == id)
++            .filter(|(s, _, _, _)| s.id == id)
+             .ok_or_else(|| Error::missing("replication snapshot"))?;
+         if created.elapsed() > Duration::from_secs(300) {
+             return Err(Error::new(
+@@ -137,16 +143,27 @@ impl Exports {
+         let mut bytes = vec![0; (item.size - offset).min(super::PAGE_BYTES as u64) as usize];
+         File::open(path.join(&item.path))?.read_exact_at(&mut bytes, offset)?;
+         *created = Instant::now();
++        lease.renew(info.position);
+         Ok(STANDARD.encode(bytes))
+     }
+     pub fn release(&mut self, id: Uuid) -> Result<()> {
+-        if self.current.as_ref().is_some_and(|(s, _, _)| s.id == id) {
++        if self.current.as_ref().is_some_and(|(s, _, _, _)| s.id == id) {
+             self.clear()?;
+         }
+         Ok(())
+     }
++    pub fn renew(&mut self, tenant: Uuid, epoch: Uuid) {
++        if let Some((info, touched, _, lease)) = &mut self.current
++            && info.tenant.id == tenant
++            && info.epoch == epoch
++            && touched.elapsed() < Duration::from_secs(300)
++        {
++            *touched = Instant::now();
++            lease.renew(info.position);
++        }
++    }
+     fn clear(&mut self) -> Result<()> {
+-        if let Some((_, _, path)) = self.current.take() {
++        if let Some((_, _, path, _lease)) = self.current.take() {
+             fs::remove_dir_all(path)?;
+             sync_dir(&self.root)?;
+         }
+diff --git a/src/resources.rs b/src/resources.rs
+index 79b2fc8..4c2eecb 100644
+--- a/src/resources.rs
++++ b/src/resources.rs
+@@ -264,7 +264,9 @@ impl IoScheduler {
+         f: impl FnOnce() -> Result<T> + Send + 'static,
+     ) -> Result<IoTask<T>> {
+         let mut q = self.inner.queue.lock();
+-        if q.stopped || q.count >= 4096 {
++        // Reads have a bounded backlog. Durable work is already bounded by its
++        // submitting writers and must not be rejected by another tenant's reads.
++        if q.stopped || (abandoned.is_some() && q.count >= 4096) {
+             return Err(Error::limit("I/O queue unavailable"));
+         }
+         let stats = q.stats.entry(tenant).or_default().clone();
+diff --git a/src/storage/cache.rs b/src/storage/cache.rs
+index 112c9a6..183e427 100644
+--- a/src/storage/cache.rs
++++ b/src/storage/cache.rs
+@@ -16,6 +16,7 @@ pub enum Contents {
+     Data(Vec<Record>),
+     Index(Vec<BlockMeta>),
+ }
++
+ pub struct Frame {
+     pub contents: Contents,
+     pub referenced: AtomicBool,
+@@ -31,6 +32,37 @@ pub struct Cache {
+     capacity: usize,
+ }
+ impl Cache {
++    pub(crate) fn reserve(
++        &self,
++        budget: &crate::resources::Budget,
++        bytes: usize,
++    ) -> crate::Result<Reservation> {
++        let mut result = budget.reserve(bytes);
++        if result.is_ok() {
++            return result;
++        }
++        for shard in &self.shards {
++            let mut shard = shard.lock();
++            for _ in 0..shard.clock.len().saturating_mul(2) {
++                let Some(key) = shard.clock.pop_front() else {
++                    break;
++                };
++                let frame = shard.entries.get(&key).unwrap();
++                if frame.referenced.swap(false, Ordering::Relaxed) {
++                    shard.clock.push_back(key);
++                    continue;
++                }
++                let frame = shard.entries.remove(&key).unwrap();
++                shard.bytes -= frame.reservation.size();
++                drop(frame);
++                result = budget.reserve(bytes);
++                if result.is_ok() {
++                    return result;
++                }
++            }
++        }
++        result
++    }
+     pub fn new(capacity: usize) -> Self {
+         Self {
+             shards: (0..8)
+@@ -92,3 +124,34 @@ impl Cache {
+         }
+     }
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use crate::resources::{Budget, Counter};
++
++    #[test]
++    fn a_failed_reservation_reclaims_only_the_cache_space_it_needs() {
++        let budget = Budget {
++            global: Counter::new(256),
++            tenant: Counter::new(256),
++        };
++        let cache = Cache::new(1024);
++        let keys: Vec<_> = (0..4).map(|n| CacheKey(Uuid::from_u128(n), 0)).collect();
++        for &key in &keys {
++            cache.insert(
++                key,
++                Arc::new(Frame {
++                    contents: Contents::Data(vec![]),
++                    referenced: AtomicBool::new(false),
++                    reservation: Arc::new(budget.reserve(64).unwrap()),
++                }),
++            );
++        }
++        let _memory = cache.reserve(&budget, 64).unwrap();
++        assert_eq!(
++            keys.iter().filter(|key| cache.get(key).is_some()).count(),
++            3
++        );
++    }
++}
+diff --git a/src/storage/engine.rs b/src/storage/engine.rs
+index 3e00d02..deeb75a 100644
+--- a/src/storage/engine.rs
++++ b/src/storage/engine.rs
+@@ -33,6 +33,24 @@ use std::{
+ use uuid::Uuid;
+ pub use write::Transaction;
+ 
++pub(crate) struct LogRetention {
++    engine: Arc<Engine>,
++    id: Uuid,
++}
++impl LogRetention {
++    pub(crate) fn renew(&self, position: u64) {
++        self.engine.log_retention.lock().insert(
++            self.id,
++            (position, Some(Instant::now() + Duration::from_secs(300))),
++        );
++    }
++}
++impl Drop for LogRetention {
++    fn drop(&mut self) {
++        self.engine.log_retention.lock().remove(&self.id);
++    }
++}
++
+ #[derive(Clone, Serialize, Deserialize)]
+ struct Manifest {
+     version: u32,
+@@ -211,6 +229,7 @@ pub struct Engine {
+     maintenance: Mutex<()>,
+     cache: Arc<Cache>,
+     snapshots: Mutex<BTreeMap<Uuid, Weak<Lease>>>,
++    log_retention: Mutex<BTreeMap<Uuid, (u64, Option<Instant>)>>,
+     disk: AtomicU64,
+     metrics: Metrics,
+     closed: AtomicBool,
+@@ -353,6 +372,7 @@ impl Engine {
+             maintenance: Mutex::new(()),
+             cache,
+             snapshots: Mutex::new(BTreeMap::new()),
++            log_retention: Mutex::new(BTreeMap::new()),
+             disk: AtomicU64::new(disk),
+             metrics: Metrics::default(),
+             closed: AtomicBool::new(false),
+@@ -382,6 +402,13 @@ impl Engine {
+     pub fn seq(&self) -> u64 {
+         self.committed.load(Ordering::Acquire)
+     }
++    pub(crate) fn wait_progress(&self, observed: u64, timeout: Duration) {
++        let mut writer = self.writer.lock();
++        if self.seq() == observed {
++            self.durable
++                .wait_for(&mut writer, timeout.min(Duration::from_millis(10)));
++        }
++    }
+     pub fn writable(&self) -> bool {
+         !self.closed.load(Ordering::Acquire)
+             && self.writer.lock().poison.is_none()
+@@ -408,6 +435,14 @@ impl Engine {
+         let view = self.view.read();
+         self.pin(view.clone(), self.seq(), self.options.snapshot_seconds)
+     }
++    pub(crate) fn retain_replication_log(self: &Arc<Self>) -> LogRetention {
++        let lease = LogRetention {
++            engine: self.clone(),
++            id: Uuid::new_v4(),
++        };
++        self.log_retention.lock().insert(lease.id, (0, None));
++        lease
++    }
+     fn pin(self: &Arc<Self>, view: View, seq: u64, seconds: u64) -> Result<Snapshot> {
+         let mut registry = self.snapshots.lock();
+         registry.retain(|_, weak| weak.strong_count() > 0);
+diff --git a/src/storage/engine/maintenance.rs b/src/storage/engine/maintenance.rs
+index 6bb9638..c692322 100644
+--- a/src/storage/engine/maintenance.rs
++++ b/src/storage/engine/maintenance.rs
+@@ -50,7 +50,16 @@ impl Engine {
+         self.flush_inner(true)
+     }
+     fn flush_inner(&self, only_if_needed: bool) -> Result<()> {
+-        let _maintenance = self.maintenance.lock();
++        let _maintenance = if only_if_needed {
++            let Some(guard) = self.maintenance.try_lock() else {
++                // Foreground backpressure is preferable to waiting for an entire
++                // compaction. The next maintenance pass will flush this buffer.
++                return Ok(());
++            };
++            guard
++        } else {
++            self.maintenance.lock()
++        };
+         if only_if_needed && !self.needs_flush() {
+             return Ok(());
+         }
+@@ -176,8 +185,7 @@ impl Engine {
+             let mut all = self.view.read().tables.files.clone();
+             all.extend(tables);
+             let versions = VersionSet::new(all, &self.budget)?;
+-            let mut writer = self.writer.lock();
+-            let mut manifest = writer.manifest.clone();
++            let mut manifest = self.writer.lock().manifest.clone();
+             manifest.checkpoint = checkpoint;
+             self.metrics
+                 .flush_bytes
+@@ -200,27 +208,45 @@ impl Engine {
+                     n + fs::metadata(self.path.join("wal").join(format!("{}.wal", w.id)))?.len(),
+                 )
+             })?;
++            let floor = {
++                let mut leases = self.log_retention.lock();
++                leases.retain(|_, (_, expires)| {
++                    expires.is_none_or(|expires| expires > Instant::now())
++                });
++                leases.values().map(|(seq, _)| *seq).min()
++            };
+             while retained_bytes > retention && !manifest.retained_wals.is_empty() {
++                let next = manifest
++                    .retained_wals
++                    .get(1)
++                    .or_else(|| manifest.wals.first())
++                    .unwrap()
++                    .start_seq;
++                if floor.is_some_and(|floor| next > floor.saturating_add(1)) {
++                    break;
++                }
+                 let old = manifest.retained_wals.remove(0);
+                 retained_bytes -=
+                     fs::metadata(self.path.join("wal").join(format!("{}.wal", old.id)))?.len();
+                 obsolete.push(old);
+             }
+             if let Err(error) = publish(&self.path, &manifest) {
++                let mut writer = self.writer.lock();
+                 writer.poison = Some(Error::new("COMMIT_UNKNOWN", error.to_string()));
+                 self.durable.notify_all();
+                 return Err(error);
+             }
++            let mut writer = self.writer.lock();
+             writer.manifest = manifest;
+             let mut view = self.view.write();
+             view.tables = versions;
+             view.frozen.retain(|m| !Arc::ptr_eq(m, &mem));
+             drop(view);
++            drop(writer);
+             for wal in obsolete {
+                 fs::remove_file(self.path.join("wal").join(format!("{}.wal", wal.id)))?;
+             }
+             sync_dir(&self.path.join("wal"))?;
+-            drop(writer);
+             self.reconcile_disk_locked()?;
+             Ok(())
+         })();
+@@ -345,8 +371,7 @@ impl Engine {
+             files.retain(|t| t.info.id != promoted.info.id);
+             files.push(promoted.clone());
+             let versions = VersionSet::new(files, &self.budget)?;
+-            let mut writer = self.writer.lock();
+-            let mut manifest = writer.manifest.clone();
++            let mut manifest = self.writer.lock().manifest.clone();
+             manifest
+                 .tables
+                 .iter_mut()
+@@ -354,11 +379,12 @@ impl Engine {
+                 .unwrap()
+                 .level = destination;
+             if let Err(error) = publish(&self.path, &manifest) {
++                let mut writer = self.writer.lock();
+                 writer.poison = Some(Error::new("COMMIT_UNKNOWN", error.to_string()));
+                 self.durable.notify_all();
+                 return Err(error);
+             }
+-            writer.manifest = manifest;
++            self.writer.lock().manifest = manifest;
+             self.view.write().tables = versions;
+             return Ok(());
+         }
+@@ -465,8 +491,7 @@ impl Engine {
+             all.retain(|t| !selected.iter().any(|s| s.info.id == t.info.id));
+             all.extend(tables);
+             let versions = VersionSet::new(all, &self.budget)?;
+-            let mut writer = self.writer.lock();
+-            let mut manifest = writer.manifest.clone();
++            let mut manifest = self.writer.lock().manifest.clone();
+             manifest
+                 .tables
+                 .retain(|t| !selected.iter().any(|s| s.info.id == t.id));
+@@ -479,11 +504,12 @@ impl Engine {
+                 .fetch_add(outputs.iter().map(|t| t.size).sum(), Ordering::Relaxed);
+             manifest.tables.extend(outputs);
+             if let Err(error) = publish(&self.path, &manifest) {
++                let mut writer = self.writer.lock();
+                 writer.poison = Some(Error::new("COMMIT_UNKNOWN", error.to_string()));
+                 self.durable.notify_all();
+                 return Err(error);
+             }
+-            writer.manifest = manifest;
++            self.writer.lock().manifest = manifest;
+             let mut view = self.view.write();
+             view.tables = versions;
+             validate_levels(&view.tables)?;
+@@ -493,7 +519,6 @@ impl Engine {
+             }
+             drop(cursors);
+             drop(deeper);
+-            drop(writer);
+             self.reconcile_disk_locked()?;
+             Ok(())
+         })();
+diff --git a/src/storage/engine/read.rs b/src/storage/engine/read.rs
+index 111b2ef..5b2f1d8 100644
+--- a/src/storage/engine/read.rs
++++ b/src/storage/engine/read.rs
+@@ -337,9 +337,10 @@ enum Source<'a> {
+     Level(LevelCursor<'a>),
+     Mem {
+         mem: &'a MemTable,
++        seq: u64,
+         start: Vec<u8>,
+         end: Option<Vec<u8>>,
+-        last: Option<(Vec<u8>, u64)>,
++        last: Option<Vec<u8>>,
+     },
+     Table(TableCursor<'a>),
+ }
+@@ -379,6 +380,7 @@ impl Source<'_> {
+             Source::Level(cursor) => cursor.next(stats),
+             Source::Mem {
+                 mem,
++                seq,
+                 start,
+                 end,
+                 last,
+@@ -386,22 +388,19 @@ impl Source<'_> {
+                 let data = mem.data.read();
+                 let lower = last
+                     .as_ref()
+-                    .map_or(start.as_slice(), |(k, _)| k.as_slice());
+-                for (key, versions) in data.range::<[u8], _>((
+-                    std::ops::Bound::Included(lower),
+-                    std::ops::Bound::Unbounded,
+-                )) {
++                    .map_or(std::ops::Bound::Included(start.as_slice()), |key| {
++                        std::ops::Bound::Excluded(key.as_slice())
++                    });
++                for (key, versions) in data.range::<[u8], _>((lower, std::ops::Bound::Unbounded)) {
+                     if end.as_ref().is_some_and(|e| key >= e) {
+                         break;
+                     }
+-                    let end = if let Some((_, seq)) = last.as_ref().filter(|(k, _)| key == k) {
+-                        versions.partition_point(|r| r.seq < *seq)
+-                    } else {
+-                        versions.len()
+-                    };
+-                    if let Some(i) = end.checked_sub(1) {
+-                        let record = &versions[i];
+-                        *last = Some((key.clone(), record.seq));
++                    let end = versions.partition_point(|r| r.seq <= *seq);
++                    // A key created after the snapshot still consumes one scan
++                    // entry. Returning its first (invisible) version lets Scan
++                    // enforce cancellation/budgets before skipping it.
++                    if let Some(record) = versions.get(end.saturating_sub(1)) {
++                        *last = Some(key.clone());
+                         return Ok(Some(record.clone()));
+                     }
+                 }
+@@ -475,6 +474,7 @@ impl<'a> Scan<'a> {
+     ) -> Result<Self> {
+         let mut sources = vec![Source::Mem {
+             mem: &view.mem,
++            seq,
+             start: start.clone(),
+             end: end.clone(),
+             last: None,
+@@ -482,6 +482,7 @@ impl<'a> Scan<'a> {
+         for mem in &view.frozen {
+             sources.push(Source::Mem {
+                 mem,
++                seq,
+                 start: start.clone(),
+                 end: end.clone(),
+                 last: None,
+@@ -608,6 +609,33 @@ impl<'a> Scan<'a> {
+ mod tests {
+     use super::*;
+ 
++    #[test]
++    fn keys_created_after_a_snapshot_still_consume_the_scan_budget() {
++        let dir = tempfile::tempdir().unwrap();
++        let store = crate::Store::open(dir.path(), Options::default()).unwrap();
++        let t = store
++            .tenant(store.create_tenant("invisible-scan-budget").unwrap().id)
++            .unwrap();
++        t.engine()
++            .transact(|tx| tx.put(b"Zz".to_vec(), b"visible".to_vec()))
++            .unwrap();
++        let snapshot = t.engine().snapshot().unwrap();
++        for n in 0..100 {
++            t.engine()
++                .transact(|tx| tx.put(format!("Za{n:04}").into_bytes(), b"newer".to_vec()))
++                .unwrap();
++        }
++        let mut stats = ReadStats::default();
++        let mut scan = snapshot
++            .scan(b"Z".to_vec(), Some(b"[".to_vec()), None, &mut stats)
++            .unwrap();
++        scan.set_budget(10, Instant::now() + Duration::from_secs(5));
++        assert_eq!(
++            scan.next(&mut stats).unwrap_err().code,
++            "RESOURCE_EXHAUSTED"
++        );
++    }
++
+     #[test]
+     fn disjoint_ranges_preserve_spanning_versions_and_tombstones() {
+         let root = tempfile::tempdir().unwrap();
+@@ -693,6 +721,7 @@ mod tests {
+         let mut scan = old.scan_ranges(ranges, &mut stats, None).unwrap();
+         scan.scan
+             .set_budget(1, Instant::now() + Duration::from_secs(10));
++        assert!(scan.next(&mut stats).unwrap().is_some());
+         assert_eq!(
+             scan.next(&mut stats).unwrap_err().code,
+             "RESOURCE_EXHAUSTED"
+diff --git a/src/storage/engine/replication.rs b/src/storage/engine/replication.rs
+index 33a7def..32ca4d8 100644
+--- a/src/storage/engine/replication.rs
++++ b/src/storage/engine/replication.rs
+@@ -205,8 +205,13 @@ impl Engine {
+         // Keep each original TXN1 frame intact but submit one contiguous write to
+         // the fair I/O queue. A torn page still recovers complete atomic batches.
+         if let Err(error) = writer.wal.append(bytes, &self.io, self.info.id) {
+-            writer.poison = Some(Error::new("COMMIT_UNKNOWN", error.to_string()));
+-            return Err(writer.poison.clone().unwrap());
++            if error.code == "COMMIT_UNKNOWN" {
++                writer.poison = Some(error.clone());
++                self.durable.notify_all();
++            } else {
++                self.disk.fetch_sub(disk_bytes, Ordering::AcqRel);
++            }
++            return Err(error);
+         }
+         // The writer guard prevents memtable rotation for the entire page.
+         // Snapshot readers need not contend on the view lock during insertion.
+diff --git a/src/storage/engine/write.rs b/src/storage/engine/write.rs
+index d1d9ec1..c4a7abc 100644
+--- a/src/storage/engine/write.rs
++++ b/src/storage/engine/write.rs
+@@ -4,21 +4,29 @@ impl Engine {
+         self: &Arc<Self>,
+         f: impl FnOnce(&mut Transaction<'_>) -> Result<T>,
+     ) -> Result<T> {
+-        self.transact_inner(f, false, false)
++        self.transact_inner(f, false, false, None)
+             .map(|(result, _)| result)
+     }
+     pub fn transact_snapshot<T>(
+         self: &Arc<Self>,
+         f: impl FnOnce(&mut Transaction<'_>) -> Result<T>,
+     ) -> Result<(T, Snapshot)> {
+-        self.transact_inner(f, true, false)
++        self.transact_inner(f, true, false, None)
+             .map(|(result, snapshot)| (result, snapshot.unwrap()))
+     }
+     pub(crate) fn transact_maintenance<T>(
+         self: &Arc<Self>,
+         f: impl FnOnce(&mut Transaction<'_>) -> Result<T>,
+     ) -> Result<T> {
+-        self.transact_inner(f, false, true)
++        self.transact_inner(f, false, true, None)
++            .map(|(result, _)| result)
++    }
++    pub(crate) fn transact_waiting<T>(
++        self: &Arc<Self>,
++        f: impl FnOnce(&mut Transaction<'_>) -> Result<T>,
++        check: &dyn Fn() -> Result<()>,
++    ) -> Result<T> {
++        self.transact_inner(f, false, false, Some(check))
+             .map(|(result, _)| result)
+     }
+     fn transact_inner<T>(
+@@ -26,27 +34,46 @@ impl Engine {
+         f: impl FnOnce(&mut Transaction<'_>) -> Result<T>,
+         pin: bool,
+         maintenance: bool,
++        check: Option<&dyn Fn() -> Result<()>>,
+     ) -> Result<(T, Option<Snapshot>)> {
+         let authority = self.authority.read().clone();
+-        let _permission = authority.as_ref().map(|a| a.write()).transpose()?;
+-        if self.closed.load(Ordering::Acquire) {
+-            return Err(Error::new("UNAVAILABLE", "tenant closed"));
+-        }
+-        let waiting = Instant::now();
+-        let mut writer = self.writer.lock();
+-        self.metrics
+-            .write_lock_wait_ns
+-            .fetch_add(waiting.elapsed().as_nanos() as u64, Ordering::Relaxed);
+-        if let Some(error) = &writer.poison {
+-            return Err(error.clone());
+-        }
+-        let view = self.view.read().clone();
+-        if l0_pressure(&view.tables) >= self.options.l0_stop {
+-            return Err(Error::limit("L0 backlog: retry after compaction"));
+-        }
+-        if view.mem.bytes.load(Ordering::Acquire) > self.options.memtable_bytes * 4 {
+-            return Err(Error::limit("memtable backlog: retry after flush"));
+-        }
++        let (_permission, mut writer, view) = loop {
++            if let Some(check) = check {
++                check()?;
++            }
++            let permission = authority.as_ref().map(|a| a.write()).transpose()?;
++            if self.closed.load(Ordering::Acquire) {
++                return Err(Error::new("UNAVAILABLE", "tenant closed"));
++            }
++            let waiting = Instant::now();
++            let writer = self.writer.lock();
++            self.metrics
++                .write_lock_wait_ns
++                .fetch_add(waiting.elapsed().as_nanos() as u64, Ordering::Relaxed);
++            if let Some(error) = &writer.poison {
++                return Err(error.clone());
++            }
++            let view = self.view.read().clone();
++            let backlog = if l0_pressure(&view.tables) >= self.options.l0_stop {
++                Some("L0 backlog: retry after compaction")
++            } else if view.mem.bytes.load(Ordering::Acquire) > self.options.memtable_bytes * 4 {
++                Some("memtable backlog: retry after flush")
++            } else {
++                None
++            };
++            let Some(backlog) = backlog else {
++                break (permission, writer, view);
++            };
++            if check.is_none() {
++                return Err(Error::limit(backlog));
++            }
++            // A durable index build already exists. Wait before invoking its
++            // FnOnce transaction instead of failing halfway through publication.
++            // Neither the writer lock nor the node fence is held while waiting.
++            drop(writer);
++            drop(permission);
++            self.wait_progress(self.seq(), Duration::from_millis(10));
++        };
+         let seq = writer
+             .staged
+             .checked_add(1)
+@@ -78,41 +105,58 @@ impl Engine {
+             return Ok((result, snapshot));
+         }
+         let records: Vec<Record> = tx.changes.into_values().collect();
+-        let memory = self
+-            .budget
+-            .reserve(records.iter().map(Record::size).sum::<usize>() * 2)
+-            .or_else(|_| {
+-                self.cache.clear();
+-                self.budget
+-                    .reserve(records.iter().map(Record::size).sum::<usize>() * 2)
+-            })?;
++        let memory = self.cache.reserve(
++            &self.budget,
++            records.iter().map(Record::size).sum::<usize>() * 2,
++        )?;
+         let bytes = wal::encode(seq, &records)?;
+-        self.reserve_disk(bytes.len() as u64 + 4096, maintenance)?;
+         let snapshot = if pin {
+             Some(self.pin(view.clone(), seq, self.options.index_build_seconds)?)
+         } else {
+             None
+         };
++        let reserved_disk = bytes.len() as u64 + 4096;
++        self.reserve_disk(reserved_disk, maintenance)?;
+         let wal_bytes = bytes.len() as u64;
+         if let Err(error) = writer.wal.append(bytes, &self.io, self.info.id) {
+-            let error = Error::new("COMMIT_UNKNOWN", error.to_string());
+-            writer.poison = Some(error.clone());
+-            self.durable.notify_all();
++            if error.code == "COMMIT_UNKNOWN" {
++                writer.poison = Some(error.clone());
++                self.durable.notify_all();
++            } else {
++                self.disk.fetch_sub(reserved_disk, Ordering::AcqRel);
++            }
+             return Err(error);
+         }
+         self.record_staged_commit(&mut writer, seq, &records, wal_bytes);
+         view.mem.apply(records, memory);
+         writer.staged = seq;
+-        if !writer.syncing {
++        while self.seq() < seq && writer.poison.is_none() {
++            if writer.syncing {
++                self.durable.wait(&mut writer);
++                continue;
++            }
+             writer.syncing = true;
+             drop(writer);
+             std::thread::sleep(Duration::from_millis(1));
+             writer = self.writer.lock();
+-            self.sync_writer(&mut writer)?;
+-        } else {
+-            while self.seq() < seq && writer.poison.is_none() {
+-                self.durable.wait(&mut writer);
++            let through = writer.staged;
++            let catalog_through = writer.catalog_staged;
++            let file = writer.wal.file.clone();
++            drop(writer);
++            let synced = self.io.run(self.info.id, move || Ok(file.sync_all()?));
++            super::super::failpoint("wal_synced");
++            writer = self.writer.lock();
++            writer.syncing = false;
++            if let Err(error) = synced {
++                writer.poison = Some(Error::new("COMMIT_UNKNOWN", error.to_string()));
++            } else if writer.poison.is_none() {
++                // Appends may have arrived during fsync. Only the prefix captured
++                // before it began is acknowledged; later appends need another sync.
++                self.metrics.fsyncs.fetch_add(1, Ordering::Relaxed);
++                self.catalog_seq.store(catalog_through, Ordering::Release);
++                self.committed.store(through, Ordering::Release);
+             }
++            self.durable.notify_all();
+         }
+         if let Some(error) = &writer.poison {
+             return Err(error.clone());
+@@ -146,7 +190,16 @@ impl Engine {
+             writer.catalog_staged = seq;
+         }
+     }
+-    pub(super) fn sync_writer(&self, writer: &mut Writer) -> Result<()> {
++    pub(super) fn sync_writer(
++        &self,
++        writer: &mut parking_lot::MutexGuard<'_, Writer>,
++    ) -> Result<()> {
++        while writer.syncing && writer.poison.is_none() {
++            self.durable.wait(writer);
++        }
++        if let Some(error) = &writer.poison {
++            return Err(error.clone());
++        }
+         if let Err(error) = writer.wal.sync(&self.io, self.info.id) {
+             let error = Error::new("COMMIT_UNKNOWN", error.to_string());
+             writer.poison = Some(error.clone());
+@@ -348,6 +401,157 @@ impl Transaction<'_> {
+ mod tests {
+     use super::*;
+     #[test]
++    fn index_admission_waits_for_compaction_before_running_the_transaction_once() {
++        let dir = tempfile::tempdir().unwrap();
++        let store = crate::Store::open(
++            dir.path(),
++            Options {
++                l0_trigger: 2,
++                l0_stop: 4,
++                ..Default::default()
++            },
++        )
++        .unwrap();
++        let tenant = store
++            .tenant(store.create_tenant("index-backpressure").unwrap().id)
++            .unwrap();
++        let engine = tenant.engine().clone();
++        drop(tenant);
++        drop(store);
++        // Retain the managed engine after stopping automatic maintenance so the
++        // backlog and its release are deterministic, without timing a large merge.
++        for n in 0..4 {
++            engine
++                .transact(|tx| tx.put(b"Zhot".to_vec(), vec![n; 128]))
++                .unwrap();
++            engine.flush().unwrap();
++        }
++        assert_eq!(engine.table_counts()[&0], 4);
++        let snapshot = engine.snapshot().unwrap();
++        let (checked_tx, checked_rx) = std::sync::mpsc::channel();
++        let (ran_tx, ran_rx) = std::sync::mpsc::channel();
++        let waiting = engine.clone();
++        let task = std::thread::spawn(move || {
++            waiting.transact_waiting(
++                |tx| {
++                    ran_tx.send(()).unwrap();
++                    tx.put(b"Znew".to_vec(), b"committed".to_vec())
++                },
++                &|| {
++                    let _ = checked_tx.send(());
++                    snapshot.check()
++                },
++            )
++        });
++        checked_rx.recv_timeout(Duration::from_secs(5)).unwrap();
++        let premature = ran_rx.recv_timeout(Duration::from_millis(30));
++        engine.compact(true).unwrap();
++        task.join().unwrap().unwrap();
++        assert!(premature.is_err());
++        ran_rx.recv_timeout(Duration::from_secs(5)).unwrap();
++        assert!(ran_rx.try_recv().is_err());
++        assert!(
++            engine
++                .snapshot()
++                .unwrap()
++                .get(b"Znew", &mut ReadStats::default())
++                .unwrap()
++                .is_some()
++        );
++    }
++    #[test]
++    fn saturated_read_queue_cannot_poison_another_tenants_writer() {
++        let dir = tempfile::tempdir().unwrap();
++        let store = crate::Store::open(
++            dir.path(),
++            Options {
++                io_workers: 1,
++                ..Default::default()
++            },
++        )
++        .unwrap();
++        let t = store
++            .tenant(store.create_tenant("writer").unwrap().id)
++            .unwrap();
++        let engine = t.engine().clone();
++        let _maintenance = engine.maintenance.lock();
++        let reader = Uuid::new_v4();
++        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
++        let (release_tx, release_rx) = std::sync::mpsc::channel();
++        let blocker = engine
++            .io
++            .submit(reader, move || {
++                entered_tx.send(()).unwrap();
++                let _ = release_rx.recv();
++                Ok(())
++            })
++            .unwrap();
++        entered_rx.recv().unwrap();
++        let reads: Vec<_> = (0..4096)
++            .map(|_| engine.io.submit_read(reader, None, || Ok(())).unwrap())
++            .collect();
++        assert!(engine.io.submit_read(reader, None, || Ok(())).is_err());
++        let writer = engine.clone();
++        let task = std::thread::spawn(move || {
++            writer.transact(|tx| tx.put(b"confirmed".to_vec(), b"value".to_vec()))
++        });
++        let deadline = Instant::now() + Duration::from_secs(5);
++        while engine.io.stats(engine.info.id)["queued_jobs"] == 0
++            && !task.is_finished()
++            && Instant::now() < deadline
++        {
++            std::thread::sleep(Duration::from_millis(1));
++        }
++        drop(reads);
++        release_tx.send(()).unwrap();
++        blocker.wait().unwrap();
++        task.join().unwrap().unwrap();
++        engine
++            .transact(|tx| tx.put(b"next".to_vec(), b"value".to_vec()))
++            .unwrap();
++        assert!(engine.writable());
++        assert!(
++            engine
++                .snapshot()
++                .unwrap()
++                .get(b"confirmed", &mut ReadStats::default())
++                .unwrap()
++                .is_some()
++        );
++    }
++
++    #[test]
++    fn snapshot_admission_failure_does_not_leak_disk_reservations() {
++        let dir = tempfile::tempdir().unwrap();
++        let store = crate::Store::open(
++            dir.path(),
++            Options {
++                max_snapshots: 1,
++                ..Default::default()
++            },
++        )
++        .unwrap();
++        let t = store
++            .tenant(store.create_tenant("snapshot-quota").unwrap().id)
++            .unwrap();
++        let engine = t.engine();
++        let _maintenance = engine.maintenance.lock();
++        let snapshot = engine.snapshot().unwrap();
++        let before = engine.disk_bytes();
++        for _ in 0..3 {
++            assert!(
++                engine
++                    .transact_snapshot(|tx| tx.put(b"key".to_vec(), vec![42; 1024]))
++                    .is_err()
++            );
++            assert_eq!(engine.disk_bytes(), before);
++        }
++        drop(snapshot);
++        engine
++            .transact_snapshot(|tx| tx.put(b"key".to_vec(), vec![42; 1024]))
++            .unwrap();
++    }
++    #[test]
+     fn cleanup_can_use_reserved_disk_headroom_when_user_writes_are_backpressured() {
+         let dir = tempfile::tempdir().unwrap();
+         let store = crate::Store::open(dir.path(), Options::default()).unwrap();
+@@ -460,13 +664,17 @@ mod tests {
+                         },
+                         pin,
+                         false,
++                        None,
+                     )
+                     .unwrap();
+                 completed.send(value.0.to_vec()).unwrap();
+             });
+             ready.recv_timeout(Duration::from_secs(5)).unwrap();
+             let premature = result.recv_timeout(Duration::from_millis(30));
+-            engine.sync_writer(&mut engine.writer.lock()).unwrap();
++            let mut writer = engine.writer.lock();
++            writer.syncing = false;
++            engine.sync_writer(&mut writer).unwrap();
++            drop(writer);
+             assert!(
+                 premature.is_err(),
+                 "read-only transaction acknowledged staged data before fsync"
+diff --git a/src/storage/mod.rs b/src/storage/mod.rs
+index e73e923..545c26c 100644
+--- a/src/storage/mod.rs
++++ b/src/storage/mod.rs
+@@ -4,6 +4,7 @@ mod files;
+ mod sst;
+ mod wal;
+ 
++pub(crate) use engine::LogRetention;
+ pub(crate) use engine::ScanRange;
+ pub(crate) use engine::directory_size;
+ pub use engine::{Engine, Scan, Snapshot, Transaction};
+diff --git a/src/storage/sst.rs b/src/storage/sst.rs
+index c4be833..c3fcfa1 100644
+--- a/src/storage/sst.rs
++++ b/src/storage/sst.rs
+@@ -495,7 +495,7 @@ impl Table {
+                 return Err(Error::corrupt("index frame type"));
+             };
+             let mut data_groups = std::collections::BTreeMap::<usize, Vec<usize>>::new();
+-            for i in indexes {
++            for &i in &indexes {
+                 let mut block = blocks.partition_point(|m| m.last < keys[i]);
+                 while block < blocks.len() && blocks[block].first <= keys[i] {
+                     if bloom_contains(&blocks[block].bloom, &keys[i]) {
+@@ -539,7 +539,7 @@ impl Table {
+                 }
+             }
+             // A version chain can span index partitions.
+-            for i in 0..keys.len() {
++            for &i in &indexes {
+                 if out[i].is_none()
+                     && self.top[part].last == keys[i]
+                     && part + 1 < self.top.len()
+@@ -646,15 +646,12 @@ fn load_frame(
+     if raw_len > MAX_FRAME {
+         return Err(Error::corrupt("SST decompressed length"));
+     }
+-    let mut memory = budget
+-        .reserve(raw_len * 12 + len as usize + 1024)
+-        .or_else(|error| {
+-            if !evict {
+-                return Err(error);
+-            }
+-            cache.clear();
+-            budget.reserve(raw_len * 12 + len as usize + 1024)
+-        })?;
++    let size = raw_len * 12 + len as usize + 1024;
++    let mut memory = if evict {
++        cache.reserve(budget, size)
++    } else {
++        budget.reserve(size)
++    }?;
+     let raw = read_frame(file, offset, len)?;
+     let contents = if index {
+         Contents::Index(decode_meta(&raw, file_size)?)
+diff --git a/src/storage/wal.rs b/src/storage/wal.rs
+index dfc45d2..2f14f9b 100644
+--- a/src/storage/wal.rs
++++ b/src/storage/wal.rs
+@@ -150,10 +150,12 @@ impl Wal {
+                 std::process::abort();
+             }
+         }
+-        io.run(tenant, move || {
++        io.submit(tenant, move || {
+             file.write_all_at(&bytes, offset)?;
+             Ok(())
+-        })?;
++        })?
++        .wait()
++        .map_err(|error| Error::new("COMMIT_UNKNOWN", error.to_string()))?;
+         self.len += len as u64;
+         super::failpoint("wal_appended");
+         Ok(())
+diff --git a/src/tenant/contracts.rs b/src/tenant/contracts.rs
+index 4548b83..f9c3434 100644
+--- a/src/tenant/contracts.rs
++++ b/src/tenant/contracts.rs
+@@ -75,13 +75,17 @@ impl TenantHandle {
+                     "read token belongs to another history",
+                 ));
+             }
+-            if self.engine().seq() >= seq {
++            let applied = self.engine().seq();
++            if applied >= seq {
+                 return Ok(());
+             }
+             if std::time::Instant::now() >= deadline {
+                 return Err(Error::new("REPLICA_LAG", "read consistency deadline"));
+             }
+-            std::thread::sleep(std::time::Duration::from_millis(2));
++            self.engine().wait_progress(
++                applied,
++                deadline.saturating_duration_since(std::time::Instant::now()),
++            );
+         }
+     }
+ 
+diff --git a/src/tenant/indexes.rs b/src/tenant/indexes.rs
+index a91f8ab..4331b78 100644
+--- a/src/tenant/indexes.rs
++++ b/src/tenant/indexes.rs
+@@ -141,13 +141,14 @@ impl TenantHandle {
+         crate::identity::unmanaged(collection)?;
+         let _permit = self.core.gate.enter()?;
+         self.touch();
+-        self.build_index(collection, spec, false)
++        self.build_index(collection, spec, false, None)
+     }
+     fn build_index(
+         &self,
+         collection_name: &str,
+         spec: IndexSpec,
+         restart: bool,
++        stop: Option<&std::sync::atomic::AtomicBool>,
+     ) -> Result<IndexDefinition> {
+         validate_spec(&spec)?;
+         let generation = Uuid::new_v4();
+@@ -194,8 +195,11 @@ impl TenantHandle {
+                     put(tx, key, &definition)?;
+                     Ok((collection, definition))
+                 })?;
+-            let built = self.populate_index(&collection, &mut definition, &snapshot);
++            let built = self.populate_index(&collection, &mut definition, &snapshot, stop);
+             if let Err(error) = built {
++                if stop.is_some_and(|stop| stop.load(std::sync::atomic::Ordering::Acquire)) {
++                    return Err(error);
++                }
+                 let key = named(&prefix(b'J', collection.id), &definition.spec.name);
+                 let _ = self.engine().transact(|tx| {
+                     if let Some(value) = tx.get(&key)? {
+@@ -228,7 +232,15 @@ impl TenantHandle {
+         collection: &Collection,
+         definition: &mut IndexDefinition,
+         snapshot: &Snapshot,
++        stop: Option<&std::sync::atomic::AtomicBool>,
+     ) -> Result<()> {
++        let check_stop = || {
++            if stop.is_some_and(|stop| stop.load(std::sync::atomic::Ordering::Acquire)) {
++                Err(Error::new("CANCELLED", "index recovery stopping"))
++            } else {
++                Ok(())
++            }
++        };
+         let docs = prefix(b'D', collection.id);
+         let mut stats = ReadStats::default();
+         let mut scan = snapshot.scan(docs.clone(), codec::prefix_end(&docs), None, &mut stats)?;
+@@ -236,6 +248,7 @@ impl TenantHandle {
+         let mut entry_memory = Vec::new();
+         let mut bytes = 0;
+         while let Some(record) = scan.next(&mut stats)? {
++            check_stop()?;
+             if let Some(entry) = index_entry(collection.id, definition, &record.value.unwrap())? {
+                 entry_memory.push(
+                     self.engine()
+@@ -247,54 +260,61 @@ impl TenantHandle {
+                 definition.entries += 1;
+             }
+             if entries.len() >= 256 || bytes >= 2 << 20 {
+-                self.write_index_entries(collection, definition, &entries)?;
++                self.write_index_entries(collection, definition, &entries, snapshot, stop)?;
+                 entries.clear();
+                 entry_memory.clear();
+                 bytes = 0;
+             }
+         }
+         if !entries.is_empty() {
+-            self.write_index_entries(collection, definition, &entries)?;
++            self.write_index_entries(collection, definition, &entries, snapshot, stop)?;
+         }
+         drop(entries);
+         drop(entry_memory);
+         let delta = delta_prefix(collection.id, definition.generation);
+         let mut delta_after: Option<Vec<u8>> = None;
+         loop {
++            check_stop()?;
+             snapshot.check()?;
+             if self.engine().needs_flush() {
+                 self.engine().flush_if_needed()?;
+             }
+-            let finished = self.engine().transact(|tx| {
+-                let key = named(&prefix(b'J', collection.id), &definition.spec.name);
+-                ensure_build(tx, &key, definition.generation)?;
+-                let pending = tx.prefix_first_after(&delta, delta_after.as_deref(), 64)?;
+-                if pending.is_empty() {
+-                    definition.state = IndexState::Ready;
+-                    definition.ready_seq = tx.seq;
+-                    put(tx, key, definition)?;
+-                    return Ok(true);
+-                }
+-                let mut bytes = 0;
+-                for (key, value) in pending {
+-                    let _memory = self.engine().budget.reserve(value.len() * 2 + 512)?;
+-                    let update = Delta::decode(&value)?;
+-                    maintain_index(tx, definition, update.old.as_ref(), update.new.as_ref())?;
+-                    if update.old.is_some() {
+-                        definition.entries = definition.entries.saturating_sub(1);
+-                    }
+-                    if update.new.is_some() {
+-                        definition.entries += 1;
++            let finished = self.engine().transact_waiting(
++                |tx| {
++                    let key = named(&prefix(b'J', collection.id), &definition.spec.name);
++                    ensure_build(tx, &key, definition.generation)?;
++                    let pending = tx.prefix_first_after(&delta, delta_after.as_deref(), 64)?;
++                    if pending.is_empty() {
++                        definition.state = IndexState::Ready;
++                        definition.ready_seq = tx.seq;
++                        put(tx, key, definition)?;
++                        return Ok(true);
+                     }
+-                    delta_after = Some(key.clone());
+-                    tx.delete(key)?;
+-                    bytes += value.len();
+-                    if bytes >= 2 << 20 {
+-                        break;
++                    let mut bytes = 0;
++                    for (key, value) in pending {
++                        let _memory = self.engine().budget.reserve(value.len() * 2 + 512)?;
++                        let update = Delta::decode(&value)?;
++                        maintain_index(tx, definition, update.old.as_ref(), update.new.as_ref())?;
++                        if update.old.is_some() {
++                            definition.entries = definition.entries.saturating_sub(1);
++                        }
++                        if update.new.is_some() {
++                            definition.entries += 1;
++                        }
++                        delta_after = Some(key.clone());
++                        tx.delete(key)?;
++                        bytes += value.len();
++                        if bytes >= 2 << 20 {
++                            break;
++                        }
+                     }
+-                }
+-                Ok(false)
+-            })?;
++                    Ok(false)
++                },
++                &|| {
++                    snapshot.check()?;
++                    check_stop()
++                },
++            )?;
+             if finished {
+                 crate::storage::failpoint("index_ready");
+                 return Ok(());
+@@ -306,23 +326,47 @@ impl TenantHandle {
+         collection: &Collection,
+         index: &IndexDefinition,
+         entries: &[IndexEntry],
++        snapshot: &Snapshot,
++        stop: Option<&std::sync::atomic::AtomicBool>,
+     ) -> Result<()> {
+         if self.engine().needs_flush() {
+             self.engine().flush_if_needed()?;
+         }
+-        self.engine().transact(|tx| {
+-            ensure_build(
+-                tx,
+-                &named(&prefix(b'J', collection.id), &index.spec.name),
+-                index.generation,
+-            )?;
+-            for entry in entries {
+-                maintain_index(tx, index, None, Some(entry))?;
+-            }
+-            Ok(())
+-        })
++        self.engine().transact_waiting(
++            |tx| {
++                ensure_build(
++                    tx,
++                    &named(&prefix(b'J', collection.id), &index.spec.name),
++                    index.generation,
++                )?;
++                for entry in entries {
++                    maintain_index(tx, index, None, Some(entry))?;
++                }
++                Ok(())
++            },
++            &|| {
++                snapshot.check()?;
++                if stop.is_some_and(|stop| stop.load(std::sync::atomic::Ordering::Acquire)) {
++                    Err(Error::new("CANCELLED", "index recovery stopping"))
++                } else {
++                    Ok(())
++                }
++            },
++        )
+     }
+-    pub(crate) fn restart_interrupted_build(&self) -> Result<()> {
++    pub(crate) fn restart_interrupted_build(
++        &self,
++        stop: &std::sync::atomic::AtomicBool,
++    ) -> Result<()> {
++        let catalog = self.engine().catalog_seq();
++        if self
++            .core
++            .recovery_catalog
++            .load(std::sync::atomic::Ordering::Acquire)
++            == catalog
++        {
++            return Ok(());
++        }
+         let snapshot = self.engine().snapshot()?;
+         for collection in list_snapshot::<Collection>(&snapshot, b"C", 1024)? {
+             for index in
+@@ -331,11 +375,15 @@ impl TenantHandle {
+                 if index.state == IndexState::Building
+                     && !self.core.builds.lock().contains(&index.generation)
+                 {
+-                    self.build_index(&collection.name, index.spec, true)?;
++                    drop(snapshot);
++                    self.build_index(&collection.name, index.spec, true, Some(stop))?;
+                     return Ok(());
+                 }
+             }
+         }
++        self.core
++            .recovery_catalog
++            .store(catalog, std::sync::atomic::Ordering::Release);
+         Ok(())
+     }
+ }
+diff --git a/src/tenant/manager.rs b/src/tenant/manager.rs
+index d57f47c..b76a103 100644
+--- a/src/tenant/manager.rs
++++ b/src/tenant/manager.rs
+@@ -43,7 +43,9 @@ struct Registry {
+ }
+ mod lifecycle;
+ mod replication;
+-use lifecycle::{clean_lifecycle_debris, recover_lifecycle};
++use lifecycle::{
++    clean_lifecycle_debris, collect_lifecycle_debris, recover_lifecycle, remove_lifecycle_debris,
++};
+ 
+ struct Slot {
+     last_seq: Option<u64>,
+@@ -206,7 +208,9 @@ impl Store {
+                 };
+                 let slots: Vec<_> = inner.slots.lock().values().cloned().collect();
+                 for slot in slots {
+-                    let mut guard = slot.lock();
++                    let Some(mut guard) = slot.try_lock() else {
++                        continue;
++                    };
+                     if guard.core.is_some() && !guard.queued {
+                         guard.queued = true;
+                         if sender.try_send(slot.clone()).is_err() {
+@@ -217,6 +221,32 @@ impl Store {
+             }
+         });
+         workers.insert(0, coordinator);
++        let weak = Arc::downgrade(&inner);
++        let build_stop = stop.clone();
++        // Recovery builds have a separate, single bounded worker. A large index
++        // must not consume all flush/compaction workers for other tenants.
++        workers.push(thread::spawn(move || {
++            while !build_stop.load(Ordering::Acquire) {
++                thread::sleep(Duration::from_millis(100));
++                let Some(inner) = weak.upgrade() else { break };
++                if !inner.node.writable() {
++                    continue;
++                }
++                let slots: Vec<_> = inner.slots.lock().values().cloned().collect();
++                for slot in slots {
++                    if build_stop.load(Ordering::Acquire) {
++                        break;
++                    }
++                    let core = slot.try_lock().and_then(|slot| slot.core.clone());
++                    if let Some(core) = core {
++                        let handle = TenantHandle { core };
++                        if let Err(error) = handle.restart_interrupted_build(&build_stop) {
++                            *handle.engine().maintenance_error.lock() = Some(error.to_string());
++                        }
++                    }
++                }
++            }
++        }));
+         Ok(Self {
+             owner: Arc::new(Owner {
+                 inner,
+@@ -331,7 +361,13 @@ impl Store {
+         {
+             return Err(Error::new("ALREADY_EXISTS", "tenant name"));
+         }
+-        if registry.tenants.len() >= 16_384 {
++        if registry
++            .tenants
++            .values()
++            .filter(|r| !matches!(r.lifecycle, Lifecycle::Deleted))
++            .count()
++            >= 16_384
++        {
+             return Err(Error::limit("tenant registry limit"));
+         }
+         let info = TenantInfo {
+@@ -411,6 +447,7 @@ impl Store {
+                         cursors: Mutex::new(HashMap::new()),
+                         plans: Mutex::new(HashMap::new()),
+                         builds: Mutex::new(HashSet::new()),
++                        recovery_catalog: std::sync::atomic::AtomicU64::new(u64::MAX),
+                     }))
+                 }
+                 Err(error) => {
+@@ -528,10 +565,13 @@ impl Store {
+         Ok(info)
+     }
+     pub fn delete_tenant(&self, id: Uuid) -> Result<()> {
+-        let _permission = self.owner.inner.node.write()?;
+-        self.delete_tenant_inner(id)
++        self.delete_tenant_inner(id, self.owner.inner.node.write()?)
+     }
+-    fn delete_tenant_inner(&self, id: Uuid) -> Result<()> {
++    fn delete_tenant_inner(
++        &self,
++        id: Uuid,
++        permission: parking_lot::RwLockReadGuard<'_, ()>,
++    ) -> Result<()> {
+         let slot = self.slot(id);
+         let mut slot = slot.lock();
+         if slot.restoring {
+@@ -558,7 +598,7 @@ impl Store {
+             crate::storage::errorpoint("tenant_delete_journal_published")?;
+             recover_lifecycle(&inner.root, &mut registry)?;
+             atomic_json(&inner.root.join("control/tenants.json"), &*registry)?;
+-            clean_lifecycle_debris(&inner.root, &registry, false)
++            collect_lifecycle_debris(&inner.root, &registry, false)
+         })();
+         if result.is_err() {
+             slot.failure = Some(Error::new(
+@@ -566,7 +606,17 @@ impl Store {
+                 "tenant deletion outcome is uncertain; restart Store to recover",
+             ));
+         }
+-        result
++        drop(registry);
++        drop(slot);
++        drop(permission);
++        let cleanup = remove_lifecycle_debris(&inner.root, result?);
++        if cleanup.is_err() {
++            self.slot(id).lock().failure = Some(Error::new(
++                "UNAVAILABLE",
++                "tenant deletion cleanup failed; reopen Store to recover",
++            ));
++        }
++        cleanup
+     }
+     pub fn status(&self, id: Uuid) -> Result<serde_json::Value> {
+         let inner = &self.owner.inner;
+@@ -590,16 +640,15 @@ impl Store {
+ }
+ 
+ fn maintain_tenant(inner: &Arc<Inner>, slot: &Arc<Mutex<Slot>>) {
+-    let core = slot.lock().core.clone();
++    let Some(guard) = slot.try_lock() else { return };
++    let core = guard.core.clone();
++    drop(guard);
+     if let Some(core) = core {
+         core.cursors.lock().retain(|_, c| c.valid());
+         let handle = TenantHandle { core: core.clone() };
+         let result = core.engine.maintain().and_then(|_| {
+             if inner.node.writable() {
+-                handle
+-                    .retention_step()
+-                    .and_then(|_| handle.gc_step())
+-                    .and_then(|_| handle.restart_interrupted_build())
++                handle.retention_step().and_then(|_| handle.gc_step())
+             } else {
+                 Ok(())
+             }
+@@ -619,3 +668,41 @@ fn maintain_tenant(inner: &Arc<Inner>, slot: &Arc<Mutex<Slot>>) {
+         }
+     }
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    #[test]
++    fn deleted_tenant_history_does_not_consume_live_tenant_capacity() {
++        let dir = tempfile::tempdir().unwrap();
++        drop(Store::open(dir.path(), Options::default()).unwrap());
++        let path = dir.path().join("control/tenants.json");
++        let mut registry: Registry = read_json(&path).unwrap();
++        for _ in 0..16_384 {
++            let id = Uuid::new_v4();
++            registry.tenants.insert(
++                id,
++                Registration {
++                    info: TenantInfo {
++                        id,
++                        name: "deleted".into(),
++                        generation: Uuid::new_v4(),
++                        history: Uuid::new_v4(),
++                        memory_bytes: Options::default().tenant_memory_bytes,
++                        disk_bytes: Options::default().tenant_disk_bytes,
++                    },
++                    lifecycle: Lifecycle::Deleted,
++                },
++            );
++        }
++        atomic_json(&path, &registry).unwrap();
++        let store = Store::open(dir.path(), Options::default()).unwrap();
++        let tenant = store.create_tenant("new-live-tenant").unwrap();
++        store
++            .tenant(tenant.id)
++            .unwrap()
++            .create_collection("docs")
++            .unwrap();
++        assert_eq!(store.tenants().len(), 1);
++    }
++}
+diff --git a/src/tenant/manager/lifecycle.rs b/src/tenant/manager/lifecycle.rs
+index 19c3d71..f659d28 100644
+--- a/src/tenant/manager/lifecycle.rs
++++ b/src/tenant/manager/lifecycle.rs
+@@ -50,7 +50,13 @@ impl Store {
+                 "import tenant UUID, name, or directory already exists",
+             ));
+         }
+-        if registry.tenants.len() >= 16_384 {
++        if registry
++            .tenants
++            .values()
++            .filter(|r| !matches!(r.lifecycle, Lifecycle::Deleted))
++            .count()
++            >= 16_384
++        {
+             return Err(Error::limit("tenant registry limit"));
+         }
+         // source is the already verified, same-filesystem private backup workspace.
+@@ -115,14 +121,23 @@ impl Store {
+         self.restore_checkpoint(id, &source)
+     }
+     pub(crate) fn restore_checkpoint(&self, id: Uuid, source: &Path) -> Result<()> {
+-        let _permission = self.owner.inner.node.write()?;
+         self.require_local_restore()?;
+-        self.restore_checkpoint_branch(id, source, true)
++        self.restore_checkpoint_branch(id, source, None)
+     }
+-    pub(super) fn restore_checkpoint_inner(&self, id: Uuid, source: &Path) -> Result<()> {
+-        self.restore_checkpoint_branch(id, source, false)
++    pub(super) fn restore_checkpoint_inner(
++        &self,
++        id: Uuid,
++        source: &Path,
++        upstream: &crate::replication::Source,
++    ) -> Result<()> {
++        self.restore_checkpoint_branch(id, source, Some(upstream))
+     }
+-    fn restore_checkpoint_branch(&self, id: Uuid, source: &Path, new_history: bool) -> Result<()> {
++    fn restore_checkpoint_branch(
++        &self,
++        id: Uuid,
++        source: &Path,
++        upstream: Option<&crate::replication::Source>,
++    ) -> Result<()> {
+         let slot = self.slot(id);
+         let inner = &self.owner.inner;
+         let stage = Uuid::new_v4();
+@@ -156,7 +171,7 @@ impl Store {
+                 "backup belongs to a different tenant database",
+             ));
+         }
+-        registration.info.history = if new_history {
++        registration.info.history = if upstream.is_none() {
+             Uuid::new_v4()
+         } else {
+             backup_info.history
+@@ -181,6 +196,14 @@ impl Store {
+         drop(check);
+         // Copy and verification run without the tenant lifecycle lock. Only publication
+         // needs a stopped tenant; a failed attempt leaves the serving database intact.
++        let _permission = match upstream {
++            Some(source) => inner.node.replica_write(source)?,
++            None => {
++                let permission = inner.node.write()?;
++                self.require_local_restore()?;
++                permission
++            }
++        };
+         let mut slot = slot.lock();
+         self.close_slot(&mut slot)?;
+         slot.last_seq = None;
+@@ -201,7 +224,7 @@ impl Store {
+             *registry = next;
+             recover_lifecycle(&inner.root, &mut registry)?;
+             atomic_json(&inner.root.join("control/tenants.json"), &*registry)?;
+-            clean_lifecycle_debris(&inner.root, &registry, false)
++            collect_lifecycle_debris(&inner.root, &registry, false)
+         })();
+         if let Err(error) = &result {
+             slot.failure = Some(Error::new(
+@@ -209,7 +232,19 @@ impl Store {
+                 format!("restore publication uncertain; reopen Store: {error}"),
+             ));
+         }
+-        result
++        drop(registry);
++        drop(slot);
++        // Large obsolete directories are reclaimed after publication, without
++        // holding the shared registry or this tenant's lifecycle lock.
++        drop(_permission);
++        let cleanup = remove_lifecycle_debris(&inner.root, result?);
++        if let Err(error) = &cleanup {
++            preparation.slot.lock().failure = Some(Error::new(
++                "UNAVAILABLE",
++                format!("restore cleanup failed; reopen Store to recover: {error}"),
++            ));
++        }
++        cleanup
+     }
+ }
+ 
+@@ -225,10 +260,6 @@ pub(super) fn recover_lifecycle(root: &Path, registry: &mut Registry) -> Result<
+                     sync_dir(&root.join("tenants"))?;
+                     sync_dir(&root.join("trash"))?;
+                 }
+-                if trash.exists() {
+-                    reject_symlink(&trash)?;
+-                    fs::remove_dir_all(trash)?;
+-                }
+                 registration.lifecycle = Lifecycle::Deleted;
+             }
+             Lifecycle::Restoring { stage, old } => {
+@@ -299,6 +330,14 @@ pub(super) fn clean_lifecycle_debris(
+     registry: &Registry,
+     startup: bool,
+ ) -> Result<()> {
++    remove_lifecycle_debris(root, collect_lifecycle_debris(root, registry, startup)?)
++}
++pub(super) fn collect_lifecycle_debris(
++    root: &Path,
++    registry: &Registry,
++    startup: bool,
++) -> Result<Vec<PathBuf>> {
++    let mut paths = Vec::new();
+     for directory in ["trash", "staging"] {
+         // Another tenant may be preparing an unpublished restore while serving traffic.
+         if directory == "staging" && !startup {
+@@ -319,10 +358,20 @@ pub(super) fn clean_lifecycle_debris(
+                 });
+             if !referenced {
+                 reject_symlink(&entry.path())?;
+-                fs::remove_dir_all(entry.path())?;
++                paths.push(entry.path());
+             }
+         }
+-        sync_dir(&root.join(directory))?;
+     }
++    Ok(paths)
++}
++pub(super) fn remove_lifecycle_debris(root: &Path, paths: Vec<PathBuf>) -> Result<()> {
++    for path in paths {
++        match fs::remove_dir_all(path) {
++            Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(error.into()),
++            _ => {}
++        }
++    }
++    sync_dir(&root.join("trash"))?;
++    sync_dir(&root.join("staging"))?;
+     Ok(())
+ }
+diff --git a/src/tenant/manager/replication.rs b/src/tenant/manager/replication.rs
+index fc1a1a0..f27b611 100644
+--- a/src/tenant/manager/replication.rs
++++ b/src/tenant/manager/replication.rs
+@@ -112,6 +112,10 @@ impl Store {
+         let handle = self.tenant(id)?;
+         let seq = handle.engine().seq();
+         slot.lock().last_seq = Some(seq);
++        drop(handle);
++        // Reading positions must not retain every cold engine (and its open
++        // descriptors) for a node-wide fence or status request.
++        let _ = self.close_tenant(id);
+         Ok(seq)
+     }
+ 
+@@ -326,10 +330,10 @@ impl Store {
+         path: &Path,
+         info: TenantInfo,
+     ) -> Result<()> {
+-        let _permission = self.owner.inner.node.replica_write(source)?;
+         if self.contains_tenant(info.id) {
+-            self.restore_checkpoint_inner(info.id, path)
++            self.restore_checkpoint_inner(info.id, path, source)
+         } else {
++            let _permission = self.owner.inner.node.replica_write(source)?;
+             self.import_checkpoint_inner(path, info)
+         }
+     }
+@@ -347,10 +351,16 @@ impl Store {
+         if unique.len() != expected.len() {
+             return Err(Error::corrupt("duplicate replicated tenant"));
+         }
++        drop(_permission);
+         let mut blocked = HashMap::new();
+         for info in self.tenants() {
+             if !unique.contains(&info.id)
+-                && let Err(error) = self.delete_tenant_inner(info.id)
++                && let Err(error) = self
++                    .owner
++                    .inner
++                    .node
++                    .replica_write(source)
++                    .and_then(|permission| self.delete_tenant_inner(info.id, permission))
+             {
+                 blocked.insert(info.id, error);
+             }
+@@ -360,14 +370,15 @@ impl Store {
+             if !self.contains_tenant(info.id) {
+                 continue;
+             }
+-            if let Err(error) = self.update_replica_quota(info) {
++            if let Err(error) = self.update_replica_quota(source, info) {
+                 blocked.insert(info.id, error);
+             }
+         }
+         Ok(blocked)
+     }
+ 
+-    fn update_replica_quota(&self, info: &TenantInfo) -> Result<()> {
++    fn update_replica_quota(&self, source: &Source, info: &TenantInfo) -> Result<()> {
++        let _permission = self.owner.inner.node.replica_write(source)?;
+         if info.memory_bytes < self.options().memtable_bytes * 4
+             || info.memory_bytes > self.options().global_memory_bytes
+             || info.disk_bytes < 1 << 20
+diff --git a/src/tenant/mod.rs b/src/tenant/mod.rs
+index 4ab20f3..c6ea42d 100644
+--- a/src/tenant/mod.rs
++++ b/src/tenant/mod.rs
+@@ -31,6 +31,7 @@ pub(crate) struct TenantCore {
+     pub cursors: Mutex<HashMap<Uuid, crate::query::Cursor>>,
+     pub plans: Mutex<HashMap<(Uuid, String), Arc<crate::query::LookupPlan>>>,
+     pub builds: Mutex<HashSet<Uuid>>,
++    pub recovery_catalog: std::sync::atomic::AtomicU64,
+ }
+ #[derive(Clone)]
+ pub struct TenantHandle {
+diff --git a/tests/backup.rs b/tests/backup.rs
+index fc471d0..ff699b8 100644
+--- a/tests/backup.rs
++++ b/tests/backup.rs
+@@ -357,7 +357,11 @@ fn storage_failure_and_quota_do_not_stop_local_commits() {
+ #[cfg(feature = "failpoints")]
+ #[test]
+ fn interrupted_uploads_resume_and_only_complete_markers_are_visible() {
+-    for point in ["backup_manifest_uploaded", "backup_completed"] {
++    for point in [
++        "backup_progress",
++        "backup_manifest_uploaded",
++        "backup_completed",
++    ] {
+         let (dir, store, id, cfg) = setup();
+         let config_path = dir.path().join("backup.json");
+         fs::write(&config_path, serde_json::to_vec(&cfg).unwrap()).unwrap();
+@@ -377,6 +381,12 @@ fn interrupted_uploads_resume_and_only_complete_markers_are_visible() {
+         assert_eq!(jobs.len(), 1);
+         let finished = wait(&service, &jobs[0]);
+         assert_eq!(finished.state, JobState::Completed, "{finished:?}");
++        if point == "backup_progress" {
++            assert!(
++                finished.reused_bytes > 0,
++                "uploaded objects must be reused after losing progress counters"
++            );
++        }
+         assert_eq!(list(&service, id).len(), 1);
+         complete(
+             &service,
+diff --git a/tests/engine.rs b/tests/engine.rs
+index f0aa023..1c9f8a2 100644
+--- a/tests/engine.rs
++++ b/tests/engine.rs
+@@ -1218,3 +1218,52 @@ fn deleting_another_tenant_preserves_unpublished_restore_preparation() {
+     );
+     drop(reopened);
+ }
++
++#[cfg(unix)]
++#[test]
++fn restore_cleanup_error_still_fences_the_tenant_until_store_recovery() {
++    use std::os::unix::fs::PermissionsExt;
++    let (dir, store, tenant) = setup();
++    let id = tenant.id();
++    tenant
++        .put("assets", json!({"_key":"same","value":"before"}), None)
++        .unwrap();
++    let backup = store.backup(id).unwrap();
++    tenant
++        .put("assets", json!({"_key":"same","value":"after"}), None)
++        .unwrap();
++    drop(tenant);
++    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
++    while store.close_tenant(id).is_err() {
++        assert!(std::time::Instant::now() < deadline);
++        std::thread::sleep(std::time::Duration::from_millis(10));
++    }
++    let blocked = dir
++        .path()
++        .join("trash")
++        .join(uuid::Uuid::new_v4().to_string());
++    std::fs::create_dir(&blocked).unwrap();
++    std::fs::write(blocked.join("debris"), b"old data").unwrap();
++    std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o0)).unwrap();
++    // Root can bypass POSIX permissions; this failure is exercised when the
++    // backend suite runs as the ordinary OrbStack/CI service user.
++    if std::fs::read_dir(&blocked).is_ok() {
++        std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o700)).unwrap();
++        return;
++    }
++    let result = store.restore(id, backup);
++    std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o700)).unwrap();
++    assert!(result.is_err());
++    assert_eq!(store.tenant(id).err().unwrap().code, "UNAVAILABLE");
++    assert_eq!(store.close_tenant(id).unwrap_err().code, "UNAVAILABLE");
++    drop(store);
++    let reopened = Store::open(dir.path(), options()).unwrap();
++    let tenant = reopened.tenant(id).unwrap();
++    assert_eq!(
++        tenant.get("assets", "same").unwrap().unwrap()["value"],
++        "before"
++    );
++    tenant
++        .put("assets", json!({"_key":"recovered"}), None)
++        .unwrap();
++}
+diff --git a/tests/http.rs b/tests/http.rs
+index 539cf15..3176286 100644
+--- a/tests/http.rs
++++ b/tests/http.rs
+@@ -10,6 +10,96 @@ use tenant_kv::{
+ };
+ use tower::ServiceExt;
+ 
++#[cfg(unix)]
++#[tokio::test]
++async fn server_exposes_not_ready_before_closing_its_listener_on_sigterm() {
++    struct Child(std::process::Child);
++    impl Drop for Child {
++        fn drop(&mut self) {
++            let _ = self.0.kill();
++            let _ = self.0.wait();
++        }
++    }
++    let dir = tempfile::tempdir().unwrap();
++    let auth_path = dir.path().join("auth.json");
++    std::fs::write(
++        &auth_path,
++        serde_json::to_vec(&AuthConfig {
++            tokens: vec![Token {
++                subject: "shutdown-test".into(),
++                sha256: http::token_hash("shutdown-test-secret-123456"),
++                tenant: None,
++                role: Role::Admin,
++            }],
++        })
++        .unwrap(),
++    )
++    .unwrap();
++    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
++    let address = listener.local_addr().unwrap();
++    drop(listener);
++    let mut child = Child(
++        std::process::Command::new(env!("CARGO_BIN_EXE_tenant-kv"))
++            .arg("serve")
++            .arg("--root")
++            .arg(dir.path().join("data"))
++            .arg("--auth")
++            .arg(auth_path)
++            .arg("--listen")
++            .arg(address.to_string())
++            .stdout(std::process::Stdio::null())
++            .stderr(std::process::Stdio::null())
++            .spawn()
++            .unwrap(),
++    );
++    let client = reqwest::Client::builder()
++        .timeout(std::time::Duration::from_secs(1))
++        .build()
++        .unwrap();
++    let url = format!("http://{address}/ready");
++    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(8);
++    loop {
++        if client
++            .get(&url)
++            .send()
++            .await
++            .is_ok_and(|r| r.status().is_success())
++        {
++            break;
++        }
++        assert!(std::time::Instant::now() < deadline);
++        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
++    }
++    assert!(
++        std::process::Command::new("kill")
++            .args(["-TERM", &child.0.id().to_string()])
++            .status()
++            .unwrap()
++            .success()
++    );
++    let mut observed = false;
++    while child.0.try_wait().unwrap().is_none() {
++        if let Ok(response) = client.get(&url).send().await
++            && response.status() == StatusCode::SERVICE_UNAVAILABLE
++        {
++            assert_eq!(response.json::<Value>().await.unwrap()["draining"], true);
++            observed = true;
++            break;
++        }
++        assert!(std::time::Instant::now() < deadline);
++        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
++    }
++    assert!(observed, "the listener closed before publishing not-ready");
++    loop {
++        if let Some(status) = child.0.try_wait().unwrap() {
++            assert!(status.success());
++            break;
++        }
++        assert!(std::time::Instant::now() < deadline);
++        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
++    }
++}
++
+ async fn call(
+     app: &axum::Router,
+     method: &str,
+@@ -38,6 +128,177 @@ async fn call(
+     let bytes = response.into_body().collect().await.unwrap().to_bytes();
+     (status, serde_json::from_slice(&bytes).unwrap())
+ }
++
++#[tokio::test]
++async fn document_history_never_controls_server_history_headers() {
++    let dir = tempfile::tempdir().unwrap();
++    let store = Store::open(dir.path(), Options::default()).unwrap();
++    let t = store
++        .tenant(store.create_tenant("history-header").unwrap().id)
++        .unwrap();
++    t.create_collection("docs").unwrap();
++    let secret = "history-header-reader-123456";
++    let app = http::app(
++        store.clone(),
++        AuthConfig {
++            tokens: vec![Token {
++                subject: "reader".into(),
++                sha256: http::token_hash(secret),
++                tenant: Some(t.id()),
++                role: Role::Read,
++            }],
++        },
++    )
++    .unwrap();
++    for (key, history) in [("forged", "forged-token"), ("invalid", "历史\n")] {
++        t.put("docs", json!({"_key":key,"history":history}), None)
++            .unwrap();
++        let base = format!("/v1/tenants/{}/collections/docs", t.id());
++        for (method, path, body) in [
++            ("GET", format!("{base}/documents/{key}"), json!(null)),
++            ("POST", format!("{base}/multi_get"), json!({"keys":[key]})),
++            (
++                "POST",
++                format!("/v1/tenants/{}/dsl", t.id()),
++                json!({"statement":"get docs $key","params":{"key":key}}),
++            ),
++        ] {
++            let response = app
++                .clone()
++                .oneshot(
++                    Request::builder()
++                        .method(method)
++                        .uri(path)
++                        .header("authorization", format!("Bearer {secret}"))
++                        .header("content-type", "application/json")
++                        .body(Body::from(if method == "GET" {
++                            vec![]
++                        } else {
++                            serde_json::to_vec(&body).unwrap()
++                        }))
++                        .unwrap(),
++                )
++                .await
++                .unwrap();
++            assert_eq!(response.status(), StatusCode::OK);
++            assert_eq!(response.headers()["x-tkv-history"], t.history());
++            let bytes = response.into_body().collect().await.unwrap().to_bytes();
++            let value: Value = serde_json::from_slice(&bytes).unwrap();
++            assert!(
++                value
++                    .to_string()
++                    .contains(&serde_json::to_string(history).unwrap())
++            );
++        }
++    }
++}
++
++#[tokio::test]
++async fn cursor_quotas_leave_point_reads_and_other_principals_available() {
++    let dir = tempfile::tempdir().unwrap();
++    let store = Store::open(
++        dir.path(),
++        Options {
++            max_snapshots: 8,
++            ..Default::default()
++        },
++    )
++    .unwrap();
++    let t = store
++        .tenant(store.create_tenant("cursor-reserve").unwrap().id)
++        .unwrap();
++    t.create_collection("docs").unwrap();
++    for i in 0..3 {
++        t.put("docs", json!({"_key":i.to_string()}), None).unwrap();
++    }
++    let tokens = [
++        "cursor-reader-a-123456",
++        "cursor-reader-b-123456",
++        "cursor-reader-c-123456",
++    ];
++    let app = http::app(
++        store.clone(),
++        AuthConfig {
++            tokens: tokens
++                .iter()
++                .map(|secret| Token {
++                    subject: secret.to_string(),
++                    sha256: http::token_hash(secret),
++                    tenant: Some(t.id()),
++                    role: Role::Read,
++                })
++                .collect(),
++        },
++    )
++    .unwrap();
++    let base = format!("/v1/tenants/{}/collections/docs", t.id());
++    let mut first = None;
++    for secret in &tokens[..2] {
++        for _ in 0..2 {
++            let (status, value) = call(
++                &app,
++                "POST",
++                &format!("{base}/query"),
++                Some(secret),
++                json!({"limit":1}),
++            )
++            .await;
++            assert_eq!(status, StatusCode::OK, "{value}");
++            first.get_or_insert(value["cursor"].as_str().unwrap().to_string());
++        }
++        assert_eq!(
++            call(
++                &app,
++                "POST",
++                &format!("{base}/query"),
++                Some(secret),
++                json!({"limit":1})
++            )
++            .await
++            .0,
++            StatusCode::TOO_MANY_REQUESTS
++        );
++    }
++    assert_eq!(
++        call(
++            &app,
++            "POST",
++            &format!("{base}/query"),
++            Some(tokens[2]),
++            json!({"limit":1})
++        )
++        .await
++        .0,
++        StatusCode::TOO_MANY_REQUESTS
++    );
++    for secret in tokens {
++        assert_eq!(
++            call(
++                &app,
++                "GET",
++                &format!("{base}/documents/0"),
++                Some(secret),
++                json!({})
++            )
++            .await
++            .0,
++            StatusCode::OK
++        );
++    }
++    t.release_cursor(first.as_ref().unwrap()).unwrap();
++    assert_eq!(
++        call(
++            &app,
++            "POST",
++            &format!("{base}/query"),
++            Some(tokens[2]),
++            json!({"limit":1})
++        )
++        .await
++        .0,
++        StatusCode::OK
++    );
++}
+ #[tokio::test]
+ async fn authenticated_http_workflow_and_cross_tenant_cursor_denial() {
+     let dir = tempfile::tempdir().unwrap();
+diff --git a/tests/middleware.rs b/tests/middleware.rs
+index cb00411..2e9cad0 100644
+--- a/tests/middleware.rs
++++ b/tests/middleware.rs
+@@ -1285,12 +1285,31 @@ fn request_read_controls_preserve_limits_cursors_and_independent_requests() {
+             .read_batch(&[operation(4)])
+             .is_ok()
+     );
+-    // Historical physical entries consume the allowance even if one current row is returned.
++    // In-memory version chains seek to the snapshot rather than spending the
++    // scan allowance walking newer versions of the same logical key.
+     t.create_collection("history").unwrap();
+     for value in 0..12 {
+         t.put("history", json!({"_key":"k","value":value}), None)
+             .unwrap();
+     }
++    let hot = t
++        .read_with(&ReadOptions {
++            max_scan: Some(1000),
++            ..Default::default()
++        })
++        .unwrap()
++        .query("history", Query::default())
++        .unwrap();
++    assert_eq!(hot.documents[0]["value"], 11);
++    for value in 0..12 {
++        t.put(
++            "history",
++            json!({"_key":format!("other-{value}"),"value":value}),
++            None,
++        )
++        .unwrap();
++    }
++    // A caller still cannot raise the configured scan cap over distinct rows.
+     assert_eq!(
+         t.read_with(&ReadOptions {
+             max_scan: Some(1000),
+diff --git a/tests/replication.rs b/tests/replication.rs
+index 7c83961..2fc135c 100644
+--- a/tests/replication.rs
++++ b/tests/replication.rs
+@@ -59,6 +59,13 @@ struct Pair {
+     servers: Vec<tokio::task::JoinHandle<()>>,
+     _dirs: Vec<tempfile::TempDir>,
+ }
++#[derive(Default)]
++struct SnapshotGate {
++    contexts: std::sync::atomic::AtomicUsize,
++    blocked: std::sync::atomic::AtomicBool,
++    entered: tokio::sync::Notify,
++    release: tokio::sync::Notify,
++}
+ impl Drop for Pair {
+     fn drop(&mut self) {
+         for server in &self.servers {
+@@ -74,6 +81,13 @@ impl Pair {
+         Self::with_replica_role(options, Role::Replica).await
+     }
+     async fn with_replica_role(options: Options, replica_role: Role) -> Self {
++        Self::with_snapshot_gate(options, replica_role, None).await
++    }
++    async fn with_snapshot_gate(
++        options: Options,
++        replica_role: Role,
++        gate: Option<std::sync::Arc<SnapshotGate>>,
++    ) -> Self {
+         let da = tempfile::tempdir().unwrap();
+         let db = tempfile::tempdir().unwrap();
+         let a = Store::open(da.path(), options.clone()).unwrap();
+@@ -93,7 +107,28 @@ impl Pair {
+             config(db.path(), cluster, replica_role, ua.clone()),
+         )
+         .unwrap();
+-        let appa = http::app_with_replication(a.clone(), auth(), None, Some(sa.clone())).unwrap();
++        let mut appa =
++            http::app_with_replication(a.clone(), auth(), None, Some(sa.clone())).unwrap();
++        if let Some(gate) = gate {
++            appa = appa.layer(axum::middleware::from_fn(
++                move |request: axum::extract::Request, next: axum::middleware::Next| {
++                    let gate = gate.clone();
++                    async move {
++                        if request.uri().path().ends_with("/context") {
++                            gate.contexts
++                                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
++                        }
++                        if request.uri().path() == "/v1/replication/snapshot"
++                            && gate.blocked.load(std::sync::atomic::Ordering::Acquire)
++                        {
++                            gate.entered.notify_one();
++                            gate.release.notified().await;
++                        }
++                        next.run(request).await
++                    }
++                },
++            ));
++        }
+         let appb = http::app_with_replication(b.clone(), auth(), None, Some(sb.clone())).unwrap();
+         let servers = vec![
+             tokio::spawn(async move {
+@@ -278,6 +313,130 @@ async fn streams_atomic_indexes_deletes_and_switches_both_directions() {
+     assert!(replica.get("assets", "d").unwrap().is_some());
+ }
+ 
++#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
++async fn slow_checkpoint_initialization_does_not_hold_healthy_replication_cycles() {
++    let gate = std::sync::Arc::new(SnapshotGate::default());
++    let pair = Pair::with_snapshot_gate(options(), Role::Replica, Some(gate.clone())).await;
++    let good = pair.a.create_tenant("incremental").unwrap().id;
++    pair.a
++        .tenant(good)
++        .unwrap()
++        .create_collection("docs")
++        .unwrap();
++    pair.catch_up(false).await;
++    gate.blocked
++        .store(true, std::sync::atomic::Ordering::Release);
++    let slow = pair.a.create_tenant("slow-checkpoint").unwrap().id;
++    pair.a
++        .tenant(slow)
++        .unwrap()
++        .create_collection("docs")
++        .unwrap();
++    let cycle = tokio::time::timeout(Duration::from_secs(2), pair.sb.sync_once()).await;
++    let entered = tokio::time::timeout(Duration::from_secs(2), gate.entered.notified()).await;
++    pair.a
++        .tenant(good)
++        .unwrap()
++        .put("docs", json!({"_key":"ack","value":42}), None)
++        .unwrap();
++    let healthy = tokio::time::timeout(Duration::from_secs(2), pair.sb.sync_once()).await;
++    let observed = pair.b.tenant(good).unwrap().get("docs", "ack").unwrap();
++    gate.blocked
++        .store(false, std::sync::atomic::Ordering::Release);
++    gate.release.notify_waiters();
++    assert!(cycle.unwrap().is_ok());
++    assert!(entered.is_ok());
++    assert!(healthy.unwrap().is_ok());
++    assert_eq!(observed.unwrap()["value"], 42);
++    pair.catch_up(false).await;
++}
++
++#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
++async fn cloned_clients_reuse_primary_discovery_for_sequential_writes() {
++    let observed = std::sync::Arc::new(SnapshotGate::default());
++    let pair = Pair::with_snapshot_gate(options(), Role::Replica, Some(observed.clone())).await;
++    let id = pair.a.create_tenant("cached-writes").unwrap().id;
++    pair.a
++        .tenant(id)
++        .unwrap()
++        .create_collection("docs")
++        .unwrap();
++    pair.catch_up(false).await;
++    let client =
++        tenant_kv::client::Client::new(&[pair.ua.clone(), pair.ub.clone()], ADMIN.into(), id)
++            .unwrap();
++    for n in 0..5 {
++        client
++            .clone()
++            .write_batch(
++                "docs",
++                vec![WriteOp::Put {
++                    document: json!({"_key":n.to_string()}),
++                    if_rev: None,
++                }],
++                WriteOptions::default(),
++            )
++            .await
++            .unwrap();
++    }
++    assert_eq!(
++        observed.contexts.load(std::sync::atomic::Ordering::Relaxed),
++        1
++    );
++    pair.catch_up(false).await;
++    for n in 0..5 {
++        assert!(
++            pair.b
++                .tenant(id)
++                .unwrap()
++                .get("docs", &n.to_string())
++                .unwrap()
++                .is_some()
++        );
++    }
++}
++
++#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
++async fn checkpoint_transfer_pins_wal_beyond_the_retention_byte_window() {
++    let pair = Pair::with_options(Options {
++        l0_stop: 128,
++        ..options()
++    })
++    .await;
++    let info = pair.a.create_tenant("pinned-transfer").unwrap();
++    let tenant = pair.a.tenant(info.id).unwrap();
++    let state = pair.a.replication_state();
++    let snapshot = pair
++        .sa
++        .snapshot(state.cluster, state.epoch, info.id)
++        .unwrap();
++    for n in 0..32u64 {
++        tenant
++            .engine()
++            .transact(|tx| tx.put(format!("Z{n:04}").into_bytes(), vec![42; 64 << 10]))
++            .unwrap();
++        tenant.engine().flush().unwrap();
++    }
++    let request = tenant_kv::replication::LogRequest {
++        protocol: tenant_kv::replication::PROTOCOL,
++        cluster: state.cluster,
++        epoch: state.epoch,
++        tenant: info.id,
++        generation: info.generation,
++        after: snapshot.position,
++        cursor: None,
++    };
++    let page = pair.sa.export_log(&request).unwrap();
++    assert!(page.through > snapshot.position);
++    pair.sa.release_snapshot(snapshot.id).unwrap();
++    tenant
++        .engine()
++        .transact(|tx| tx.put(b"Zlast".to_vec(), vec![43; 64 << 10]))
++        .unwrap();
++    tenant.engine().flush().unwrap();
++    assert_eq!(pair.sa.export_log(&request).err().unwrap().code, "LOG_GONE");
++}
++
+ #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+ async fn retained_log_expiry_installs_checkpoint_and_replicates_catalog_deletion() {
+     let pair = Pair::new().await;
+@@ -612,6 +771,7 @@ async fn busy_catalog_tenant_does_not_stall_healthy_replication() {
+     }
+     pair.catch_up(false).await;
+     let held = pair.b.tenant(busy).unwrap();
++    close(&pair.a, busy).await;
+     pair.a.delete_tenant(busy).unwrap();
+     pair.a
+         .tenant(good)

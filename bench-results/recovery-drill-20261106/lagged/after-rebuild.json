@@ -1,0 +1,69 @@
+{
+  "primary": {
+    "node": {
+      "version": 1,
+      "protocol": 3,
+      "node": "64c19cc9-8057-4363-9e8a-da658f9d7782",
+      "cluster": "73d533ef-c935-4c87-82f4-1c646075c73a",
+      "epoch": "91441461-f4b2-4563-898b-06d740b895c3",
+      "enabled": true,
+      "role": "primary",
+      "source": null,
+      "fence": null,
+      "parent": null,
+      "forced": true,
+      "log_retention_bytes": 8388608
+    },
+    "tenants": [
+      {
+        "info": {
+          "id": "91638ee9-27fa-405d-9bc8-86485a3158c3",
+          "name": "recovery-lagged",
+          "generation": "63628447-e7ce-4c67-b516-42756f036624",
+          "history": "3d156304-5fd0-4f76-96b7-53f6abbc9b87",
+          "memory_bytes": 536870912,
+          "disk_bytes": 107374182400
+        },
+        "seq": 286
+      }
+    ],
+    "unavailable": [],
+    "last_error": "REPLICATION_UNAVAILABLE: peer request failed or timed out",
+    "completed_cycles": 15
+  },
+  "replica": {
+    "node": {
+      "version": 1,
+      "protocol": 3,
+      "node": "7885096c-da66-4728-ade8-938edeb108c0",
+      "cluster": "73d533ef-c935-4c87-82f4-1c646075c73a",
+      "epoch": "91441461-f4b2-4563-898b-06d740b895c3",
+      "enabled": true,
+      "role": "replica",
+      "source": {
+        "node": "64c19cc9-8057-4363-9e8a-da658f9d7782",
+        "epoch": "91441461-f4b2-4563-898b-06d740b895c3"
+      },
+      "fence": null,
+      "parent": null,
+      "forced": false,
+      "log_retention_bytes": 8388608
+    },
+    "tenants": [
+      {
+        "info": {
+          "id": "91638ee9-27fa-405d-9bc8-86485a3158c3",
+          "name": "recovery-lagged",
+          "generation": "63628447-e7ce-4c67-b516-42756f036624",
+          "history": "3d156304-5fd0-4f76-96b7-53f6abbc9b87",
+          "memory_bytes": 536870912,
+          "disk_bytes": 107374182400
+        },
+        "seq": 286
+      }
+    ],
+    "unavailable": [],
+    "last_error": null,
+    "completed_cycles": 29
+  }
+}

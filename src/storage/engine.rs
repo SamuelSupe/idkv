@@ -33,6 +33,24 @@ use std::{
 use uuid::Uuid;
 pub use write::Transaction;
 
+pub(crate) struct LogRetention {
+    engine: Arc<Engine>,
+    id: Uuid,
+}
+impl LogRetention {
+    pub(crate) fn renew(&self, position: u64) {
+        self.engine.log_retention.lock().insert(
+            self.id,
+            (position, Some(Instant::now() + Duration::from_secs(300))),
+        );
+    }
+}
+impl Drop for LogRetention {
+    fn drop(&mut self) {
+        self.engine.log_retention.lock().remove(&self.id);
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 struct Manifest {
     version: u32,
@@ -211,6 +229,7 @@ pub struct Engine {
     maintenance: Mutex<()>,
     cache: Arc<Cache>,
     snapshots: Mutex<BTreeMap<Uuid, Weak<Lease>>>,
+    log_retention: Mutex<BTreeMap<Uuid, (u64, Option<Instant>)>>,
     disk: AtomicU64,
     metrics: Metrics,
     closed: AtomicBool,
@@ -353,6 +372,7 @@ impl Engine {
             maintenance: Mutex::new(()),
             cache,
             snapshots: Mutex::new(BTreeMap::new()),
+            log_retention: Mutex::new(BTreeMap::new()),
             disk: AtomicU64::new(disk),
             metrics: Metrics::default(),
             closed: AtomicBool::new(false),
@@ -382,6 +402,13 @@ impl Engine {
     pub fn seq(&self) -> u64 {
         self.committed.load(Ordering::Acquire)
     }
+    pub(crate) fn wait_progress(&self, observed: u64, timeout: Duration) {
+        let mut writer = self.writer.lock();
+        if self.seq() == observed {
+            self.durable
+                .wait_for(&mut writer, timeout.min(Duration::from_millis(10)));
+        }
+    }
     pub fn writable(&self) -> bool {
         !self.closed.load(Ordering::Acquire)
             && self.writer.lock().poison.is_none()
@@ -407,6 +434,14 @@ impl Engine {
     pub fn snapshot(self: &Arc<Self>) -> Result<Snapshot> {
         let view = self.view.read();
         self.pin(view.clone(), self.seq(), self.options.snapshot_seconds)
+    }
+    pub(crate) fn retain_replication_log(self: &Arc<Self>) -> LogRetention {
+        let lease = LogRetention {
+            engine: self.clone(),
+            id: Uuid::new_v4(),
+        };
+        self.log_retention.lock().insert(lease.id, (0, None));
+        lease
     }
     fn pin(self: &Arc<Self>, view: View, seq: u64, seconds: u64) -> Result<Snapshot> {
         let mut registry = self.snapshots.lock();

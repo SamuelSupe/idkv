@@ -106,6 +106,7 @@ impl TenantHandle {
                 return Err(Error::new("CURSOR_EXPIRED", "replication history changed"));
             }
             if cursor.fingerprint != fingerprint
+                || cursor.principal != budget.principal
                 || cursor.snapshot.tenant() != self.id()
                 || cursor.snapshot.generation() != self.engine().runtime_id
             {
@@ -413,6 +414,7 @@ impl TenantHandle {
         let next_cursor = if more {
             let last = candidates.last().unwrap();
             Some(Cursor {
+                principal: budget.principal.clone(),
                 publication,
                 replication_epoch,
                 snapshot: snapshot.clone(),
@@ -463,7 +465,12 @@ impl TenantHandle {
             }
             if next_cursor.is_some()
                 && query.cursor.is_none()
-                && cursors.len() >= self.engine().options.max_snapshots
+                && (cursors.len() >= self.engine().options.max_snapshots / 2
+                    || cursors
+                        .values()
+                        .filter(|c| c.principal == budget.principal)
+                        .count()
+                        >= (self.engine().options.max_snapshots / 4).max(1))
             {
                 return Err(Error::limit("cursor count limit"));
             }

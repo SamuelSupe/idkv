@@ -26,26 +26,39 @@ fn wall() -> Result<i64> {
         .map_err(|_| Error::new("CLOCK_SKEW", "system time overflow"))
 }
 pub(crate) struct ClockAnchor {
-    wall: i64,
-    monotonic: Instant,
+    sample: parking_lot::Mutex<(i64, Instant)>,
 }
 impl ClockAnchor {
     pub(crate) fn new() -> Result<Self> {
         Ok(Self {
-            wall: wall()?,
-            monotonic: Instant::now(),
+            sample: parking_lot::Mutex::new((wall()?, Instant::now())),
         })
     }
     pub(crate) fn sample(&self, previous: i64, tolerance_ms: u64) -> Result<i64> {
+        let mut anchor = self.sample.lock();
         let now = wall()?;
-        let elapsed = i64::try_from(self.monotonic.elapsed().as_micros())
+        let monotonic = Instant::now();
+        Self::advance(&mut anchor, now, monotonic, previous, tolerance_ms)
+    }
+    fn advance(
+        anchor: &mut (i64, Instant),
+        now: i64,
+        monotonic: Instant,
+        previous: i64,
+        tolerance_ms: u64,
+    ) -> Result<i64> {
+        let elapsed = i64::try_from(monotonic.duration_since(anchor.1).as_micros())
             .map_err(|_| Error::new("CLOCK_SKEW", "monotonic time overflow"))?;
-        Self::validate(
+        let recorded = Self::validate(
             now,
-            self.wall.saturating_add(elapsed),
+            anchor.0.saturating_add(elapsed),
             previous,
             tolerance_ms,
-        )
+        )?;
+        // Track normal clock discipline without forgiving a discontinuity: a
+        // failed sample never moves the anchor or the durable previous time.
+        *anchor = (now, monotonic);
+        Ok(recorded)
     }
     fn validate(now: i64, expected: i64, previous: i64, tolerance_ms: u64) -> Result<i64> {
         let tolerance = tolerance_ms.saturating_mul(1000);
@@ -90,5 +103,35 @@ mod tests {
                 "CLOCK_SKEW"
             );
         }
+    }
+    #[test]
+    fn normal_clock_discipline_refreshes_the_anchor_but_jumps_still_fail_closed() {
+        let start = Instant::now();
+        let mut anchor = (1_000_000, start);
+        let mut previous = 1_000_000;
+        for tick in 1..20 {
+            previous = ClockAnchor::advance(
+                &mut anchor,
+                1_000_000 + tick * 1500,
+                start + std::time::Duration::from_micros(tick as u64 * 1000),
+                previous,
+                1,
+            )
+            .unwrap();
+        }
+        let unchanged = anchor;
+        assert_eq!(
+            ClockAnchor::advance(
+                &mut anchor,
+                2_000_000,
+                start + std::time::Duration::from_millis(20),
+                previous,
+                1
+            )
+            .unwrap_err()
+            .code,
+            "CLOCK_SKEW"
+        );
+        assert_eq!(anchor, unchanged);
     }
 }

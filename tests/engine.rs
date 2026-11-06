@@ -1218,3 +1218,52 @@ fn deleting_another_tenant_preserves_unpublished_restore_preparation() {
     );
     drop(reopened);
 }
+
+#[cfg(unix)]
+#[test]
+fn restore_cleanup_error_still_fences_the_tenant_until_store_recovery() {
+    use std::os::unix::fs::PermissionsExt;
+    let (dir, store, tenant) = setup();
+    let id = tenant.id();
+    tenant
+        .put("assets", json!({"_key":"same","value":"before"}), None)
+        .unwrap();
+    let backup = store.backup(id).unwrap();
+    tenant
+        .put("assets", json!({"_key":"same","value":"after"}), None)
+        .unwrap();
+    drop(tenant);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while store.close_tenant(id).is_err() {
+        assert!(std::time::Instant::now() < deadline);
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let blocked = dir
+        .path()
+        .join("trash")
+        .join(uuid::Uuid::new_v4().to_string());
+    std::fs::create_dir(&blocked).unwrap();
+    std::fs::write(blocked.join("debris"), b"old data").unwrap();
+    std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o0)).unwrap();
+    // Root can bypass POSIX permissions; this failure is exercised when the
+    // backend suite runs as the ordinary OrbStack/CI service user.
+    if std::fs::read_dir(&blocked).is_ok() {
+        std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o700)).unwrap();
+        return;
+    }
+    let result = store.restore(id, backup);
+    std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(result.is_err());
+    assert_eq!(store.tenant(id).err().unwrap().code, "UNAVAILABLE");
+    assert_eq!(store.close_tenant(id).unwrap_err().code, "UNAVAILABLE");
+    drop(store);
+    let reopened = Store::open(dir.path(), options()).unwrap();
+    let tenant = reopened.tenant(id).unwrap();
+    assert_eq!(
+        tenant.get("assets", "same").unwrap().unwrap()["value"],
+        "before"
+    );
+    tenant
+        .put("assets", json!({"_key":"recovered"}), None)
+        .unwrap();
+}

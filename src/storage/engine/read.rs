@@ -337,9 +337,10 @@ enum Source<'a> {
     Level(LevelCursor<'a>),
     Mem {
         mem: &'a MemTable,
+        seq: u64,
         start: Vec<u8>,
         end: Option<Vec<u8>>,
-        last: Option<(Vec<u8>, u64)>,
+        last: Option<Vec<u8>>,
     },
     Table(TableCursor<'a>),
 }
@@ -379,6 +380,7 @@ impl Source<'_> {
             Source::Level(cursor) => cursor.next(stats),
             Source::Mem {
                 mem,
+                seq,
                 start,
                 end,
                 last,
@@ -386,22 +388,19 @@ impl Source<'_> {
                 let data = mem.data.read();
                 let lower = last
                     .as_ref()
-                    .map_or(start.as_slice(), |(k, _)| k.as_slice());
-                for (key, versions) in data.range::<[u8], _>((
-                    std::ops::Bound::Included(lower),
-                    std::ops::Bound::Unbounded,
-                )) {
+                    .map_or(std::ops::Bound::Included(start.as_slice()), |key| {
+                        std::ops::Bound::Excluded(key.as_slice())
+                    });
+                for (key, versions) in data.range::<[u8], _>((lower, std::ops::Bound::Unbounded)) {
                     if end.as_ref().is_some_and(|e| key >= e) {
                         break;
                     }
-                    let end = if let Some((_, seq)) = last.as_ref().filter(|(k, _)| key == k) {
-                        versions.partition_point(|r| r.seq < *seq)
-                    } else {
-                        versions.len()
-                    };
-                    if let Some(i) = end.checked_sub(1) {
-                        let record = &versions[i];
-                        *last = Some((key.clone(), record.seq));
+                    let end = versions.partition_point(|r| r.seq <= *seq);
+                    // A key created after the snapshot still consumes one scan
+                    // entry. Returning its first (invisible) version lets Scan
+                    // enforce cancellation/budgets before skipping it.
+                    if let Some(record) = versions.get(end.saturating_sub(1)) {
+                        *last = Some(key.clone());
                         return Ok(Some(record.clone()));
                     }
                 }
@@ -475,6 +474,7 @@ impl<'a> Scan<'a> {
     ) -> Result<Self> {
         let mut sources = vec![Source::Mem {
             mem: &view.mem,
+            seq,
             start: start.clone(),
             end: end.clone(),
             last: None,
@@ -482,6 +482,7 @@ impl<'a> Scan<'a> {
         for mem in &view.frozen {
             sources.push(Source::Mem {
                 mem,
+                seq,
                 start: start.clone(),
                 end: end.clone(),
                 last: None,
@@ -609,6 +610,33 @@ mod tests {
     use super::*;
 
     #[test]
+    fn keys_created_after_a_snapshot_still_consume_the_scan_budget() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::Store::open(dir.path(), Options::default()).unwrap();
+        let t = store
+            .tenant(store.create_tenant("invisible-scan-budget").unwrap().id)
+            .unwrap();
+        t.engine()
+            .transact(|tx| tx.put(b"Zz".to_vec(), b"visible".to_vec()))
+            .unwrap();
+        let snapshot = t.engine().snapshot().unwrap();
+        for n in 0..100 {
+            t.engine()
+                .transact(|tx| tx.put(format!("Za{n:04}").into_bytes(), b"newer".to_vec()))
+                .unwrap();
+        }
+        let mut stats = ReadStats::default();
+        let mut scan = snapshot
+            .scan(b"Z".to_vec(), Some(b"[".to_vec()), None, &mut stats)
+            .unwrap();
+        scan.set_budget(10, Instant::now() + Duration::from_secs(5));
+        assert_eq!(
+            scan.next(&mut stats).unwrap_err().code,
+            "RESOURCE_EXHAUSTED"
+        );
+    }
+
+    #[test]
     fn disjoint_ranges_preserve_spanning_versions_and_tombstones() {
         let root = tempfile::tempdir().unwrap();
         let store = crate::Store::open(
@@ -693,6 +721,7 @@ mod tests {
         let mut scan = old.scan_ranges(ranges, &mut stats, None).unwrap();
         scan.scan
             .set_budget(1, Instant::now() + Duration::from_secs(10));
+        assert!(scan.next(&mut stats).unwrap().is_some());
         assert_eq!(
             scan.next(&mut stats).unwrap_err().code,
             "RESOURCE_EXHAUSTED"

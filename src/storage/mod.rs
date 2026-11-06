@@ -4,6 +4,7 @@ mod files;
 mod sst;
 mod wal;
 
+pub(crate) use engine::LogRetention;
 pub(crate) use engine::ScanRange;
 pub(crate) use engine::directory_size;
 pub use engine::{Engine, Scan, Snapshot, Transaction};

@@ -121,6 +121,9 @@ python3 scripts/replication_demo.py --binary target/release/tenant-kv --root /va
 | v0.5.1 复制优化、资源边界与运行验证 | [docs/v0.5.1-validation.md](docs/v0.5.1-validation.md) |
 | v0.5.2 严重缺陷修复、主键读取优化与运行验证 | [docs/v0.5.2-validation.md](docs/v0.5.2-validation.md) |
 | 配额、备份恢复和故障处理 | [docs/operations.md](docs/operations.md) |
+| 主节点丢失、外部隔离、故障升主、重建与备份恢复演练 | [docs/recovery-drill.md](docs/recovery-drill.md) |
+| 当前版本并行负载、磁盘不足、WAL I/O 故障与重启资格验证 | [docs/production-qualification.md](docs/production-qualification.md) |
+| 后台备份进度同步与轻租户写入尾延迟优化 | [docs/tail-latency-optimization.md](docs/tail-latency-optimization.md) |
 | OpenDAL 配置、备份协议与恢复 | [docs/backup.md](docs/backup.md) |
 | v0.2 备份实现验证 | [docs/backup-validation.md](docs/backup-validation.md) |
 | 实际测试结果、复现命令与限制 | [docs/validation.md](docs/validation.md) |
@@ -141,3 +144,5 @@ python3 scripts/replication_demo.py --binary target/release/tenant-kv --root /va
 | HTTP 与 OpenAPI | `src/http.rs`、`src/http/openapi.rs` |
 
 可通过 `--config config.json` 覆盖 `Options` 的任意配置字段；未指定字段保留默认值。配置边界及预算含义见运维文档。
+
+针对外部报告的逐项核实、并发隔离与数据安全修复及回归边界，见[报告核实与修复](docs/review-remediation-20261106.md)。

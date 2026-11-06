@@ -50,12 +50,31 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             let listener = tokio::net::TcpListener::bind(&listen).await?;
             let replication_worker = replication.as_ref().map(|service| service.start());
             eprintln!("tenant-kv listening on {}", listener.local_addr()?);
-            axum::serve(listener, router).with_graceful_shutdown(async move {
+            let (draining, drained) = tokio::sync::oneshot::channel();
+            let server = axum::serve(listener, router).with_graceful_shutdown(async move {
                 shutdown_signal().await;
                 runtime.drain();
+                let _ = draining.send(());
                 eprintln!("tenant-kv draining requests");
-            }).await?;
+                // Give health checks a visible not-ready interval before the
+                // listener closes. Existing accepted work then has a deadline.
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            }).into_future();
+            tokio::pin!(server);
+            tokio::select! {
+                result = &mut server => result?,
+                _ = drained => {
+                    match tokio::time::timeout(std::time::Duration::from_secs(32), &mut server).await {
+                        Ok(result) => result?,
+                        Err(_) => {
+                            eprintln!("tenant-kv request drain exceeded 30 seconds; terminating");
+                            std::process::exit(1);
+                        }
+                    }
+                }
+            }
             if let Some(worker) = replication_worker { worker.abort(); let _ = worker.await; }
+            if let Some(service) = replication { service.stop_initializations().await; }
             let result = tokio::task::spawn_blocking(move || telemetry.shutdown()).await?;
             if let Err(error) = result { eprintln!("{error}"); }
             eprintln!("tenant-kv shutdown complete");

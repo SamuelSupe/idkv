@@ -81,9 +81,13 @@ curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
 
 状态为 queued、checkpointing、uploading、verifying、restoring、pruning、completed、failed、interrupted。进度的 uploaded_bytes、reused_bytes、processed_files 按当前尝试计数，重启恢复/显式重试时清零。completed 的 create 结果包含 checkpoint_seq、checkpoint_ms、文件数和总字节。checkpoint_ms 是捕获检查点的时间记录，不是按时间精确回放 WAL 的索引。
 
+任务阶段、检查点清单和终态结果持久化后才发布；逐文件进度只更新内存，在下一阶段或终态时一同保存，避免每个文件的计数更新都同步磁盘。通过任务 HTTP/API 查看实时进度，不依赖内部任务 JSON 文件的计数实时变化。续传根据检查点清单、已上传对象和完成标记恢复，重启后仍按原规则重置本次进度。实现与验证见[后台备份进度与写入尾延迟优化](tail-latency-optimization.md)。
+
 同租户一次仅执行一个远端操作。活动任务、目录锁或未释放的句柄可导致 BUSY；备份未配置为 UNAVAILABLE。后台故障反映在任务的 error 中，不能仅看轮询 HTTP 200。远端错误使用 BACKUP_STORAGE_ERROR，资源限制为 RESOURCE_EXHAUSTED，内容校验失败为 CORRUPTION。
 
 ## 恢复与新机器导入
+
+从完整备份恢复到新 Store 的实际流程、检查点后成功写入的损失核对及恢复计时，见[故障恢复演练](recovery-drill.md)。该演练的 fs 仓库保存在同一虚拟磁盘，只验证两个在线进程不可用后的恢复路径，不覆盖整盘丢失或真实云 S3。
 
 现有租户恢复只接受同 UUID、同持久 generation；不依赖打开当前引擎，因此可以恢复 CURRENT/Manifest 损坏的租户。先下载至私有目录，验证长度、SHA-256、文件白名单、租户归属、SST 内容和 checkpoint_seq。再复用 Store 恢复 journal，校验后发布目录切换。发布重新检查当前注册状态、配额和独占锁；下载期间租户被删除会使恢复失败。发布前的校验失败不替换在线目录。
 

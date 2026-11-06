@@ -47,6 +47,7 @@ impl Default for ReadOptions {
 
 #[derive(Clone)]
 pub(crate) struct ReadBudget {
+    pub(crate) principal: Option<Arc<str>>,
     pub(crate) deadline: Instant,
     pub(crate) max_scan: usize,
     pub(crate) allow_full_scan: bool,
@@ -61,6 +62,7 @@ impl ReadBudget {
             ));
         }
         let out = Self {
+            principal: None,
             deadline: Instant::now()
                 .checked_add(Duration::from_millis(
                     options
@@ -209,7 +211,11 @@ impl TenantReader<'_> {
                     if Instant::now() >= wait_deadline {
                         return Err(error);
                     }
-                    std::thread::sleep(Duration::from_millis(2))
+                    let engine = self.tenant.engine();
+                    engine.wait_progress(
+                        engine.seq(),
+                        wait_deadline.saturating_duration_since(Instant::now()),
+                    );
                 }
                 result => return result,
             }

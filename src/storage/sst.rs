@@ -495,7 +495,7 @@ impl Table {
                 return Err(Error::corrupt("index frame type"));
             };
             let mut data_groups = std::collections::BTreeMap::<usize, Vec<usize>>::new();
-            for i in indexes {
+            for &i in &indexes {
                 let mut block = blocks.partition_point(|m| m.last < keys[i]);
                 while block < blocks.len() && blocks[block].first <= keys[i] {
                     if bloom_contains(&blocks[block].bloom, &keys[i]) {
@@ -539,7 +539,7 @@ impl Table {
                 }
             }
             // A version chain can span index partitions.
-            for i in 0..keys.len() {
+            for &i in &indexes {
                 if out[i].is_none()
                     && self.top[part].last == keys[i]
                     && part + 1 < self.top.len()
@@ -646,15 +646,12 @@ fn load_frame(
     if raw_len > MAX_FRAME {
         return Err(Error::corrupt("SST decompressed length"));
     }
-    let mut memory = budget
-        .reserve(raw_len * 12 + len as usize + 1024)
-        .or_else(|error| {
-            if !evict {
-                return Err(error);
-            }
-            cache.clear();
-            budget.reserve(raw_len * 12 + len as usize + 1024)
-        })?;
+    let size = raw_len * 12 + len as usize + 1024;
+    let mut memory = if evict {
+        cache.reserve(budget, size)
+    } else {
+        budget.reserve(size)
+    }?;
     let raw = read_frame(file, offset, len)?;
     let contents = if index {
         Contents::Index(decode_meta(&raw, file_size)?)

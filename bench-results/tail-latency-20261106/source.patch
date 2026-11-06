@@ -1,0 +1,99 @@
+diff --git a/src/backup/jobs.rs b/src/backup/jobs.rs
+index eac1c67..bc03590 100644
+--- a/src/backup/jobs.rs
++++ b/src/backup/jobs.rs
+@@ -76,7 +76,7 @@ impl Inner {
+                 let manifest = self.manifest(job.tenant, backup)?;
+                 for file in &manifest.files {
+                     context.download(file, manifest.tenant.generation, None)?;
+-                    self.update(job.id, |j| j.processed_files += 1)?;
++                    self.progress(job.id, 0, 0)?;
+                 }
+                 Ok(serde_json::to_value(manifest.summary())?)
+             }
+@@ -204,14 +204,11 @@ impl Context<'_> {
+                 &checkpoint.join(&file.path),
+                 manifest.tenant.generation,
+             )?;
+-            self.inner.update(self.job.id, |j| {
+-                j.processed_files += 1;
+-                if uploaded {
+-                    j.uploaded_bytes += file.size;
+-                } else {
+-                    j.reused_bytes += file.size;
+-                }
+-            })?;
++            self.inner.progress(
++                self.job.id,
++                if uploaded { file.size } else { 0 },
++                if uploaded { 0 } else { file.size },
++            )?;
+         }
+         self.inner.publish_backup(&manifest)?;
+         Ok(serde_json::to_value(manifest.summary())?)
+@@ -270,7 +267,7 @@ impl Context<'_> {
+                 manifest.tenant.generation,
+                 Some(&checkpoint.join(&file.path)),
+             )?;
+-            self.inner.update(self.job.id, |j| j.processed_files += 1)?;
++            self.inner.progress(self.job.id, 0, 0)?;
+         }
+         for dir in [
+             checkpoint.join("sst"),
+diff --git a/src/backup/mod.rs b/src/backup/mod.rs
+index 227d3a7..9904f28 100644
+--- a/src/backup/mod.rs
++++ b/src/backup/mod.rs
+@@ -437,6 +437,22 @@ impl Inner {
+         state.jobs.insert(id, job);
+         Ok(())
+     }
++
++    fn progress(&self, id: Uuid, uploaded_bytes: u64, reused_bytes: u64) -> Result<()> {
++        let mut state = self.state.lock();
++        let job = state
++            .jobs
++            .get_mut(&id)
++            .ok_or_else(|| Error::missing("backup job"))?;
++        job.processed_files += 1;
++        job.uploaded_bytes += uploaded_bytes;
++        job.reused_bytes += reused_bytes;
++        job.updated_ms = now_ms();
++        // Progress resets on resume; only phase transitions and terminal results
++        // need durability. Per-file fsyncs compete with unrelated tenants' WALs.
++        crate::storage::failpoint("backup_progress");
++        Ok(())
++    }
+ }
+ pub(crate) fn remote_error(e: opendal::Error) -> Error {
+     let code = if e.kind() == opendal::ErrorKind::NotFound {
+diff --git a/tests/backup.rs b/tests/backup.rs
+index fc471d0..ff699b8 100644
+--- a/tests/backup.rs
++++ b/tests/backup.rs
+@@ -357,7 +357,11 @@ fn storage_failure_and_quota_do_not_stop_local_commits() {
+ #[cfg(feature = "failpoints")]
+ #[test]
+ fn interrupted_uploads_resume_and_only_complete_markers_are_visible() {
+-    for point in ["backup_manifest_uploaded", "backup_completed"] {
++    for point in [
++        "backup_progress",
++        "backup_manifest_uploaded",
++        "backup_completed",
++    ] {
+         let (dir, store, id, cfg) = setup();
+         let config_path = dir.path().join("backup.json");
+         fs::write(&config_path, serde_json::to_vec(&cfg).unwrap()).unwrap();
+@@ -377,6 +381,12 @@ fn interrupted_uploads_resume_and_only_complete_markers_are_visible() {
+         assert_eq!(jobs.len(), 1);
+         let finished = wait(&service, &jobs[0]);
+         assert_eq!(finished.state, JobState::Completed, "{finished:?}");
++        if point == "backup_progress" {
++            assert!(
++                finished.reused_bytes > 0,
++                "uploaded objects must be reused after losing progress counters"
++            );
++        }
+         assert_eq!(list(&service, id).len(), 1);
+         complete(
+             &service,

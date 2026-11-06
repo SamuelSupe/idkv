@@ -50,7 +50,16 @@ impl Engine {
         self.flush_inner(true)
     }
     fn flush_inner(&self, only_if_needed: bool) -> Result<()> {
-        let _maintenance = self.maintenance.lock();
+        let _maintenance = if only_if_needed {
+            let Some(guard) = self.maintenance.try_lock() else {
+                // Foreground backpressure is preferable to waiting for an entire
+                // compaction. The next maintenance pass will flush this buffer.
+                return Ok(());
+            };
+            guard
+        } else {
+            self.maintenance.lock()
+        };
         if only_if_needed && !self.needs_flush() {
             return Ok(());
         }
@@ -176,8 +185,7 @@ impl Engine {
             let mut all = self.view.read().tables.files.clone();
             all.extend(tables);
             let versions = VersionSet::new(all, &self.budget)?;
-            let mut writer = self.writer.lock();
-            let mut manifest = writer.manifest.clone();
+            let mut manifest = self.writer.lock().manifest.clone();
             manifest.checkpoint = checkpoint;
             self.metrics
                 .flush_bytes
@@ -200,27 +208,45 @@ impl Engine {
                     n + fs::metadata(self.path.join("wal").join(format!("{}.wal", w.id)))?.len(),
                 )
             })?;
+            let floor = {
+                let mut leases = self.log_retention.lock();
+                leases.retain(|_, (_, expires)| {
+                    expires.is_none_or(|expires| expires > Instant::now())
+                });
+                leases.values().map(|(seq, _)| *seq).min()
+            };
             while retained_bytes > retention && !manifest.retained_wals.is_empty() {
+                let next = manifest
+                    .retained_wals
+                    .get(1)
+                    .or_else(|| manifest.wals.first())
+                    .unwrap()
+                    .start_seq;
+                if floor.is_some_and(|floor| next > floor.saturating_add(1)) {
+                    break;
+                }
                 let old = manifest.retained_wals.remove(0);
                 retained_bytes -=
                     fs::metadata(self.path.join("wal").join(format!("{}.wal", old.id)))?.len();
                 obsolete.push(old);
             }
             if let Err(error) = publish(&self.path, &manifest) {
+                let mut writer = self.writer.lock();
                 writer.poison = Some(Error::new("COMMIT_UNKNOWN", error.to_string()));
                 self.durable.notify_all();
                 return Err(error);
             }
+            let mut writer = self.writer.lock();
             writer.manifest = manifest;
             let mut view = self.view.write();
             view.tables = versions;
             view.frozen.retain(|m| !Arc::ptr_eq(m, &mem));
             drop(view);
+            drop(writer);
             for wal in obsolete {
                 fs::remove_file(self.path.join("wal").join(format!("{}.wal", wal.id)))?;
             }
             sync_dir(&self.path.join("wal"))?;
-            drop(writer);
             self.reconcile_disk_locked()?;
             Ok(())
         })();
@@ -345,8 +371,7 @@ impl Engine {
             files.retain(|t| t.info.id != promoted.info.id);
             files.push(promoted.clone());
             let versions = VersionSet::new(files, &self.budget)?;
-            let mut writer = self.writer.lock();
-            let mut manifest = writer.manifest.clone();
+            let mut manifest = self.writer.lock().manifest.clone();
             manifest
                 .tables
                 .iter_mut()
@@ -354,11 +379,12 @@ impl Engine {
                 .unwrap()
                 .level = destination;
             if let Err(error) = publish(&self.path, &manifest) {
+                let mut writer = self.writer.lock();
                 writer.poison = Some(Error::new("COMMIT_UNKNOWN", error.to_string()));
                 self.durable.notify_all();
                 return Err(error);
             }
-            writer.manifest = manifest;
+            self.writer.lock().manifest = manifest;
             self.view.write().tables = versions;
             return Ok(());
         }
@@ -465,8 +491,7 @@ impl Engine {
             all.retain(|t| !selected.iter().any(|s| s.info.id == t.info.id));
             all.extend(tables);
             let versions = VersionSet::new(all, &self.budget)?;
-            let mut writer = self.writer.lock();
-            let mut manifest = writer.manifest.clone();
+            let mut manifest = self.writer.lock().manifest.clone();
             manifest
                 .tables
                 .retain(|t| !selected.iter().any(|s| s.info.id == t.id));
@@ -479,11 +504,12 @@ impl Engine {
                 .fetch_add(outputs.iter().map(|t| t.size).sum(), Ordering::Relaxed);
             manifest.tables.extend(outputs);
             if let Err(error) = publish(&self.path, &manifest) {
+                let mut writer = self.writer.lock();
                 writer.poison = Some(Error::new("COMMIT_UNKNOWN", error.to_string()));
                 self.durable.notify_all();
                 return Err(error);
             }
-            writer.manifest = manifest;
+            self.writer.lock().manifest = manifest;
             let mut view = self.view.write();
             view.tables = versions;
             validate_levels(&view.tables)?;
@@ -493,7 +519,6 @@ impl Engine {
             }
             drop(cursors);
             drop(deeper);
-            drop(writer);
             self.reconcile_disk_locked()?;
             Ok(())
         })();

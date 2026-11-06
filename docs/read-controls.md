@@ -84,7 +84,7 @@ if let Some(cursor) = page.cursor { client.release_cursor(&cursor).await?; }
 
 客户端新增 MultiGet、Query、Explain、Lookup、read_batch、published_dataset、read_published、query_published、lookup_published 和 release_cursor。`get(collection,key,minimum)` 保持原签名；需要读取控制时用 get_with_options。ReadPosition 可以从 WriteResult、ReadBatchResult 或 ReadContext 生成。需要把读取结果用于条件写时，使用 read_batch 返回的同快照 history 和文档 _rev，不要用新获取的 write_context 替换原读取的历史。
 
-新读取优先使用从库。v0.10.1 在一个 Client 及其 clone 之间共享一秒的只读路由缓存；同时到来的冷请求合并为一次发现。复用 Client 才能持续命中缓存，每次重新创建 Client 会重新发现。发现阶段最多并发探测两个配置节点，每个探测不超过两秒及剩余预算的四分之一，为实际读取留下时间。等待其他调用刷新缓存同样受本次调用的截止时间和取消控制，没有常驻刷新任务。
+新读取优先使用从库。v0.10.1 在一个 Client 及其 clone 之间让读取与批量写入共享一秒的路由缓存；同时到来的冷请求合并为一次发现。复用 Client 才能持续命中缓存，每次重新创建 Client 会重新发现。发现阶段最多并发探测两个配置节点，每个探测不超过两秒及剩余预算的四分之一，为实际读取留下时间。等待其他调用刷新缓存同样受本次调用的截止时间和取消控制，没有常驻刷新任务。
 
 缓存中的角色、history 和已应用序号只用于选择地址。若缓存显示从库落后于最低位置，优先尝试主库，即使缓存中的主库序号也已过时；原始最低 history/seq 仍完整发送给服务端校验。缓存 history 与最低位置不符时重新发现，不能把旧位置改成新历史。每次数据响应仍检查读取控制能力。没有最低位置时允许读取从库本地已应用状态。
 
@@ -95,3 +95,5 @@ if let Some(cursor) = page.cursor { client.release_cursor(&cursor).await?; }
 客户端返回 `tkv1.<origin-and-tenant-hash>.<server-cursor>` 形式的不透明游标。绑定当前租户和配置的节点 origin，不能注入任意 URL；原始游标仍由服务端校验查询、快照、租户及存储代次。普通、read_batch 和发布查询全部使用此包装。续页直接访问原节点，不做发现、回退或自动重试；节点不可用时返回错误，需要调用方决定是否重新开始整个查询。发布分页仍固定原数据集版本。
 
 release_cursor 仅访问原节点，read 角色即可释放其授权租户内的游标；成功后不可继续分页；节点不可达时由租约回收。SDK 游标只用于 SDK，不能直接提交到原始 HTTP；相同租户与节点配置的新 Client 可以继续尚未过期的 SDK 游标。如果续页快照早于请求的最低序号，返回 409/SNAPSHOT_TOO_OLD，并保留原游标，不会用当前节点已追平来伪装原快照满足新位置。主从切换、恢复、服务重启仍会使旧快照失效。客户端不会自行升主。
+
+内存表扫描按固定快照序号二分选择每个 key 的可见版本，不逐个遍历较新的历史版本；快照之后新增且没有可见版本的 key 仍计一次扫描，避免绕过预算；SST 仍可能读取多个历史记录，实际访问的记录和 tombstone 继续受扫描预算约束。非索引排序的每页需要重新扫描并计算有界 top-K，应为高频分页配置相应索引。

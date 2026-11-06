@@ -1,0 +1,506 @@
+{
+  "phase": "combined",
+  "requested_seconds": 600,
+  "actual_seconds": 600.3560973840067,
+  "operations": {
+    "heavy_writer": {
+      "calls": 23261,
+      "calls_per_second": 38.768,
+      "p50_ms": 6.24,
+      "p95_ms": 15.317,
+      "p99_ms": 39.691,
+      "errors": {}
+    },
+    "lookup_20": {
+      "calls": 59887,
+      "calls_per_second": 99.809,
+      "p50_ms": 0.371,
+      "p95_ms": 0.711,
+      "p99_ms": 1.244,
+      "errors": {}
+    },
+    "light_writer": {
+      "calls": 11839,
+      "calls_per_second": 19.731,
+      "p50_ms": 4.646,
+      "p95_ms": 10.189,
+      "p99_ms": 35.313,
+      "errors": {}
+    },
+    "get": {
+      "calls": 119550,
+      "calls_per_second": 199.247,
+      "p50_ms": 0.276,
+      "p95_ms": 0.569,
+      "p99_ms": 1.026,
+      "errors": {}
+    },
+    "index_query_20": {
+      "calls": 29960,
+      "calls_per_second": 49.931,
+      "p50_ms": 0.388,
+      "p95_ms": 0.767,
+      "p99_ms": 1.352,
+      "errors": {}
+    }
+  },
+  "completed_verified_backups": 18,
+  "admission_retries": {
+    "BUSY": 1
+  },
+  "overlap_sample_intervals": 76,
+  "first": {
+    "elapsed_s": 0.0027882120048161596,
+    "metrics": {
+      "memory_bytes": 12794170,
+      "tenants": [
+        {
+          "failure": null,
+          "lifecycle": {
+            "state": "active"
+          },
+          "open": true,
+          "stats": {
+            "commit_seq": 2386,
+            "disk_bytes": 2679912,
+            "dsl_cache": {
+              "entries": 0,
+              "hits": 0,
+              "misses": 0,
+              "reserved_bytes": 0
+            },
+            "io": {
+              "commits": 2387,
+              "compaction_read_bytes": 38573,
+              "compaction_write_bytes": 38533,
+              "document_bytes": 770071,
+              "flush_bytes": 398029,
+              "fsyncs": 2390,
+              "scheduler": {
+                "cancelled_jobs": 0,
+                "completed_jobs": 8474,
+                "queue_wait_ns": 113335508,
+                "queued_jobs": 0
+              },
+              "wal_bytes": 2268565,
+              "write_lock_wait_ns": 54932
+            },
+            "levels": {
+              "0": 6,
+              "1": 6
+            },
+            "maintenance_error": null,
+            "memory_bytes": 2604970,
+            "snapshots": 0
+          },
+          "tenant": {
+            "disk_bytes": 4294967296,
+            "generation": "fbbf1a16-a855-421c-9ffd-7b1eb01f0f77",
+            "history": "c954d097-5e70-46b7-b1a5-dc0a2d884e47",
+            "id": "0a1af99a-d9f1-4d05-8873-28a2dc1e0e25",
+            "memory_bytes": 134217728,
+            "name": "qualification-sentinel"
+          }
+        },
+        {
+          "failure": null,
+          "lifecycle": {
+            "state": "active"
+          },
+          "open": true,
+          "stats": {
+            "commit_seq": 4969,
+            "disk_bytes": 369547795,
+            "dsl_cache": {
+              "entries": 0,
+              "hits": 0,
+              "misses": 0,
+              "reserved_bytes": 0
+            },
+            "io": {
+              "commits": 4970,
+              "compaction_read_bytes": 2567879491,
+              "compaction_write_bytes": 2188604881,
+              "document_bytes": 485186380,
+              "flush_bytes": 480279885,
+              "fsyncs": 5397,
+              "scheduler": {
+                "cancelled_jobs": 0,
+                "completed_jobs": 174194,
+                "queue_wait_ns": 1004757692,
+                "queued_jobs": 0
+              },
+              "wal_bytes": 532914464,
+              "write_lock_wait_ns": 4516490513
+            },
+            "levels": {
+              "0": 9,
+              "1": 5,
+              "2": 26
+            },
+            "maintenance_error": null,
+            "memory_bytes": 10189008,
+            "snapshots": 0
+          },
+          "tenant": {
+            "disk_bytes": 4294967296,
+            "generation": "0191fd78-5868-41b2-868f-5bed29f00bf4",
+            "history": "3fba2323-253a-4533-a63e-e9f50a71e8fa",
+            "id": "d564cb80-ce9c-4325-a0e9-5721d513d825",
+            "memory_bytes": 134217728,
+            "name": "qualification-heavy"
+          }
+        }
+      ]
+    },
+    "primary": {
+      "node": {
+        "version": 1,
+        "protocol": 3,
+        "node": "f98ef2aa-0e51-49bf-ba11-8d3e6bf5633b",
+        "cluster": "17eb08be-22ed-4fb7-a1fa-d0cab5bbbd55",
+        "epoch": "80a77a83-8781-45a5-b2fd-eb3410a7bcbe",
+        "enabled": true,
+        "role": "primary",
+        "source": null,
+        "fence": null,
+        "parent": null,
+        "forced": false,
+        "log_retention_bytes": 268435456
+      },
+      "tenants": [
+        {
+          "info": {
+            "id": "0a1af99a-d9f1-4d05-8873-28a2dc1e0e25",
+            "name": "qualification-sentinel",
+            "generation": "fbbf1a16-a855-421c-9ffd-7b1eb01f0f77",
+            "history": "c954d097-5e70-46b7-b1a5-dc0a2d884e47",
+            "memory_bytes": 134217728,
+            "disk_bytes": 4294967296
+          },
+          "seq": 2386
+        },
+        {
+          "info": {
+            "id": "d564cb80-ce9c-4325-a0e9-5721d513d825",
+            "name": "qualification-heavy",
+            "generation": "0191fd78-5868-41b2-868f-5bed29f00bf4",
+            "history": "3fba2323-253a-4533-a63e-e9f50a71e8fa",
+            "memory_bytes": 134217728,
+            "disk_bytes": 4294967296
+          },
+          "seq": 4969
+        }
+      ],
+      "unavailable": [],
+      "last_error": null,
+      "completed_cycles": 0
+    },
+    "replica": {
+      "node": {
+        "version": 1,
+        "protocol": 3,
+        "node": "8a7f1d34-bbe4-4367-a41d-814c1ca7cf30",
+        "cluster": "17eb08be-22ed-4fb7-a1fa-d0cab5bbbd55",
+        "epoch": "80a77a83-8781-45a5-b2fd-eb3410a7bcbe",
+        "enabled": true,
+        "role": "replica",
+        "source": {
+          "node": "f98ef2aa-0e51-49bf-ba11-8d3e6bf5633b",
+          "epoch": "80a77a83-8781-45a5-b2fd-eb3410a7bcbe"
+        },
+        "fence": null,
+        "parent": null,
+        "forced": false,
+        "log_retention_bytes": 268435456
+      },
+      "tenants": [
+        {
+          "info": {
+            "id": "0a1af99a-d9f1-4d05-8873-28a2dc1e0e25",
+            "name": "qualification-sentinel",
+            "generation": "fbbf1a16-a855-421c-9ffd-7b1eb01f0f77",
+            "history": "c954d097-5e70-46b7-b1a5-dc0a2d884e47",
+            "memory_bytes": 134217728,
+            "disk_bytes": 4294967296
+          },
+          "seq": 2385
+        },
+        {
+          "info": {
+            "id": "d564cb80-ce9c-4325-a0e9-5721d513d825",
+            "name": "qualification-heavy",
+            "generation": "0191fd78-5868-41b2-868f-5bed29f00bf4",
+            "history": "3fba2323-253a-4533-a63e-e9f50a71e8fa",
+            "memory_bytes": 134217728,
+            "disk_bytes": 4294967296
+          },
+          "seq": 4967
+        }
+      ],
+      "unavailable": [],
+      "last_error": null,
+      "completed_cycles": 1982
+    },
+    "retention": {
+      "expiration_lag_ms": 0,
+      "gc": {
+        "completed_rounds": 1,
+        "history_sweep_active": false,
+        "knowledge_floor": 0,
+        "migration_complete": false,
+        "reclaimed_records": 0,
+        "watermark_ms": 0
+      },
+      "next_expiration_ms": 1793939945252,
+      "physical_reclamation": "as snapshots release and compaction completes",
+      "policy": {
+        "activated_seq": 4968,
+        "legacy_expires_at_ms": 1793939945252,
+        "retention_seconds": 20
+      }
+    },
+    "backup_active": true,
+    "process": {
+      "0": {
+        "VmHWM": "44224 kB",
+        "VmRSS": "44224 kB",
+        "Threads": "36",
+        "file_descriptors": 79
+      },
+      "1": {
+        "VmHWM": "54072 kB",
+        "VmRSS": "54072 kB",
+        "Threads": "31",
+        "file_descriptors": 68
+      }
+    }
+  },
+  "last": {
+    "elapsed_s": 595.3859657249996,
+    "metrics": {
+      "memory_bytes": 69814353,
+      "tenants": [
+        {
+          "failure": null,
+          "lifecycle": {
+            "state": "active"
+          },
+          "open": true,
+          "stats": {
+            "commit_seq": 19962,
+            "disk_bytes": 23585907,
+            "dsl_cache": {
+              "entries": 0,
+              "hits": 0,
+              "misses": 0,
+              "reserved_bytes": 0
+            },
+            "io": {
+              "commits": 19962,
+              "compaction_read_bytes": 5354438,
+              "compaction_write_bytes": 1069050,
+              "document_bytes": 4281070,
+              "flush_bytes": 4585329,
+              "fsyncs": 19209,
+              "scheduler": {
+                "cancelled_jobs": 0,
+                "completed_jobs": 163913,
+                "queue_wait_ns": 1665979915,
+                "queued_jobs": 0
+              },
+              "wal_bytes": 23263876,
+              "write_lock_wait_ns": 4001767622
+            },
+            "levels": {
+              "0": 6,
+              "1": 7
+            },
+            "maintenance_error": null,
+            "memory_bytes": 8748075,
+            "snapshots": 0
+          },
+          "tenant": {
+            "disk_bytes": 4294967296,
+            "generation": "fbbf1a16-a855-421c-9ffd-7b1eb01f0f77",
+            "history": "c954d097-5e70-46b7-b1a5-dc0a2d884e47",
+            "id": "0a1af99a-d9f1-4d05-8873-28a2dc1e0e25",
+            "memory_bytes": 134217728,
+            "name": "qualification-sentinel"
+          }
+        },
+        {
+          "failure": null,
+          "lifecycle": {
+            "state": "active"
+          },
+          "open": true,
+          "stats": {
+            "commit_seq": 34288,
+            "disk_bytes": 375371483,
+            "dsl_cache": {
+              "entries": 0,
+              "hits": 0,
+              "misses": 0,
+              "reserved_bytes": 0
+            },
+            "io": {
+              "commits": 34288,
+              "compaction_read_bytes": 14000575113,
+              "compaction_write_bytes": 11668287982,
+              "document_bytes": 2455956728,
+              "flush_bytes": 2438256572,
+              "fsyncs": 34237,
+              "scheduler": {
+                "cancelled_jobs": 0,
+                "completed_jobs": 1252127,
+                "queue_wait_ns": 8289507229,
+                "queued_jobs": 0
+              },
+              "wal_bytes": 2718384221,
+              "write_lock_wait_ns": 27434913130
+            },
+            "levels": {
+              "0": 17,
+              "1": 20,
+              "2": 148
+            },
+            "maintenance_error": null,
+            "memory_bytes": 61066086,
+            "snapshots": 0
+          },
+          "tenant": {
+            "disk_bytes": 4294967296,
+            "generation": "0191fd78-5868-41b2-868f-5bed29f00bf4",
+            "history": "3fba2323-253a-4533-a63e-e9f50a71e8fa",
+            "id": "d564cb80-ce9c-4325-a0e9-5721d513d825",
+            "memory_bytes": 134217728,
+            "name": "qualification-heavy"
+          }
+        }
+      ]
+    },
+    "primary": {
+      "node": {
+        "version": 1,
+        "protocol": 3,
+        "node": "f98ef2aa-0e51-49bf-ba11-8d3e6bf5633b",
+        "cluster": "17eb08be-22ed-4fb7-a1fa-d0cab5bbbd55",
+        "epoch": "80a77a83-8781-45a5-b2fd-eb3410a7bcbe",
+        "enabled": true,
+        "role": "primary",
+        "source": null,
+        "fence": null,
+        "parent": null,
+        "forced": false,
+        "log_retention_bytes": 268435456
+      },
+      "tenants": [
+        {
+          "info": {
+            "id": "0a1af99a-d9f1-4d05-8873-28a2dc1e0e25",
+            "name": "qualification-sentinel",
+            "generation": "fbbf1a16-a855-421c-9ffd-7b1eb01f0f77",
+            "history": "c954d097-5e70-46b7-b1a5-dc0a2d884e47",
+            "memory_bytes": 134217728,
+            "disk_bytes": 4294967296
+          },
+          "seq": 19962
+        },
+        {
+          "info": {
+            "id": "d564cb80-ce9c-4325-a0e9-5721d513d825",
+            "name": "qualification-heavy",
+            "generation": "0191fd78-5868-41b2-868f-5bed29f00bf4",
+            "history": "3fba2323-253a-4533-a63e-e9f50a71e8fa",
+            "memory_bytes": 134217728,
+            "disk_bytes": 4294967296
+          },
+          "seq": 34288
+        }
+      ],
+      "unavailable": [],
+      "last_error": null,
+      "completed_cycles": 0
+    },
+    "replica": {
+      "node": {
+        "version": 1,
+        "protocol": 3,
+        "node": "8a7f1d34-bbe4-4367-a41d-814c1ca7cf30",
+        "cluster": "17eb08be-22ed-4fb7-a1fa-d0cab5bbbd55",
+        "epoch": "80a77a83-8781-45a5-b2fd-eb3410a7bcbe",
+        "enabled": true,
+        "role": "replica",
+        "source": {
+          "node": "f98ef2aa-0e51-49bf-ba11-8d3e6bf5633b",
+          "epoch": "80a77a83-8781-45a5-b2fd-eb3410a7bcbe"
+        },
+        "fence": null,
+        "parent": null,
+        "forced": false,
+        "log_retention_bytes": 268435456
+      },
+      "tenants": [
+        {
+          "info": {
+            "id": "0a1af99a-d9f1-4d05-8873-28a2dc1e0e25",
+            "name": "qualification-sentinel",
+            "generation": "fbbf1a16-a855-421c-9ffd-7b1eb01f0f77",
+            "history": "c954d097-5e70-46b7-b1a5-dc0a2d884e47",
+            "memory_bytes": 134217728,
+            "disk_bytes": 4294967296
+          },
+          "seq": 19961
+        },
+        {
+          "info": {
+            "id": "d564cb80-ce9c-4325-a0e9-5721d513d825",
+            "name": "qualification-heavy",
+            "generation": "0191fd78-5868-41b2-868f-5bed29f00bf4",
+            "history": "3fba2323-253a-4533-a63e-e9f50a71e8fa",
+            "memory_bytes": 134217728,
+            "disk_bytes": 4294967296
+          },
+          "seq": 34285
+        }
+      ],
+      "unavailable": [],
+      "last_error": null,
+      "completed_cycles": 11808
+    },
+    "retention": {
+      "expiration_lag_ms": 42,
+      "gc": {
+        "completed_rounds": 5528,
+        "history_sweep_active": false,
+        "knowledge_floor": 0,
+        "migration_complete": true,
+        "reclaimed_records": 27645,
+        "watermark_ms": 1793940520604
+      },
+      "next_expiration_ms": 1793940520606,
+      "physical_reclamation": "as snapshots release and compaction completes",
+      "policy": {
+        "activated_seq": 4968,
+        "legacy_expires_at_ms": 1793939945252,
+        "retention_seconds": 20
+      }
+    },
+    "backup_active": true,
+    "process": {
+      "0": {
+        "VmHWM": "94900 kB",
+        "VmRSS": "94900 kB",
+        "Threads": "37",
+        "file_descriptors": 221
+      },
+      "1": {
+        "VmHWM": "63760 kB",
+        "VmRSS": "63760 kB",
+        "Threads": "32",
+        "file_descriptors": 202
+      }
+    }
+  }
+}

@@ -32,12 +32,14 @@ pub struct UnavailableTenant {
 enum TenantSync {
     Idle,
     Pending(u64),
-    Refresh,
 }
 struct Progress {
     error: Option<String>,
     cycles: u64,
     cursors: HashMap<Uuid, super::LogCursor>,
+    initializing: HashMap<Uuid, tokio::task::JoinHandle<Result<()>>>,
+    retry_at: HashMap<Uuid, Instant>,
+    transfers: HashMap<Uuid, Uuid>,
 }
 struct Inner {
     store: Store,
@@ -133,6 +135,9 @@ impl Service {
                     error: None,
                     cycles: 0,
                     cursors: HashMap::new(),
+                    initializing: HashMap::new(),
+                    retry_at: HashMap::new(),
+                    transfers: HashMap::new(),
                 }),
             }),
         })
@@ -182,10 +187,12 @@ impl Service {
                 if service.inner.store.replication_state().role == Role::Replica {
                     let result = {
                         let _cycle = service.inner.cycle.lock().await;
-                        service.sync_inner().await
+                        service.sync_inner(false).await
                     };
                     let pending = matches!(result, Ok(true));
-                    service.inner.progress.lock().error = result.err().map(|e| e.to_string());
+                    if let Err(error) = &result {
+                        service.inner.progress.lock().error = Some(error.to_string());
+                    }
                     if pending {
                         // Each round gives every pending tenant a page before revisiting
                         // a hot tenant. Sleep only at the head or after an error.
@@ -196,6 +203,24 @@ impl Service {
                 tokio::time::sleep(Duration::from_millis(service.inner.config.poll_ms)).await;
             }
         })
+    }
+    /// Stop background checkpoint transfers after stopping the replication loop.
+    /// An installation already handed to a blocking worker finishes atomically.
+    pub async fn stop_initializations(&self) {
+        let tasks: Vec<_> = self
+            .inner
+            .progress
+            .lock()
+            .initializing
+            .drain()
+            .map(|(_, task)| task)
+            .collect();
+        for task in &tasks {
+            task.abort();
+        }
+        for task in tasks {
+            let _ = task.await;
+        }
     }
     pub(super) async fn request<T: DeserializeOwned>(
         &self,
@@ -268,29 +293,44 @@ impl Service {
     }
     pub async fn sync_once(&self) -> Result<()> {
         let _cycle = self.inner.cycle.lock().await;
-        self.sync_inner().await.map(|_| ())
+        self.sync_inner(true).await.map(|_| ())
     }
-    async fn sync_inner(&self) -> Result<bool> {
+    async fn sync_inner(&self, report_error: bool) -> Result<bool> {
         if self.inner.store.replication_state().role != Role::Replica {
             return Err(Error::new("CONFLICT", "node is not a replica"));
         }
         let upstream: Received<Status> = self.request("/v1/replication/status", None).await?;
         super::compatible(upstream.node.protocol)?;
         let store = self.inner.store.clone();
-        let source = store.bind_source(&upstream.node)?;
+        let node = upstream.node.clone();
+        let binding = store.clone();
+        let source = tokio::task::spawn_blocking(move || binding.bind_source(&node))
+            .await
+            .map_err(|_| Error::new("INTERNAL", "source binding worker failed"))??;
         let mut catalog = upstream.tenants.clone();
         catalog.extend(upstream.unavailable.iter().map(|t| TenantPosition {
             info: t.info.clone(),
             seq: 0,
         }));
         catalog.sort_by_key(|p| p.info.id);
-        let blocked = store.replica_catalog(&source, &catalog)?;
+        let catalog_store = store.clone();
+        let catalog_source = source.clone();
+        let blocked = tokio::task::spawn_blocking(move || {
+            catalog_store.replica_catalog(&catalog_source, &catalog)
+        })
+        .await
+        .map_err(|_| Error::new("INTERNAL", "replica catalog worker failed"))??;
+        let mut catalog = upstream.tenants.clone();
+        catalog.extend(upstream.unavailable.iter().map(|t| TenantPosition {
+            info: t.info.clone(),
+            seq: 0,
+        }));
         let active: HashSet<_> = catalog.iter().map(|p| p.info.id).collect();
-        self.inner
-            .progress
-            .lock()
-            .cursors
-            .retain(|id, _| active.contains(id));
+        {
+            let mut progress = self.inner.progress.lock();
+            progress.cursors.retain(|id, _| active.contains(id));
+            progress.retry_at.retain(|id, _| active.contains(id));
+        }
         let mut failure = blocked.values().next().cloned().or_else(|| {
             upstream.unavailable.first().map(|t| {
                 Error::new(
@@ -299,14 +339,49 @@ impl Service {
                 )
             })
         });
+        let finished: Vec<_> = {
+            let progress = self.inner.progress.lock();
+            progress
+                .initializing
+                .iter()
+                .filter(|(_, task)| task.is_finished())
+                .map(|(id, _)| *id)
+                .collect()
+        };
+        for id in finished {
+            let task = self.inner.progress.lock().initializing.remove(&id).unwrap();
+            if let Err(error) = task.await.unwrap_or_else(|_| {
+                Err(Error::new(
+                    "INTERNAL",
+                    "replica initialization worker failed",
+                ))
+            }) {
+                self.inner
+                    .progress
+                    .lock()
+                    .retry_at
+                    .insert(id, Instant::now() + Duration::from_millis(100));
+                failure.get_or_insert(error);
+            }
+        }
         let started = Instant::now();
         let mut positions = upstream.tenants.clone();
         for round in 0..8 {
             let mut next = Vec::new();
-            let mut refresh = false;
             for mut position in positions {
                 if blocked.contains_key(&position.info.id) {
                     continue;
+                }
+                {
+                    let progress = self.inner.progress.lock();
+                    if progress.initializing.contains_key(&position.info.id)
+                        || progress
+                            .retry_at
+                            .get(&position.info.id)
+                            .is_some_and(|at| *at > Instant::now())
+                    {
+                        continue;
+                    }
                 }
                 match self
                     .sync_tenant(&source, upstream.node.cluster, &position)
@@ -319,22 +394,23 @@ impl Service {
                         position.seq = head;
                         next.push(position);
                     }
-                    Ok(TenantSync::Refresh) => refresh = true,
                     Err(error) => {
+                        self.inner.progress.lock().retry_at.insert(
+                            position.info.id,
+                            Instant::now() + Duration::from_millis(100),
+                        );
                         failure.get_or_insert(error);
                     }
                 }
             }
-            if let Some(error) = failure {
-                return Err(error);
-            }
-            if next.is_empty()
-                || refresh
-                || round == 7
-                || started.elapsed() >= Duration::from_millis(10)
-            {
-                self.inner.progress.lock().cycles += 1;
-                return Ok(refresh || !next.is_empty());
+            if next.is_empty() || round == 7 || started.elapsed() >= Duration::from_millis(10) {
+                let mut progress = self.inner.progress.lock();
+                progress.cycles += 1;
+                progress.error = failure.as_ref().map(ToString::to_string);
+                if report_error && let Some(error) = failure {
+                    return Err(error);
+                }
+                return Ok(!next.is_empty());
             }
             // Every pending tenant receives one page per round. Refresh lifecycle
             // and role information after at most eight rounds or 10 ms of work;
@@ -352,17 +428,18 @@ impl Service {
     ) -> Result<TenantSync> {
         let store = self.inner.store.clone();
         if !store.contains_tenant(position.info.id) {
-            self.initialize(source, position.info.id).await?;
-            return Ok(TenantSync::Refresh);
+            self.start_initialize(source, position.info.id);
+            return Ok(TenantSync::Idle);
         }
-        let after = store.replication_position(position.info.id)?;
-        if after > position.seq {
-            return Err(Error::new(
-                "REPLICATION_CONFLICT",
-                "replica contains transactions absent from source",
-            ));
-        }
+        let id = position.info.id;
+        let position_store = store.clone();
+        let after = tokio::task::spawn_blocking(move || position_store.replication_position(id))
+            .await
+            .map_err(|_| Error::new("INTERNAL", "replica position worker failed"))??;
+        // An asynchronous checkpoint can install a position newer than this
+        // cycle's catalog. The authenticated log endpoint checks the live head.
         if after == position.seq {
+            self.finish_transfer(position.info.id).await?;
             return Ok(TenantSync::Idle);
         }
         let request = LogRequest {
@@ -386,8 +463,8 @@ impl Service {
         match page {
             Err(error) if error.code == "LOG_GONE" => {
                 self.inner.progress.lock().cursors.remove(&position.info.id);
-                self.initialize(source, position.info.id).await?;
-                Ok(TenantSync::Refresh)
+                self.start_initialize(source, position.info.id);
+                Ok(TenantSync::Idle)
             }
             Err(error) => Err(error),
             Ok(page) => {
@@ -415,11 +492,42 @@ impl Service {
                         .cursors
                         .insert(position.info.id, cursor);
                 }
+                if matches!(pending, TenantSync::Idle) {
+                    self.finish_transfer(position.info.id).await?;
+                }
                 Ok(pending)
             }
         }
     }
+    fn start_initialize(&self, source: &Source, tenant: Uuid) {
+        let mut progress = self.inner.progress.lock();
+        if progress.initializing.len() >= 2 || progress.initializing.contains_key(&tenant) {
+            return;
+        }
+        let service = self.clone();
+        let source = source.clone();
+        progress.initializing.insert(
+            tenant,
+            tokio::spawn(async move { service.initialize(&source, tenant).await }),
+        );
+    }
+    pub(super) fn hold_transfer(&self, tenant: Uuid, id: Uuid) {
+        self.inner.progress.lock().transfers.insert(tenant, id);
+    }
+    pub(super) async fn finish_transfer(&self, tenant: Uuid) -> Result<()> {
+        let id = self.inner.progress.lock().transfers.get(&tenant).copied();
+        if let Some(id) = id {
+            let _: Received<Value> = self
+                .request("/v1/replication/snapshot/release", Some(json!({"id":id})))
+                .await?;
+            self.inner.progress.lock().transfers.remove(&tenant);
+        }
+        Ok(())
+    }
     pub fn export_log(&self, request: &LogRequest) -> Result<LogPage> {
+        if let Some(mut exports) = self.inner.exports.try_lock() {
+            exports.renew(request.tenant, request.epoch);
+        }
         self.inner.store.export_logs(request)
     }
     pub fn snapshot(
@@ -430,7 +538,8 @@ impl Service {
     ) -> Result<super::snapshot::SnapshotInfo> {
         self.inner
             .exports
-            .lock()
+            .try_lock()
+            .ok_or_else(|| Error::new("BUSY", "replication checkpoint preparation is active"))?
             .create(&self.inner.store, cluster, epoch, tenant)
     }
     pub fn snapshot_chunk(&self, id: Uuid, file: usize, offset: u64) -> Result<String> {
@@ -461,8 +570,13 @@ impl Service {
                 .ok_or_else(|| {
                     Error::new("CONFLICT", "source does not confirm this durable fence")
                 })?;
-            self.sync_inner().await?;
-            match self.inner.store.promote_verified(fence) {
+            self.sync_inner(true).await?;
+            let store = self.inner.store.clone();
+            let fence = fence.clone();
+            let result = tokio::task::spawn_blocking(move || store.promote_verified(&fence))
+                .await
+                .map_err(|_| Error::new("INTERNAL", "promotion worker failed"))?;
+            match result {
                 Err(error) if error.code == "REPLICA_LAG" && Instant::now() < deadline => {}
                 result => return result,
             }
@@ -472,7 +586,11 @@ impl Service {
         let _cycle = self.inner.cycle.lock().await;
         let upstream: Received<Status> = self.request("/v1/replication/status", None).await?;
         super::compatible(upstream.node.protocol)?;
-        let state = self.inner.store.follow_verified(&upstream.node)?;
+        let store = self.inner.store.clone();
+        let node = upstream.node.clone();
+        let state = tokio::task::spawn_blocking(move || store.follow_verified(&node))
+            .await
+            .map_err(|_| Error::new("INTERNAL", "follow worker failed"))??;
         self.inner.progress.lock().cursors.clear();
         Ok(state)
     }
@@ -519,13 +637,21 @@ impl Service {
                 ));
             }
         }
-        let fence = self.inner.store.fence_primary(peer.node.node)?;
+        let store = self.inner.store.clone();
+        let target = peer.node.node;
+        let fence = tokio::task::spawn_blocking(move || store.fence_primary(target))
+            .await
+            .map_err(|_| Error::new("INTERNAL", "fence worker failed"))??;
         let _: Received<NodeState> = self
             .request("/v1/replication/promote", Some(json!({"fence":fence.id})))
             .await?;
         let peer: Received<Status> = self.request("/v1/replication/status", None).await?;
         super::compatible(peer.node.protocol)?;
-        let state = self.inner.store.follow_verified(&peer.node)?;
+        let store = self.inner.store.clone();
+        let node = peer.node.clone();
+        let state = tokio::task::spawn_blocking(move || store.follow_verified(&node))
+            .await
+            .map_err(|_| Error::new("INTERNAL", "follow worker failed"))??;
         self.inner.progress.lock().cursors.clear();
         Ok(state)
     }
@@ -536,8 +662,11 @@ impl Service {
         accept_data_loss: bool,
     ) -> Result<NodeState> {
         let _cycle = self.inner.cycle.lock().await;
-        self.inner
-            .store
-            .force_promote(&source, old_primary_fenced, accept_data_loss)
+        let store = self.inner.store.clone();
+        tokio::task::spawn_blocking(move || {
+            store.force_promote(&source, old_primary_fenced, accept_data_loss)
+        })
+        .await
+        .map_err(|_| Error::new("INTERNAL", "force promotion worker failed"))?
     }
 }

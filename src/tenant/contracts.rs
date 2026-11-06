@@ -75,13 +75,17 @@ impl TenantHandle {
                     "read token belongs to another history",
                 ));
             }
-            if self.engine().seq() >= seq {
+            let applied = self.engine().seq();
+            if applied >= seq {
                 return Ok(());
             }
             if std::time::Instant::now() >= deadline {
                 return Err(Error::new("REPLICA_LAG", "read consistency deadline"));
             }
-            std::thread::sleep(std::time::Duration::from_millis(2));
+            self.engine().wait_progress(
+                applied,
+                deadline.saturating_duration_since(std::time::Instant::now()),
+            );
         }
     }
 

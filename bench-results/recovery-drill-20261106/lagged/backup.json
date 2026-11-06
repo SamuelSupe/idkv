@@ -1,0 +1,10 @@
+{
+  "service": "fs",
+  "options": {
+    "root": "/var/tmp/idkv-recovery-drill-20261106-final3/lagged/repository"
+  },
+  "max_backup_bytes": 536870912,
+  "max_staging_bytes": 1610612736,
+  "reserve_free_bytes": 67108864,
+  "bytes_per_second": 52428800
+}

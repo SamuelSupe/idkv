@@ -50,7 +50,13 @@ impl Store {
                 "import tenant UUID, name, or directory already exists",
             ));
         }
-        if registry.tenants.len() >= 16_384 {
+        if registry
+            .tenants
+            .values()
+            .filter(|r| !matches!(r.lifecycle, Lifecycle::Deleted))
+            .count()
+            >= 16_384
+        {
             return Err(Error::limit("tenant registry limit"));
         }
         // source is the already verified, same-filesystem private backup workspace.
@@ -115,14 +121,23 @@ impl Store {
         self.restore_checkpoint(id, &source)
     }
     pub(crate) fn restore_checkpoint(&self, id: Uuid, source: &Path) -> Result<()> {
-        let _permission = self.owner.inner.node.write()?;
         self.require_local_restore()?;
-        self.restore_checkpoint_branch(id, source, true)
+        self.restore_checkpoint_branch(id, source, None)
     }
-    pub(super) fn restore_checkpoint_inner(&self, id: Uuid, source: &Path) -> Result<()> {
-        self.restore_checkpoint_branch(id, source, false)
+    pub(super) fn restore_checkpoint_inner(
+        &self,
+        id: Uuid,
+        source: &Path,
+        upstream: &crate::replication::Source,
+    ) -> Result<()> {
+        self.restore_checkpoint_branch(id, source, Some(upstream))
     }
-    fn restore_checkpoint_branch(&self, id: Uuid, source: &Path, new_history: bool) -> Result<()> {
+    fn restore_checkpoint_branch(
+        &self,
+        id: Uuid,
+        source: &Path,
+        upstream: Option<&crate::replication::Source>,
+    ) -> Result<()> {
         let slot = self.slot(id);
         let inner = &self.owner.inner;
         let stage = Uuid::new_v4();
@@ -156,7 +171,7 @@ impl Store {
                 "backup belongs to a different tenant database",
             ));
         }
-        registration.info.history = if new_history {
+        registration.info.history = if upstream.is_none() {
             Uuid::new_v4()
         } else {
             backup_info.history
@@ -181,6 +196,14 @@ impl Store {
         drop(check);
         // Copy and verification run without the tenant lifecycle lock. Only publication
         // needs a stopped tenant; a failed attempt leaves the serving database intact.
+        let _permission = match upstream {
+            Some(source) => inner.node.replica_write(source)?,
+            None => {
+                let permission = inner.node.write()?;
+                self.require_local_restore()?;
+                permission
+            }
+        };
         let mut slot = slot.lock();
         self.close_slot(&mut slot)?;
         slot.last_seq = None;
@@ -201,7 +224,7 @@ impl Store {
             *registry = next;
             recover_lifecycle(&inner.root, &mut registry)?;
             atomic_json(&inner.root.join("control/tenants.json"), &*registry)?;
-            clean_lifecycle_debris(&inner.root, &registry, false)
+            collect_lifecycle_debris(&inner.root, &registry, false)
         })();
         if let Err(error) = &result {
             slot.failure = Some(Error::new(
@@ -209,7 +232,19 @@ impl Store {
                 format!("restore publication uncertain; reopen Store: {error}"),
             ));
         }
-        result
+        drop(registry);
+        drop(slot);
+        // Large obsolete directories are reclaimed after publication, without
+        // holding the shared registry or this tenant's lifecycle lock.
+        drop(_permission);
+        let cleanup = remove_lifecycle_debris(&inner.root, result?);
+        if let Err(error) = &cleanup {
+            preparation.slot.lock().failure = Some(Error::new(
+                "UNAVAILABLE",
+                format!("restore cleanup failed; reopen Store to recover: {error}"),
+            ));
+        }
+        cleanup
     }
 }
 
@@ -224,10 +259,6 @@ pub(super) fn recover_lifecycle(root: &Path, registry: &mut Registry) -> Result<
                     fs::rename(&current, &trash)?;
                     sync_dir(&root.join("tenants"))?;
                     sync_dir(&root.join("trash"))?;
-                }
-                if trash.exists() {
-                    reject_symlink(&trash)?;
-                    fs::remove_dir_all(trash)?;
                 }
                 registration.lifecycle = Lifecycle::Deleted;
             }
@@ -299,6 +330,14 @@ pub(super) fn clean_lifecycle_debris(
     registry: &Registry,
     startup: bool,
 ) -> Result<()> {
+    remove_lifecycle_debris(root, collect_lifecycle_debris(root, registry, startup)?)
+}
+pub(super) fn collect_lifecycle_debris(
+    root: &Path,
+    registry: &Registry,
+    startup: bool,
+) -> Result<Vec<PathBuf>> {
+    let mut paths = Vec::new();
     for directory in ["trash", "staging"] {
         // Another tenant may be preparing an unpublished restore while serving traffic.
         if directory == "staging" && !startup {
@@ -319,10 +358,20 @@ pub(super) fn clean_lifecycle_debris(
                 });
             if !referenced {
                 reject_symlink(&entry.path())?;
-                fs::remove_dir_all(entry.path())?;
+                paths.push(entry.path());
             }
         }
-        sync_dir(&root.join(directory))?;
     }
+    Ok(paths)
+}
+pub(super) fn remove_lifecycle_debris(root: &Path, paths: Vec<PathBuf>) -> Result<()> {
+    for path in paths {
+        match fs::remove_dir_all(path) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(error.into()),
+            _ => {}
+        }
+    }
+    sync_dir(&root.join("trash"))?;
+    sync_dir(&root.join("staging"))?;
     Ok(())
 }

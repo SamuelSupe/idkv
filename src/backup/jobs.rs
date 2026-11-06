@@ -76,7 +76,7 @@ impl Inner {
                 let manifest = self.manifest(job.tenant, backup)?;
                 for file in &manifest.files {
                     context.download(file, manifest.tenant.generation, None)?;
-                    self.update(job.id, |j| j.processed_files += 1)?;
+                    self.progress(job.id, 0, 0)?;
                 }
                 Ok(serde_json::to_value(manifest.summary())?)
             }
@@ -204,14 +204,11 @@ impl Context<'_> {
                 &checkpoint.join(&file.path),
                 manifest.tenant.generation,
             )?;
-            self.inner.update(self.job.id, |j| {
-                j.processed_files += 1;
-                if uploaded {
-                    j.uploaded_bytes += file.size;
-                } else {
-                    j.reused_bytes += file.size;
-                }
-            })?;
+            self.inner.progress(
+                self.job.id,
+                if uploaded { file.size } else { 0 },
+                if uploaded { 0 } else { file.size },
+            )?;
         }
         self.inner.publish_backup(&manifest)?;
         Ok(serde_json::to_value(manifest.summary())?)
@@ -270,7 +267,7 @@ impl Context<'_> {
                 manifest.tenant.generation,
                 Some(&checkpoint.join(&file.path)),
             )?;
-            self.inner.update(self.job.id, |j| j.processed_files += 1)?;
+            self.inner.progress(self.job.id, 0, 0)?;
         }
         for dir in [
             checkpoint.join("sst"),

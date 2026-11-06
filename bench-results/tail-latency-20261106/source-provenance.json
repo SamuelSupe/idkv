@@ -1,0 +1,21 @@
+{
+  "base_commit": "87d9a1a51ba825aa47e39fd90637b311e4580fe5",
+  "files": {
+    "src/backup/mod.rs": {
+      "before_sha256": "459378e9256c8a8372faca7d4e849301e65c0e327ecde6cd675cdbb2f64c3d5d",
+      "after_sha256": "938faa54cb79db92eda67704720d606c877ca258f9489aee88185a6dcf987e50"
+    },
+    "src/backup/jobs.rs": {
+      "before_sha256": "b74b4929c219893cc1e071df194ee0e3a2f82910a3790b5ecddb6da60f4004a0",
+      "after_sha256": "b761767b499d9107b6229fab4e207543e366ab78183a5f816e26761014713120"
+    },
+    "tests/backup.rs": {
+      "before_sha256": "47a16f6bdc2b8f44a7e1cb1bc728d29b182ab8699b2f423f6fff01e7f0956f3a",
+      "after_sha256": "6ef55dbcd59e67ae164db11e873e546d467fa0317920d74e1984921c750bebf7"
+    }
+  },
+  "qualification_script_sha256": "95b06478ffbec39d71c880daf3aaf488c23d8caedb90a570c28a6b39c609e786",
+  "before_binary_sha256": "46c963cc92d192bf2efd7752198ffb90dcf396989736b2f8eb1c5b78a10b72ca",
+  "after_binary_sha256": "87448b98e1003a226ee72e19c875b4903d0ee9b2e750178b2169bc13321c62ea",
+  "version": "0.10.1 working-tree optimization; not a release"
+}

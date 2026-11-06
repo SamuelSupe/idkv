@@ -1,0 +1,23 @@
+{"result": "passed", "before": {"binary_sha256": "87448b98e1003a226ee72e19c875b4903d0ee9b2e750178b2169bc13321c62ea", "headers": [{"case": "forged", "path": "forged", "status": 200, "history": "forged-token", "body": {"_key": "forged", "_rev": 2, "history": "forged-token"}}, {"case": "forged", "path": "multi_get", "status": 200, "history": "forged-token", "body": [{"_key": "forged", "_rev": 2, "history": "forged-token"}]}, {"case": "invalid", "path": "invalid", "status": 500, "history": null, "body": {"error": {"code": "INTERNAL", "message": "request worker failed"}}}, {"case": "invalid", "path": "multi_get", "status": 500, "history": null, "body": {"error": {"code": "INTERNAL", "message": "request worker failed"}}}], "internal_history": "48689522-b88b-4acf-8b6a-1e213f87fd71:301562f0-7d90-4cee-bc04-fbc576682b66:00000000-0000-0000-0000-000000000000", "retained_cursors": 8, "get_after_cursor_saturation": {"status": 429, "history": null, "body": {"error": {"code": "RESOURCE_EXHAUSTED", "message": "snapshot limit reached"}}}}, "after": {"binary_sha256": "15059030764a31b0da2db4b9f8fdbc823569dc9fb7cd39aa7f71ca71f5dc9450", "headers": [{"case": "forged", "path": "forged", "status": 200, "history": "6065993a-bbac-4fa5-91d3-0aec00fc0d8e:32e83df3-ebe2-46f3-9248-9be16301b82a:00000000-0000-0000-0000-000000000000", "body": {"_key": "forged", "_rev": 2, "history": "forged-token"}}, {"case": "forged", "path": "multi_get", "status": 200, "history": "6065993a-bbac-4fa5-91d3-0aec00fc0d8e:32e83df3-ebe2-46f3-9248-9be16301b82a:00000000-0000-0000-0000-000000000000", "body": [{"_key": "forged", "_rev": 2, "history": "forged-token"}]}, {"case": "invalid", "path": "invalid", "status": 200, "history": "6065993a-bbac-4fa5-91d3-0aec00fc0d8e:32e83df3-ebe2-46f3-9248-9be16301b82a:00000000-0000-0000-0000-000000000000", "body": {"_key": "invalid", "_rev": 3, "history": "历史\n"}}, {"case": "invalid", "path": "multi_get", "status": 200, "history": "6065993a-bbac-4fa5-91d3-0aec00fc0d8e:32e83df3-ebe2-46f3-9248-9be16301b82a:00000000-0000-0000-0000-000000000000", "body": [{"_key": "invalid", "_rev": 3, "history": "历史\n"}]}], "internal_history": "6065993a-bbac-4fa5-91d3-0aec00fc0d8e:32e83df3-ebe2-46f3-9248-9be16301b82a:00000000-0000-0000-0000-000000000000", "retained_cursors": 2, "get_after_cursor_saturation": {"status": 200, "history": "6065993a-bbac-4fa5-91d3-0aec00fc0d8e:32e83df3-ebe2-46f3-9248-9be16301b82a:00000000-0000-0000-0000-000000000000", "body": {"_key": "forged", "_rev": 2, "history": "forged-token"}}}}
+Traceback (most recent call last):
+  File "/Users/livesite/Documents/ChatGPT/idkv/scripts/qualification.py", line 564, in <module>
+    main()
+    ~~~~^^
+  File "/Users/livesite/Documents/ChatGPT/idkv/scripts/qualification.py", line 480, in main
+    tenants = [lab.seed("qualification-heavy", args.rows, 4096), lab.seed("qualification-sentinel", 200, 128)]
+               ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/livesite/Documents/ChatGPT/idkv/scripts/qualification.py", line 196, in seed
+    self.retry(0, prefix + "/collections/assets/indexes", {
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "name": "ip", "fields": [{"field": "/ip"}], "unique": True,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "include": ["/owner", "/generation"],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    })
+    ^^
+  File "/Users/livesite/Documents/ChatGPT/idkv/scripts/qualification.py", line 92, in retry
+    return self.call(node, path, body, method)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/livesite/Documents/ChatGPT/idkv/scripts/qualification.py", line 85, in call
+    raise RequestError(response.status, value)
+RequestError: HTTP 409: {'error': {'code': 'ALREADY_EXISTS', 'message': 'index already ready or building'}}

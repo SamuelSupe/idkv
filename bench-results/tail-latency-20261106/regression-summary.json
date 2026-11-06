@@ -1,0 +1,19 @@
+{
+  "command": "cargo test --locked --offline --features failpoints -- --test-threads=1",
+  "result": "passed",
+  "total": 111,
+  "suites": {
+    "unit": 20,
+    "backup": 8,
+    "dsl": 7,
+    "engine": 22,
+    "http": 4,
+    "identity": 5,
+    "middleware": 14,
+    "recovery": 9,
+    "reliability": 4,
+    "replication": 18
+  },
+  "expanded_regression": "interrupted_uploads_resume_and_only_complete_markers_are_visible: backup_progress crash; uploaded object reuse and complete verify after restart",
+  "note": "Summary of the completed test invocation; this file is not a raw test log."
+}

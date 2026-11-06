@@ -32,7 +32,7 @@ pub struct SnapshotInfo {
 }
 pub(crate) struct Exports {
     root: PathBuf,
-    current: Option<(SnapshotInfo, Instant, PathBuf)>,
+    current: Option<(SnapshotInfo, Instant, PathBuf, crate::storage::LogRetention)>,
 }
 impl Exports {
     pub fn open(store: &Store) -> Result<Self> {
@@ -69,9 +69,11 @@ impl Exports {
                 "checkpoint source changed",
             ));
         }
-        if let Some((info, created, _)) = &self.current {
+        if let Some((info, created, _, lease)) = &mut self.current {
             if created.elapsed() < Duration::from_secs(300) {
                 if info.tenant.id == tenant && info.epoch == epoch {
+                    *created = Instant::now();
+                    lease.renew(info.position);
                     return Ok(info.clone());
                 }
                 return Err(Error::new(
@@ -83,6 +85,9 @@ impl Exports {
         }
         let handle = store.tenant(tenant)?;
         let info = handle.info();
+        // Pin before checkpoint copying starts: writes and flushes continue while
+        // files are copied and must remain available after its captured position.
+        let lease = handle.engine().retain_replication_log();
         let id = Uuid::new_v4();
         let path = self.root.join(id.to_string());
         let result = (|| {
@@ -106,7 +111,8 @@ impl Exports {
         })();
         match result {
             Ok(info) => {
-                self.current = Some((info.clone(), Instant::now(), path));
+                lease.renew(info.position);
+                self.current = Some((info.clone(), Instant::now(), path, lease));
                 Ok(info)
             }
             Err(error) => {
@@ -116,10 +122,10 @@ impl Exports {
         }
     }
     pub fn chunk(&mut self, id: Uuid, file: usize, offset: u64) -> Result<String> {
-        let (info, created, path) = self
+        let (info, created, path, lease) = self
             .current
             .as_mut()
-            .filter(|(s, _, _)| s.id == id)
+            .filter(|(s, _, _, _)| s.id == id)
             .ok_or_else(|| Error::missing("replication snapshot"))?;
         if created.elapsed() > Duration::from_secs(300) {
             return Err(Error::new(
@@ -137,16 +143,27 @@ impl Exports {
         let mut bytes = vec![0; (item.size - offset).min(super::PAGE_BYTES as u64) as usize];
         File::open(path.join(&item.path))?.read_exact_at(&mut bytes, offset)?;
         *created = Instant::now();
+        lease.renew(info.position);
         Ok(STANDARD.encode(bytes))
     }
     pub fn release(&mut self, id: Uuid) -> Result<()> {
-        if self.current.as_ref().is_some_and(|(s, _, _)| s.id == id) {
+        if self.current.as_ref().is_some_and(|(s, _, _, _)| s.id == id) {
             self.clear()?;
         }
         Ok(())
     }
+    pub fn renew(&mut self, tenant: Uuid, epoch: Uuid) {
+        if let Some((info, touched, _, lease)) = &mut self.current
+            && info.tenant.id == tenant
+            && info.epoch == epoch
+            && touched.elapsed() < Duration::from_secs(300)
+        {
+            *touched = Instant::now();
+            lease.renew(info.position);
+        }
+    }
     fn clear(&mut self) -> Result<()> {
-        if let Some((_, _, path)) = self.current.take() {
+        if let Some((_, _, path, _lease)) = self.current.take() {
             fs::remove_dir_all(path)?;
             sync_dir(&self.root)?;
         }

@@ -583,18 +583,13 @@ async fn dispatch_async(
             ));
         }
         state.runtime.telemetry.record_read(&value);
-        let response_history = value
-            .get("history")
-            .and_then(Value::as_str)
-            .or_else(|| {
-                value
-                    .as_array()
-                    .and_then(|a| a.first())
-                    .and_then(|v| v.get("history"))
-                    .and_then(Value::as_str)
-            })
-            .map(str::to_owned)
-            .or_else(|| if read_only { before.clone() } else { None });
+        // JSON may be an arbitrary user document. History is manager-owned
+        // metadata and must never be inferred from the response payload.
+        let response_history = if read_only {
+            before.clone()
+        } else {
+            tenant.and_then(|id| store.tenant(id).ok().map(|t| t.history()))
+        };
         let encoded = body::encode(&store, tenant, value, read_only)?;
         drop(input_memory);
         let body = axum::body::Body::from(axum::body::Bytes::from_owner(encoded));
@@ -612,10 +607,10 @@ async fn dispatch_async(
                 .headers_mut()
                 .insert("x-tkv-read-controls", "1".parse().unwrap());
         }
-        if let Some(history) = response_history {
-            response
-                .headers_mut()
-                .insert("x-tkv-history", history.parse().unwrap());
+        if let Some(history) =
+            response_history.and_then(|history| axum::http::HeaderValue::from_str(&history).ok())
+        {
+            response.headers_mut().insert("x-tkv-history", history);
         }
         Ok::<_, Error>(response)
     })

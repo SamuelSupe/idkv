@@ -437,6 +437,22 @@ impl Inner {
         state.jobs.insert(id, job);
         Ok(())
     }
+
+    fn progress(&self, id: Uuid, uploaded_bytes: u64, reused_bytes: u64) -> Result<()> {
+        let mut state = self.state.lock();
+        let job = state
+            .jobs
+            .get_mut(&id)
+            .ok_or_else(|| Error::missing("backup job"))?;
+        job.processed_files += 1;
+        job.uploaded_bytes += uploaded_bytes;
+        job.reused_bytes += reused_bytes;
+        job.updated_ms = now_ms();
+        // Progress resets on resume; only phase transitions and terminal results
+        // need durability. Per-file fsyncs compete with unrelated tenants' WALs.
+        crate::storage::failpoint("backup_progress");
+        Ok(())
+    }
 }
 pub(crate) fn remote_error(e: opendal::Error) -> Error {
     let code = if e.kind() == opendal::ErrorKind::NotFound {

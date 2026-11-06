@@ -1,0 +1,268 @@
+{
+  "result": "passed",
+  "phases": [
+    {
+      "phase": "baseline",
+      "operations": {
+        "index_query_20": {
+          "calls": 5998,
+          "calls_per_second": 49.981,
+          "p50_ms": 0.39,
+          "p95_ms": 0.87,
+          "p99_ms": 1.419,
+          "errors": {}
+        },
+        "light_writer": {
+          "calls": 2377,
+          "calls_per_second": 19.807,
+          "p50_ms": 4.939,
+          "p95_ms": 10.172,
+          "p99_ms": 25.415,
+          "errors": {}
+        },
+        "get": {
+          "calls": 23950,
+          "calls_per_second": 199.57,
+          "p50_ms": 0.28,
+          "p95_ms": 0.689,
+          "p99_ms": 1.134,
+          "errors": {}
+        },
+        "heavy_writer": {
+          "calls": 4683,
+          "calls_per_second": 39.022,
+          "p50_ms": 6.513,
+          "p95_ms": 15.755,
+          "p99_ms": 37.63,
+          "errors": {}
+        },
+        "lookup_20": {
+          "calls": 11994,
+          "calls_per_second": 99.941,
+          "p50_ms": 0.376,
+          "p95_ms": 0.881,
+          "p99_ms": 1.395,
+          "errors": {}
+        }
+      },
+      "document_updates_per_second": 780.4399999999999,
+      "verified_backup_cycles": 0,
+      "overlap_intervals": 0,
+      "admission_retries": {},
+      "sample_seconds": 115.07678607900743,
+      "io_delta": {
+        "document_bytes": 383252450,
+        "wal_bytes": 421086412,
+        "flush_bytes": 379452570,
+        "compaction_write_bytes": 2009049892,
+        "compaction_read_bytes": 2371453992,
+        "write_lock_wait_ns": 4155354756,
+        "fsyncs": 4858
+      },
+      "write_amplification": 7.330909101820484,
+      "gc_reclaimed_delta": 0,
+      "peaks": {
+        "primary_engine_memory_bytes": 13226568,
+        "heavy_engine_memory_bytes": 11401671,
+        "heavy_disk_bytes": 388259569,
+        "l0_files": 13,
+        "expiration_lag_ms": 0,
+        "node_0_rss_bytes": 45010944,
+        "node_0_file_descriptors": 86,
+        "node_1_rss_bytes": 55574528,
+        "node_1_file_descriptors": 82,
+        "observed_replication_sequence_gap": 3
+      },
+      "maintenance_error_samples": 0
+    },
+    {
+      "phase": "combined",
+      "operations": {
+        "heavy_writer": {
+          "calls": 23261,
+          "calls_per_second": 38.768,
+          "p50_ms": 6.24,
+          "p95_ms": 15.317,
+          "p99_ms": 39.691,
+          "errors": {}
+        },
+        "lookup_20": {
+          "calls": 59887,
+          "calls_per_second": 99.809,
+          "p50_ms": 0.371,
+          "p95_ms": 0.711,
+          "p99_ms": 1.244,
+          "errors": {}
+        },
+        "light_writer": {
+          "calls": 11839,
+          "calls_per_second": 19.731,
+          "p50_ms": 4.646,
+          "p95_ms": 10.189,
+          "p99_ms": 35.313,
+          "errors": {}
+        },
+        "get": {
+          "calls": 119550,
+          "calls_per_second": 199.247,
+          "p50_ms": 0.276,
+          "p95_ms": 0.569,
+          "p99_ms": 1.026,
+          "errors": {}
+        },
+        "index_query_20": {
+          "calls": 29960,
+          "calls_per_second": 49.931,
+          "p50_ms": 0.388,
+          "p95_ms": 0.767,
+          "p99_ms": 1.352,
+          "errors": {}
+        }
+      },
+      "document_updates_per_second": 775.36,
+      "verified_backup_cycles": 18,
+      "overlap_intervals": 76,
+      "admission_retries": {
+        "BUSY": 1
+      },
+      "sample_seconds": 595.3831775129947,
+      "io_delta": {
+        "document_bytes": 1970770348,
+        "wal_bytes": 2185469757,
+        "flush_bytes": 1957976687,
+        "compaction_write_bytes": 9479683101,
+        "compaction_read_bytes": 11432695622,
+        "write_lock_wait_ns": 22918422617,
+        "fsyncs": 28840
+      },
+      "write_amplification": 6.912591088467098,
+      "gc_reclaimed_delta": 27645,
+      "peaks": {
+        "primary_engine_memory_bytes": 70975833,
+        "heavy_engine_memory_bytes": 64307018,
+        "heavy_disk_bytes": 406798699,
+        "l0_files": 35,
+        "expiration_lag_ms": 30050,
+        "node_0_rss_bytes": 97177600,
+        "node_0_file_descriptors": 250,
+        "node_1_rss_bytes": 65290240,
+        "node_1_file_descriptors": 209,
+        "observed_replication_sequence_gap": 4
+      },
+      "maintenance_error_samples": 0,
+      "p99_change_vs_baseline_percent": {
+        "heavy_writer": 5.477013021525368,
+        "lookup_20": -10.824372759856637,
+        "light_writer": 38.94550462325399,
+        "get": -9.523809523809511,
+        "index_query_20": -4.721634954193088
+      }
+    },
+    {
+      "phase": "recovery",
+      "operations": {
+        "heavy_writer": {
+          "calls": 4621,
+          "calls_per_second": 38.508,
+          "p50_ms": 6.248,
+          "p95_ms": 16.054,
+          "p99_ms": 56.725,
+          "errors": {}
+        },
+        "index_query_20": {
+          "calls": 6000,
+          "calls_per_second": 50.0,
+          "p50_ms": 0.385,
+          "p95_ms": 0.757,
+          "p99_ms": 1.28,
+          "errors": {}
+        },
+        "light_writer": {
+          "calls": 2371,
+          "calls_per_second": 19.758,
+          "p50_ms": 4.731,
+          "p95_ms": 13.421,
+          "p99_ms": 31.68,
+          "errors": {}
+        },
+        "get": {
+          "calls": 23986,
+          "calls_per_second": 199.873,
+          "p50_ms": 0.263,
+          "p95_ms": 0.566,
+          "p99_ms": 1.013,
+          "errors": {}
+        },
+        "lookup_20": {
+          "calls": 11988,
+          "calls_per_second": 99.893,
+          "p50_ms": 0.367,
+          "p95_ms": 0.716,
+          "p99_ms": 1.222,
+          "errors": {}
+        }
+      },
+      "document_updates_per_second": 770.1600000000001,
+      "verified_backup_cycles": 3,
+      "overlap_intervals": 16,
+      "admission_retries": {
+        "BUSY": 568
+      },
+      "sample_seconds": 115.1128818889847,
+      "io_delta": {
+        "document_bytes": 377876523,
+        "wal_bytes": 418376653,
+        "flush_bytes": 374484395,
+        "compaction_write_bytes": 1814528629,
+        "compaction_read_bytes": 2175897294,
+        "write_lock_wait_ns": 5384669572,
+        "fsyncs": 5487
+      },
+      "write_amplification": 6.900110269618417,
+      "gc_reclaimed_delta": 4245,
+      "peaks": {
+        "primary_engine_memory_bytes": 65498947,
+        "heavy_engine_memory_bytes": 62611464,
+        "heavy_disk_bytes": 386600494,
+        "l0_files": 20,
+        "expiration_lag_ms": 107,
+        "node_0_rss_bytes": 75796480,
+        "node_0_file_descriptors": 258,
+        "node_1_rss_bytes": 52703232,
+        "node_1_file_descriptors": 241,
+        "observed_replication_sequence_gap": 4
+      },
+      "maintenance_error_samples": 0,
+      "p99_change_vs_baseline_percent": {
+        "heavy_writer": 50.744087164496406,
+        "index_query_20": -9.79563072586328,
+        "light_writer": 24.650796773558923,
+        "get": -10.670194003527333,
+        "lookup_20": -12.401433691756282
+      }
+    }
+  ],
+  "restart_ms": 77.11013100924902,
+  "validated_current_documents": 20200,
+  "acknowledged_batch_requests": 49354,
+  "acknowledged_document_operations": 688087,
+  "restored_documents": 20000,
+  "gc_final": {
+    "expiration_lag_ms": 0,
+    "gc": {
+      "completed_rounds": 6862,
+      "history_sweep_active": false,
+      "knowledge_floor": 0,
+      "migration_complete": true,
+      "reclaimed_records": 33340,
+      "watermark_ms": 1793940672920
+    },
+    "next_expiration_ms": null,
+    "physical_reclamation": "as snapshots release and compaction completes",
+    "policy": {
+      "activated_seq": 4968,
+      "legacy_expires_at_ms": 1793939945252,
+      "retention_seconds": 20
+    }
+  }
+}

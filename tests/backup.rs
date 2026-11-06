@@ -357,7 +357,11 @@ fn storage_failure_and_quota_do_not_stop_local_commits() {
 #[cfg(feature = "failpoints")]
 #[test]
 fn interrupted_uploads_resume_and_only_complete_markers_are_visible() {
-    for point in ["backup_manifest_uploaded", "backup_completed"] {
+    for point in [
+        "backup_progress",
+        "backup_manifest_uploaded",
+        "backup_completed",
+    ] {
         let (dir, store, id, cfg) = setup();
         let config_path = dir.path().join("backup.json");
         fs::write(&config_path, serde_json::to_vec(&cfg).unwrap()).unwrap();
@@ -377,6 +381,12 @@ fn interrupted_uploads_resume_and_only_complete_markers_are_visible() {
         assert_eq!(jobs.len(), 1);
         let finished = wait(&service, &jobs[0]);
         assert_eq!(finished.state, JobState::Completed, "{finished:?}");
+        if point == "backup_progress" {
+            assert!(
+                finished.reused_bytes > 0,
+                "uploaded objects must be reused after losing progress counters"
+            );
+        }
         assert_eq!(list(&service, id).len(), 1);
         complete(
             &service,

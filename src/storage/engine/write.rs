@@ -4,21 +4,29 @@ impl Engine {
         self: &Arc<Self>,
         f: impl FnOnce(&mut Transaction<'_>) -> Result<T>,
     ) -> Result<T> {
-        self.transact_inner(f, false, false)
+        self.transact_inner(f, false, false, None)
             .map(|(result, _)| result)
     }
     pub fn transact_snapshot<T>(
         self: &Arc<Self>,
         f: impl FnOnce(&mut Transaction<'_>) -> Result<T>,
     ) -> Result<(T, Snapshot)> {
-        self.transact_inner(f, true, false)
+        self.transact_inner(f, true, false, None)
             .map(|(result, snapshot)| (result, snapshot.unwrap()))
     }
     pub(crate) fn transact_maintenance<T>(
         self: &Arc<Self>,
         f: impl FnOnce(&mut Transaction<'_>) -> Result<T>,
     ) -> Result<T> {
-        self.transact_inner(f, false, true)
+        self.transact_inner(f, false, true, None)
+            .map(|(result, _)| result)
+    }
+    pub(crate) fn transact_waiting<T>(
+        self: &Arc<Self>,
+        f: impl FnOnce(&mut Transaction<'_>) -> Result<T>,
+        check: &dyn Fn() -> Result<()>,
+    ) -> Result<T> {
+        self.transact_inner(f, false, false, Some(check))
             .map(|(result, _)| result)
     }
     fn transact_inner<T>(
@@ -26,27 +34,46 @@ impl Engine {
         f: impl FnOnce(&mut Transaction<'_>) -> Result<T>,
         pin: bool,
         maintenance: bool,
+        check: Option<&dyn Fn() -> Result<()>>,
     ) -> Result<(T, Option<Snapshot>)> {
         let authority = self.authority.read().clone();
-        let _permission = authority.as_ref().map(|a| a.write()).transpose()?;
-        if self.closed.load(Ordering::Acquire) {
-            return Err(Error::new("UNAVAILABLE", "tenant closed"));
-        }
-        let waiting = Instant::now();
-        let mut writer = self.writer.lock();
-        self.metrics
-            .write_lock_wait_ns
-            .fetch_add(waiting.elapsed().as_nanos() as u64, Ordering::Relaxed);
-        if let Some(error) = &writer.poison {
-            return Err(error.clone());
-        }
-        let view = self.view.read().clone();
-        if l0_pressure(&view.tables) >= self.options.l0_stop {
-            return Err(Error::limit("L0 backlog: retry after compaction"));
-        }
-        if view.mem.bytes.load(Ordering::Acquire) > self.options.memtable_bytes * 4 {
-            return Err(Error::limit("memtable backlog: retry after flush"));
-        }
+        let (_permission, mut writer, view) = loop {
+            if let Some(check) = check {
+                check()?;
+            }
+            let permission = authority.as_ref().map(|a| a.write()).transpose()?;
+            if self.closed.load(Ordering::Acquire) {
+                return Err(Error::new("UNAVAILABLE", "tenant closed"));
+            }
+            let waiting = Instant::now();
+            let writer = self.writer.lock();
+            self.metrics
+                .write_lock_wait_ns
+                .fetch_add(waiting.elapsed().as_nanos() as u64, Ordering::Relaxed);
+            if let Some(error) = &writer.poison {
+                return Err(error.clone());
+            }
+            let view = self.view.read().clone();
+            let backlog = if l0_pressure(&view.tables) >= self.options.l0_stop {
+                Some("L0 backlog: retry after compaction")
+            } else if view.mem.bytes.load(Ordering::Acquire) > self.options.memtable_bytes * 4 {
+                Some("memtable backlog: retry after flush")
+            } else {
+                None
+            };
+            let Some(backlog) = backlog else {
+                break (permission, writer, view);
+            };
+            if check.is_none() {
+                return Err(Error::limit(backlog));
+            }
+            // A durable index build already exists. Wait before invoking its
+            // FnOnce transaction instead of failing halfway through publication.
+            // Neither the writer lock nor the node fence is held while waiting.
+            drop(writer);
+            drop(permission);
+            self.wait_progress(self.seq(), Duration::from_millis(10));
+        };
         let seq = writer
             .staged
             .checked_add(1)
@@ -78,41 +105,58 @@ impl Engine {
             return Ok((result, snapshot));
         }
         let records: Vec<Record> = tx.changes.into_values().collect();
-        let memory = self
-            .budget
-            .reserve(records.iter().map(Record::size).sum::<usize>() * 2)
-            .or_else(|_| {
-                self.cache.clear();
-                self.budget
-                    .reserve(records.iter().map(Record::size).sum::<usize>() * 2)
-            })?;
+        let memory = self.cache.reserve(
+            &self.budget,
+            records.iter().map(Record::size).sum::<usize>() * 2,
+        )?;
         let bytes = wal::encode(seq, &records)?;
-        self.reserve_disk(bytes.len() as u64 + 4096, maintenance)?;
         let snapshot = if pin {
             Some(self.pin(view.clone(), seq, self.options.index_build_seconds)?)
         } else {
             None
         };
+        let reserved_disk = bytes.len() as u64 + 4096;
+        self.reserve_disk(reserved_disk, maintenance)?;
         let wal_bytes = bytes.len() as u64;
         if let Err(error) = writer.wal.append(bytes, &self.io, self.info.id) {
-            let error = Error::new("COMMIT_UNKNOWN", error.to_string());
-            writer.poison = Some(error.clone());
-            self.durable.notify_all();
+            if error.code == "COMMIT_UNKNOWN" {
+                writer.poison = Some(error.clone());
+                self.durable.notify_all();
+            } else {
+                self.disk.fetch_sub(reserved_disk, Ordering::AcqRel);
+            }
             return Err(error);
         }
         self.record_staged_commit(&mut writer, seq, &records, wal_bytes);
         view.mem.apply(records, memory);
         writer.staged = seq;
-        if !writer.syncing {
+        while self.seq() < seq && writer.poison.is_none() {
+            if writer.syncing {
+                self.durable.wait(&mut writer);
+                continue;
+            }
             writer.syncing = true;
             drop(writer);
             std::thread::sleep(Duration::from_millis(1));
             writer = self.writer.lock();
-            self.sync_writer(&mut writer)?;
-        } else {
-            while self.seq() < seq && writer.poison.is_none() {
-                self.durable.wait(&mut writer);
+            let through = writer.staged;
+            let catalog_through = writer.catalog_staged;
+            let file = writer.wal.file.clone();
+            drop(writer);
+            let synced = self.io.run(self.info.id, move || Ok(file.sync_all()?));
+            super::super::failpoint("wal_synced");
+            writer = self.writer.lock();
+            writer.syncing = false;
+            if let Err(error) = synced {
+                writer.poison = Some(Error::new("COMMIT_UNKNOWN", error.to_string()));
+            } else if writer.poison.is_none() {
+                // Appends may have arrived during fsync. Only the prefix captured
+                // before it began is acknowledged; later appends need another sync.
+                self.metrics.fsyncs.fetch_add(1, Ordering::Relaxed);
+                self.catalog_seq.store(catalog_through, Ordering::Release);
+                self.committed.store(through, Ordering::Release);
             }
+            self.durable.notify_all();
         }
         if let Some(error) = &writer.poison {
             return Err(error.clone());
@@ -146,7 +190,16 @@ impl Engine {
             writer.catalog_staged = seq;
         }
     }
-    pub(super) fn sync_writer(&self, writer: &mut Writer) -> Result<()> {
+    pub(super) fn sync_writer(
+        &self,
+        writer: &mut parking_lot::MutexGuard<'_, Writer>,
+    ) -> Result<()> {
+        while writer.syncing && writer.poison.is_none() {
+            self.durable.wait(writer);
+        }
+        if let Some(error) = &writer.poison {
+            return Err(error.clone());
+        }
         if let Err(error) = writer.wal.sync(&self.io, self.info.id) {
             let error = Error::new("COMMIT_UNKNOWN", error.to_string());
             writer.poison = Some(error.clone());
@@ -348,6 +401,157 @@ impl Transaction<'_> {
 mod tests {
     use super::*;
     #[test]
+    fn index_admission_waits_for_compaction_before_running_the_transaction_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::Store::open(
+            dir.path(),
+            Options {
+                l0_trigger: 2,
+                l0_stop: 4,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let tenant = store
+            .tenant(store.create_tenant("index-backpressure").unwrap().id)
+            .unwrap();
+        let engine = tenant.engine().clone();
+        drop(tenant);
+        drop(store);
+        // Retain the managed engine after stopping automatic maintenance so the
+        // backlog and its release are deterministic, without timing a large merge.
+        for n in 0..4 {
+            engine
+                .transact(|tx| tx.put(b"Zhot".to_vec(), vec![n; 128]))
+                .unwrap();
+            engine.flush().unwrap();
+        }
+        assert_eq!(engine.table_counts()[&0], 4);
+        let snapshot = engine.snapshot().unwrap();
+        let (checked_tx, checked_rx) = std::sync::mpsc::channel();
+        let (ran_tx, ran_rx) = std::sync::mpsc::channel();
+        let waiting = engine.clone();
+        let task = std::thread::spawn(move || {
+            waiting.transact_waiting(
+                |tx| {
+                    ran_tx.send(()).unwrap();
+                    tx.put(b"Znew".to_vec(), b"committed".to_vec())
+                },
+                &|| {
+                    let _ = checked_tx.send(());
+                    snapshot.check()
+                },
+            )
+        });
+        checked_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        let premature = ran_rx.recv_timeout(Duration::from_millis(30));
+        engine.compact(true).unwrap();
+        task.join().unwrap().unwrap();
+        assert!(premature.is_err());
+        ran_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(ran_rx.try_recv().is_err());
+        assert!(
+            engine
+                .snapshot()
+                .unwrap()
+                .get(b"Znew", &mut ReadStats::default())
+                .unwrap()
+                .is_some()
+        );
+    }
+    #[test]
+    fn saturated_read_queue_cannot_poison_another_tenants_writer() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::Store::open(
+            dir.path(),
+            Options {
+                io_workers: 1,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let t = store
+            .tenant(store.create_tenant("writer").unwrap().id)
+            .unwrap();
+        let engine = t.engine().clone();
+        let _maintenance = engine.maintenance.lock();
+        let reader = Uuid::new_v4();
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let blocker = engine
+            .io
+            .submit(reader, move || {
+                entered_tx.send(()).unwrap();
+                let _ = release_rx.recv();
+                Ok(())
+            })
+            .unwrap();
+        entered_rx.recv().unwrap();
+        let reads: Vec<_> = (0..4096)
+            .map(|_| engine.io.submit_read(reader, None, || Ok(())).unwrap())
+            .collect();
+        assert!(engine.io.submit_read(reader, None, || Ok(())).is_err());
+        let writer = engine.clone();
+        let task = std::thread::spawn(move || {
+            writer.transact(|tx| tx.put(b"confirmed".to_vec(), b"value".to_vec()))
+        });
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while engine.io.stats(engine.info.id)["queued_jobs"] == 0
+            && !task.is_finished()
+            && Instant::now() < deadline
+        {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        drop(reads);
+        release_tx.send(()).unwrap();
+        blocker.wait().unwrap();
+        task.join().unwrap().unwrap();
+        engine
+            .transact(|tx| tx.put(b"next".to_vec(), b"value".to_vec()))
+            .unwrap();
+        assert!(engine.writable());
+        assert!(
+            engine
+                .snapshot()
+                .unwrap()
+                .get(b"confirmed", &mut ReadStats::default())
+                .unwrap()
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn snapshot_admission_failure_does_not_leak_disk_reservations() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::Store::open(
+            dir.path(),
+            Options {
+                max_snapshots: 1,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let t = store
+            .tenant(store.create_tenant("snapshot-quota").unwrap().id)
+            .unwrap();
+        let engine = t.engine();
+        let _maintenance = engine.maintenance.lock();
+        let snapshot = engine.snapshot().unwrap();
+        let before = engine.disk_bytes();
+        for _ in 0..3 {
+            assert!(
+                engine
+                    .transact_snapshot(|tx| tx.put(b"key".to_vec(), vec![42; 1024]))
+                    .is_err()
+            );
+            assert_eq!(engine.disk_bytes(), before);
+        }
+        drop(snapshot);
+        engine
+            .transact_snapshot(|tx| tx.put(b"key".to_vec(), vec![42; 1024]))
+            .unwrap();
+    }
+    #[test]
     fn cleanup_can_use_reserved_disk_headroom_when_user_writes_are_backpressured() {
         let dir = tempfile::tempdir().unwrap();
         let store = crate::Store::open(dir.path(), Options::default()).unwrap();
@@ -460,13 +664,17 @@ mod tests {
                         },
                         pin,
                         false,
+                        None,
                     )
                     .unwrap();
                 completed.send(value.0.to_vec()).unwrap();
             });
             ready.recv_timeout(Duration::from_secs(5)).unwrap();
             let premature = result.recv_timeout(Duration::from_millis(30));
-            engine.sync_writer(&mut engine.writer.lock()).unwrap();
+            let mut writer = engine.writer.lock();
+            writer.syncing = false;
+            engine.sync_writer(&mut writer).unwrap();
+            drop(writer);
             assert!(
                 premature.is_err(),
                 "read-only transaction acknowledged staged data before fsync"

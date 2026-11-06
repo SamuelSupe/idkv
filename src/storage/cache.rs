@@ -16,6 +16,7 @@ pub enum Contents {
     Data(Vec<Record>),
     Index(Vec<BlockMeta>),
 }
+
 pub struct Frame {
     pub contents: Contents,
     pub referenced: AtomicBool,
@@ -31,6 +32,37 @@ pub struct Cache {
     capacity: usize,
 }
 impl Cache {
+    pub(crate) fn reserve(
+        &self,
+        budget: &crate::resources::Budget,
+        bytes: usize,
+    ) -> crate::Result<Reservation> {
+        let mut result = budget.reserve(bytes);
+        if result.is_ok() {
+            return result;
+        }
+        for shard in &self.shards {
+            let mut shard = shard.lock();
+            for _ in 0..shard.clock.len().saturating_mul(2) {
+                let Some(key) = shard.clock.pop_front() else {
+                    break;
+                };
+                let frame = shard.entries.get(&key).unwrap();
+                if frame.referenced.swap(false, Ordering::Relaxed) {
+                    shard.clock.push_back(key);
+                    continue;
+                }
+                let frame = shard.entries.remove(&key).unwrap();
+                shard.bytes -= frame.reservation.size();
+                drop(frame);
+                result = budget.reserve(bytes);
+                if result.is_ok() {
+                    return result;
+                }
+            }
+        }
+        result
+    }
     pub fn new(capacity: usize) -> Self {
         Self {
             shards: (0..8)
@@ -90,5 +122,36 @@ impl Cache {
             shard.clock.clear();
             shard.bytes = 0;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::resources::{Budget, Counter};
+
+    #[test]
+    fn a_failed_reservation_reclaims_only_the_cache_space_it_needs() {
+        let budget = Budget {
+            global: Counter::new(256),
+            tenant: Counter::new(256),
+        };
+        let cache = Cache::new(1024);
+        let keys: Vec<_> = (0..4).map(|n| CacheKey(Uuid::from_u128(n), 0)).collect();
+        for &key in &keys {
+            cache.insert(
+                key,
+                Arc::new(Frame {
+                    contents: Contents::Data(vec![]),
+                    referenced: AtomicBool::new(false),
+                    reservation: Arc::new(budget.reserve(64).unwrap()),
+                }),
+            );
+        }
+        let _memory = cache.reserve(&budget, 64).unwrap();
+        assert_eq!(
+            keys.iter().filter(|key| cache.get(key).is_some()).count(),
+            3
+        );
     }
 }

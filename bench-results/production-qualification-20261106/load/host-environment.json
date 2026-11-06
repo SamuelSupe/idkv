@@ -1,0 +1,14 @@
+{
+  "logical_cpus": 18,
+  "meminfo": [
+    "MemTotal:       32880040 kB",
+    "MemFree:        23970532 kB",
+    "MemAvailable:   25735648 kB",
+    "Buffers:             108 kB"
+  ],
+  "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)",
+  "cargo": "cargo 1.90.0 (840b83a10 2025-07-30)",
+  "gcc": "gcc (Ubuntu 15.2.0-4ubuntu4) 15.2.0",
+  "source_commit": "87d9a1a51ba825aa47e39fd90637b311e4580fe5",
+  "scope": "shared OrbStack VM; no CPU or total-RSS cgroup cap; OS file cache not cleared"
+}

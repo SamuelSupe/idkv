@@ -1285,12 +1285,31 @@ fn request_read_controls_preserve_limits_cursors_and_independent_requests() {
             .read_batch(&[operation(4)])
             .is_ok()
     );
-    // Historical physical entries consume the allowance even if one current row is returned.
+    // In-memory version chains seek to the snapshot rather than spending the
+    // scan allowance walking newer versions of the same logical key.
     t.create_collection("history").unwrap();
     for value in 0..12 {
         t.put("history", json!({"_key":"k","value":value}), None)
             .unwrap();
     }
+    let hot = t
+        .read_with(&ReadOptions {
+            max_scan: Some(1000),
+            ..Default::default()
+        })
+        .unwrap()
+        .query("history", Query::default())
+        .unwrap();
+    assert_eq!(hot.documents[0]["value"], 11);
+    for value in 0..12 {
+        t.put(
+            "history",
+            json!({"_key":format!("other-{value}"),"value":value}),
+            None,
+        )
+        .unwrap();
+    }
+    // A caller still cannot raise the configured scan cap over distinct rows.
     assert_eq!(
         t.read_with(&ReadOptions {
             max_scan: Some(1000),

@@ -1,0 +1,78 @@
+{
+  "scope": "First 300 seconds; excludes later build/test activity. UTC/monotonic conversion sampled at analysis time.",
+  "examples": [
+    {
+      "elapsed_s": 125.624768256,
+      "http_write_ms": 155.72669199900702,
+      "wal_fsync_ms": 150.916803,
+      "wal": "/var/tmp/idkv-tail-diagnostic-20261106/node-0/tenants/673ecaee-63b0-4566-96f3-4b97f3dd3c06/wal/e9ee8757-8478-4fdc-b68b-52b32be96338.wal"
+    },
+    {
+      "elapsed_s": 246.599778048,
+      "http_write_ms": 131.62701201508753,
+      "wal_fsync_ms": 127.035653,
+      "wal": "/var/tmp/idkv-tail-diagnostic-20261106/node-0/tenants/673ecaee-63b0-4566-96f3-4b97f3dd3c06/wal/444f302a-12f0-4ebe-a5de-e4242866dfdd.wal"
+    },
+    {
+      "elapsed_s": 286.268328192,
+      "http_write_ms": 117.93814497650601,
+      "wal_fsync_ms": 114.456042,
+      "wal": "/var/tmp/idkv-tail-diagnostic-20261106/node-0/tenants/673ecaee-63b0-4566-96f3-4b97f3dd3c06/wal/4451d16e-d048-468b-b7f2-69e38744cc3a.wal"
+    },
+    {
+      "elapsed_s": 188.7267072,
+      "http_write_ms": 117.54718501470052,
+      "wal_fsync_ms": 113.059118,
+      "wal": "/var/tmp/idkv-tail-diagnostic-20261106/node-0/tenants/673ecaee-63b0-4566-96f3-4b97f3dd3c06/wal/c322a012-79fa-4a76-8c1a-8d101cd03a1e.wal"
+    },
+    {
+      "elapsed_s": 242.398269184,
+      "http_write_ms": 103.15531399101019,
+      "wal_fsync_ms": 101.071345,
+      "wal": "/var/tmp/idkv-tail-diagnostic-20261106/node-0/tenants/673ecaee-63b0-4566-96f3-4b97f3dd3c06/wal/444f302a-12f0-4ebe-a5de-e4242866dfdd.wal"
+    },
+    {
+      "elapsed_s": 59.058110976,
+      "http_write_ms": 102.60808598832227,
+      "wal_fsync_ms": 100.681523,
+      "wal": "/var/tmp/idkv-tail-diagnostic-20261106/node-0/tenants/673ecaee-63b0-4566-96f3-4b97f3dd3c06/wal/676498f9-7f23-4dc0-b660-cd4f96b05872.wal"
+    },
+    {
+      "elapsed_s": 107.035778048,
+      "http_write_ms": 100.3406020172406,
+      "wal_fsync_ms": 95.067001,
+      "wal": "/var/tmp/idkv-tail-diagnostic-20261106/node-0/tenants/673ecaee-63b0-4566-96f3-4b97f3dd3c06/wal/28b33097-d2b8-4596-8e96-b1b23fce3a9c.wal"
+    },
+    {
+      "elapsed_s": 105.933779968,
+      "http_write_ms": 84.72396500292234,
+      "wal_fsync_ms": 82.87382,
+      "wal": "/var/tmp/idkv-tail-diagnostic-20261106/node-0/tenants/673ecaee-63b0-4566-96f3-4b97f3dd3c06/wal/28b33097-d2b8-4596-8e96-b1b23fce3a9c.wal"
+    },
+    {
+      "elapsed_s": 112.21778304,
+      "http_write_ms": 81.9135169731453,
+      "wal_fsync_ms": 76.675374,
+      "wal": "/var/tmp/idkv-tail-diagnostic-20261106/node-0/tenants/673ecaee-63b0-4566-96f3-4b97f3dd3c06/wal/28b33097-d2b8-4596-8e96-b1b23fce3a9c.wal"
+    },
+    {
+      "elapsed_s": 220.822215168,
+      "http_write_ms": 79.94131199666299,
+      "wal_fsync_ms": 75.132203,
+      "wal": "/var/tmp/idkv-tail-diagnostic-20261106/node-0/tenants/673ecaee-63b0-4566-96f3-4b97f3dd3c06/wal/498300fe-d904-4b61-b9d3-6aa0a92eac93.wal"
+    },
+    {
+      "elapsed_s": 96.541749248,
+      "http_write_ms": 79.224652989069,
+      "wal_fsync_ms": 77.769678,
+      "wal": "/var/tmp/idkv-tail-diagnostic-20261106/node-0/tenants/673ecaee-63b0-4566-96f3-4b97f3dd3c06/wal/c2bb4863-4f2f-4132-ba37-d846f99e1369.wal"
+    },
+    {
+      "elapsed_s": 297.59967104,
+      "http_write_ms": 74.40728199435398,
+      "wal_fsync_ms": 71.270307,
+      "wal": "/var/tmp/idkv-tail-diagnostic-20261106/node-0/tenants/673ecaee-63b0-4566-96f3-4b97f3dd3c06/wal/4451d16e-d048-468b-b7f2-69e38744cc3a.wal"
+    }
+  ],
+  "light_tenant": "673ecaee-63b0-4566-96f3-4b97f3dd3c06"
+}

@@ -112,6 +112,10 @@ impl Store {
         let handle = self.tenant(id)?;
         let seq = handle.engine().seq();
         slot.lock().last_seq = Some(seq);
+        drop(handle);
+        // Reading positions must not retain every cold engine (and its open
+        // descriptors) for a node-wide fence or status request.
+        let _ = self.close_tenant(id);
         Ok(seq)
     }
 
@@ -326,10 +330,10 @@ impl Store {
         path: &Path,
         info: TenantInfo,
     ) -> Result<()> {
-        let _permission = self.owner.inner.node.replica_write(source)?;
         if self.contains_tenant(info.id) {
-            self.restore_checkpoint_inner(info.id, path)
+            self.restore_checkpoint_inner(info.id, path, source)
         } else {
+            let _permission = self.owner.inner.node.replica_write(source)?;
             self.import_checkpoint_inner(path, info)
         }
     }
@@ -347,10 +351,16 @@ impl Store {
         if unique.len() != expected.len() {
             return Err(Error::corrupt("duplicate replicated tenant"));
         }
+        drop(_permission);
         let mut blocked = HashMap::new();
         for info in self.tenants() {
             if !unique.contains(&info.id)
-                && let Err(error) = self.delete_tenant_inner(info.id)
+                && let Err(error) = self
+                    .owner
+                    .inner
+                    .node
+                    .replica_write(source)
+                    .and_then(|permission| self.delete_tenant_inner(info.id, permission))
             {
                 blocked.insert(info.id, error);
             }
@@ -360,14 +370,15 @@ impl Store {
             if !self.contains_tenant(info.id) {
                 continue;
             }
-            if let Err(error) = self.update_replica_quota(info) {
+            if let Err(error) = self.update_replica_quota(source, info) {
                 blocked.insert(info.id, error);
             }
         }
         Ok(blocked)
     }
 
-    fn update_replica_quota(&self, info: &TenantInfo) -> Result<()> {
+    fn update_replica_quota(&self, source: &Source, info: &TenantInfo) -> Result<()> {
+        let _permission = self.owner.inner.node.replica_write(source)?;
         if info.memory_bytes < self.options().memtable_bytes * 4
             || info.memory_bytes > self.options().global_memory_bytes
             || info.disk_bytes < 1 << 20

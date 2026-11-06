@@ -1,0 +1,10 @@
+tenant-kv listening on 127.0.0.1:33539
+
+thread 'tokio-rt-worker' panicked at src/http.rs:618:58:
+called `Result::unwrap()` on an `Err` value: InvalidHeaderValue
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'tokio-rt-worker' panicked at src/http.rs:618:58:
+called `Result::unwrap()` on an `Err` value: InvalidHeaderValue
+tenant-kv draining requests
+tenant-kv shutdown complete

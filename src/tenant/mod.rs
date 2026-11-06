@@ -31,6 +31,7 @@ pub(crate) struct TenantCore {
     pub cursors: Mutex<HashMap<Uuid, crate::query::Cursor>>,
     pub plans: Mutex<HashMap<(Uuid, String), Arc<crate::query::LookupPlan>>>,
     pub builds: Mutex<HashSet<Uuid>>,
+    pub recovery_catalog: std::sync::atomic::AtomicU64,
 }
 #[derive(Clone)]
 pub struct TenantHandle {

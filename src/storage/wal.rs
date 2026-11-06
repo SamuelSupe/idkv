@@ -150,10 +150,12 @@ impl Wal {
                 std::process::abort();
             }
         }
-        io.run(tenant, move || {
+        io.submit(tenant, move || {
             file.write_all_at(&bytes, offset)?;
             Ok(())
-        })?;
+        })?
+        .wait()
+        .map_err(|error| Error::new("COMMIT_UNKNOWN", error.to_string()))?;
         self.len += len as u64;
         super::failpoint("wal_appended");
         Ok(())

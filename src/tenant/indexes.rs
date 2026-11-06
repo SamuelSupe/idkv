@@ -141,13 +141,14 @@ impl TenantHandle {
         crate::identity::unmanaged(collection)?;
         let _permit = self.core.gate.enter()?;
         self.touch();
-        self.build_index(collection, spec, false)
+        self.build_index(collection, spec, false, None)
     }
     fn build_index(
         &self,
         collection_name: &str,
         spec: IndexSpec,
         restart: bool,
+        stop: Option<&std::sync::atomic::AtomicBool>,
     ) -> Result<IndexDefinition> {
         validate_spec(&spec)?;
         let generation = Uuid::new_v4();
@@ -194,8 +195,11 @@ impl TenantHandle {
                     put(tx, key, &definition)?;
                     Ok((collection, definition))
                 })?;
-            let built = self.populate_index(&collection, &mut definition, &snapshot);
+            let built = self.populate_index(&collection, &mut definition, &snapshot, stop);
             if let Err(error) = built {
+                if stop.is_some_and(|stop| stop.load(std::sync::atomic::Ordering::Acquire)) {
+                    return Err(error);
+                }
                 let key = named(&prefix(b'J', collection.id), &definition.spec.name);
                 let _ = self.engine().transact(|tx| {
                     if let Some(value) = tx.get(&key)? {
@@ -228,7 +232,15 @@ impl TenantHandle {
         collection: &Collection,
         definition: &mut IndexDefinition,
         snapshot: &Snapshot,
+        stop: Option<&std::sync::atomic::AtomicBool>,
     ) -> Result<()> {
+        let check_stop = || {
+            if stop.is_some_and(|stop| stop.load(std::sync::atomic::Ordering::Acquire)) {
+                Err(Error::new("CANCELLED", "index recovery stopping"))
+            } else {
+                Ok(())
+            }
+        };
         let docs = prefix(b'D', collection.id);
         let mut stats = ReadStats::default();
         let mut scan = snapshot.scan(docs.clone(), codec::prefix_end(&docs), None, &mut stats)?;
@@ -236,6 +248,7 @@ impl TenantHandle {
         let mut entry_memory = Vec::new();
         let mut bytes = 0;
         while let Some(record) = scan.next(&mut stats)? {
+            check_stop()?;
             if let Some(entry) = index_entry(collection.id, definition, &record.value.unwrap())? {
                 entry_memory.push(
                     self.engine()
@@ -247,54 +260,61 @@ impl TenantHandle {
                 definition.entries += 1;
             }
             if entries.len() >= 256 || bytes >= 2 << 20 {
-                self.write_index_entries(collection, definition, &entries)?;
+                self.write_index_entries(collection, definition, &entries, snapshot, stop)?;
                 entries.clear();
                 entry_memory.clear();
                 bytes = 0;
             }
         }
         if !entries.is_empty() {
-            self.write_index_entries(collection, definition, &entries)?;
+            self.write_index_entries(collection, definition, &entries, snapshot, stop)?;
         }
         drop(entries);
         drop(entry_memory);
         let delta = delta_prefix(collection.id, definition.generation);
         let mut delta_after: Option<Vec<u8>> = None;
         loop {
+            check_stop()?;
             snapshot.check()?;
             if self.engine().needs_flush() {
                 self.engine().flush_if_needed()?;
             }
-            let finished = self.engine().transact(|tx| {
-                let key = named(&prefix(b'J', collection.id), &definition.spec.name);
-                ensure_build(tx, &key, definition.generation)?;
-                let pending = tx.prefix_first_after(&delta, delta_after.as_deref(), 64)?;
-                if pending.is_empty() {
-                    definition.state = IndexState::Ready;
-                    definition.ready_seq = tx.seq;
-                    put(tx, key, definition)?;
-                    return Ok(true);
-                }
-                let mut bytes = 0;
-                for (key, value) in pending {
-                    let _memory = self.engine().budget.reserve(value.len() * 2 + 512)?;
-                    let update = Delta::decode(&value)?;
-                    maintain_index(tx, definition, update.old.as_ref(), update.new.as_ref())?;
-                    if update.old.is_some() {
-                        definition.entries = definition.entries.saturating_sub(1);
+            let finished = self.engine().transact_waiting(
+                |tx| {
+                    let key = named(&prefix(b'J', collection.id), &definition.spec.name);
+                    ensure_build(tx, &key, definition.generation)?;
+                    let pending = tx.prefix_first_after(&delta, delta_after.as_deref(), 64)?;
+                    if pending.is_empty() {
+                        definition.state = IndexState::Ready;
+                        definition.ready_seq = tx.seq;
+                        put(tx, key, definition)?;
+                        return Ok(true);
                     }
-                    if update.new.is_some() {
-                        definition.entries += 1;
+                    let mut bytes = 0;
+                    for (key, value) in pending {
+                        let _memory = self.engine().budget.reserve(value.len() * 2 + 512)?;
+                        let update = Delta::decode(&value)?;
+                        maintain_index(tx, definition, update.old.as_ref(), update.new.as_ref())?;
+                        if update.old.is_some() {
+                            definition.entries = definition.entries.saturating_sub(1);
+                        }
+                        if update.new.is_some() {
+                            definition.entries += 1;
+                        }
+                        delta_after = Some(key.clone());
+                        tx.delete(key)?;
+                        bytes += value.len();
+                        if bytes >= 2 << 20 {
+                            break;
+                        }
                     }
-                    delta_after = Some(key.clone());
-                    tx.delete(key)?;
-                    bytes += value.len();
-                    if bytes >= 2 << 20 {
-                        break;
-                    }
-                }
-                Ok(false)
-            })?;
+                    Ok(false)
+                },
+                &|| {
+                    snapshot.check()?;
+                    check_stop()
+                },
+            )?;
             if finished {
                 crate::storage::failpoint("index_ready");
                 return Ok(());
@@ -306,23 +326,47 @@ impl TenantHandle {
         collection: &Collection,
         index: &IndexDefinition,
         entries: &[IndexEntry],
+        snapshot: &Snapshot,
+        stop: Option<&std::sync::atomic::AtomicBool>,
     ) -> Result<()> {
         if self.engine().needs_flush() {
             self.engine().flush_if_needed()?;
         }
-        self.engine().transact(|tx| {
-            ensure_build(
-                tx,
-                &named(&prefix(b'J', collection.id), &index.spec.name),
-                index.generation,
-            )?;
-            for entry in entries {
-                maintain_index(tx, index, None, Some(entry))?;
-            }
-            Ok(())
-        })
+        self.engine().transact_waiting(
+            |tx| {
+                ensure_build(
+                    tx,
+                    &named(&prefix(b'J', collection.id), &index.spec.name),
+                    index.generation,
+                )?;
+                for entry in entries {
+                    maintain_index(tx, index, None, Some(entry))?;
+                }
+                Ok(())
+            },
+            &|| {
+                snapshot.check()?;
+                if stop.is_some_and(|stop| stop.load(std::sync::atomic::Ordering::Acquire)) {
+                    Err(Error::new("CANCELLED", "index recovery stopping"))
+                } else {
+                    Ok(())
+                }
+            },
+        )
     }
-    pub(crate) fn restart_interrupted_build(&self) -> Result<()> {
+    pub(crate) fn restart_interrupted_build(
+        &self,
+        stop: &std::sync::atomic::AtomicBool,
+    ) -> Result<()> {
+        let catalog = self.engine().catalog_seq();
+        if self
+            .core
+            .recovery_catalog
+            .load(std::sync::atomic::Ordering::Acquire)
+            == catalog
+        {
+            return Ok(());
+        }
         let snapshot = self.engine().snapshot()?;
         for collection in list_snapshot::<Collection>(&snapshot, b"C", 1024)? {
             for index in
@@ -331,11 +375,15 @@ impl TenantHandle {
                 if index.state == IndexState::Building
                     && !self.core.builds.lock().contains(&index.generation)
                 {
-                    self.build_index(&collection.name, index.spec, true)?;
+                    drop(snapshot);
+                    self.build_index(&collection.name, index.spec, true, Some(stop))?;
                     return Ok(());
                 }
             }
         }
+        self.core
+            .recovery_catalog
+            .store(catalog, std::sync::atomic::Ordering::Release);
         Ok(())
     }
 }

@@ -205,8 +205,13 @@ impl Engine {
         // Keep each original TXN1 frame intact but submit one contiguous write to
         // the fair I/O queue. A torn page still recovers complete atomic batches.
         if let Err(error) = writer.wal.append(bytes, &self.io, self.info.id) {
-            writer.poison = Some(Error::new("COMMIT_UNKNOWN", error.to_string()));
-            return Err(writer.poison.clone().unwrap());
+            if error.code == "COMMIT_UNKNOWN" {
+                writer.poison = Some(error.clone());
+                self.durable.notify_all();
+            } else {
+                self.disk.fetch_sub(disk_bytes, Ordering::AcqRel);
+            }
+            return Err(error);
         }
         // The writer guard prevents memtable rotation for the entire page.
         // Snapshot readers need not contend on the view lock during insertion.

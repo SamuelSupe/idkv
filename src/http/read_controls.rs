@@ -81,12 +81,11 @@ pub(super) struct OperationContext<'a> {
 }
 impl OperationContext<'_> {
     pub(super) fn reader<'a>(&self, tenant: &'a TenantHandle) -> Result<TenantReader<'a>> {
-        Ok(TenantReader {
-            tenant,
-            budget: self
-                .budget
-                .cloned()
-                .ok_or_else(|| Error::new("INTERNAL", "missing read budget"))?,
-        })
+        let mut budget = self
+            .budget
+            .cloned()
+            .ok_or_else(|| Error::new("INTERNAL", "missing read budget"))?;
+        budget.principal = Some(self.principal.into());
+        Ok(TenantReader { tenant, budget })
     }
 }

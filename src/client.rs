@@ -278,10 +278,16 @@ impl Client {
         let tenant = self.tenant.to_string();
         let body = json!({"operations":operations,"write_options":options});
         let mut last = Error::new("READ_ONLY", "no writable primary");
+        let discovery_options = ClientReadOptions::default();
+        let runtime = reads::ReadRuntime {
+            options: &discovery_options,
+            deadline: std::time::Instant::now() + std::time::Duration::from_secs(8),
+        };
         for _ in 0..attempts {
-            let nodes = self.contexts().await?;
-            let mut primary = nodes.into_iter().filter(|(_, context)| context.writable);
-            let Some((node, _)) = primary.next() else {
+            let routes = self.read_routes(&runtime).await?;
+            let mut primary = routes.nodes.iter().filter(|(_, context)| context.writable);
+            let Some((index, _)) = primary.next() else {
+                self.routes.invalidate(&routes);
                 return Err(last);
             };
             if primary.next().is_some() {
@@ -292,7 +298,7 @@ impl Client {
             }
             match self
                 .request(
-                    node,
+                    &self.nodes[*index],
                     &["v1", "tenants", &tenant, "collections", collection, "batch"],
                     Some(body.clone()),
                     None,
@@ -310,6 +316,7 @@ impl Client {
                             | "RESPONSE_UNAVAILABLE"
                     ) =>
                 {
+                    self.routes.invalidate(&routes);
                     last = error
                 }
                 Err(error) => return Err(error),
