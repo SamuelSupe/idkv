@@ -48,6 +48,7 @@ impl Engine {
         maintenance: bool,
         check: Option<&dyn Fn() -> Result<()>>,
     ) -> Result<(T, Option<Snapshot>)> {
+        self.ensure_durable()?;
         let authority = self.authority.read().clone();
         let (_permission, mut writer, view) = loop {
             if let Some(check) = check {

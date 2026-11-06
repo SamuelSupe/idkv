@@ -1,0 +1,84 @@
+{
+  "result": "passed",
+  "binary_sha256": "e4f552a15bd1970759073be81c4be4f7811fe7a276786819b68eeed27832f3aa",
+  "options": {
+    "global_memory_bytes": 536870912,
+    "tenant_memory_bytes": 134217728,
+    "memtable_bytes": 16777216,
+    "cache_bytes": 8388608,
+    "target_sst_bytes": 4194304,
+    "level_base_bytes": 16777216,
+    "l0_stop": 24,
+    "tenant_disk_bytes": 4294967296
+  },
+  "full_disk": false,
+  "wal_bytes": 5611769,
+  "verified": {
+    "node": 0,
+    "tenant": "c9469827-86c4-403a-8aa3-d4446bd5cc5b",
+    "documents": 1200,
+    "sha256": "66ffdb825f34b47c7008cdf4e16958d6c8fe4c801290d0e686f8c91378d3a848",
+    "acknowledged_mismatches": 0
+  },
+  "samples": [
+    {
+      "close_ms": 3.52125900099054,
+      "open_ms": 1.5941709862090647,
+      "cycle_ms": 5.1154299871996045,
+      "inodes": [
+        51891328
+      ]
+    },
+    {
+      "close_ms": 0.38066800334490836,
+      "open_ms": 1.5070039953570813,
+      "cycle_ms": 1.8876719987019897,
+      "inodes": [
+        51891328
+      ]
+    },
+    {
+      "close_ms": 0.32029199064709246,
+      "open_ms": 1.514129020506516,
+      "cycle_ms": 1.8344210111536086,
+      "inodes": [
+        51891328
+      ]
+    },
+    {
+      "close_ms": 0.3786680172197521,
+      "open_ms": 1.440836989786476,
+      "cycle_ms": 1.819505007006228,
+      "inodes": [
+        51891328
+      ]
+    },
+    {
+      "close_ms": 0.3104180213995278,
+      "open_ms": 1.3886699744034559,
+      "cycle_ms": 1.6990879958029836,
+      "inodes": [
+        51891328
+      ]
+    },
+    {
+      "close_ms": 0.29679201543331146,
+      "open_ms": 1.3483369839377701,
+      "cycle_ms": 1.6451289993710816,
+      "inodes": [
+        51891328
+      ]
+    },
+    {
+      "close_ms": 0.2996260009240359,
+      "open_ms": 1.382670016027987,
+      "cycle_ms": 1.682296016952023,
+      "inodes": [
+        51891328
+      ]
+    }
+  ],
+  "open_median_ms": 1.440836989786476,
+  "close_median_ms": 0.32029199064709246,
+  "cycle_median_ms": 1.819505007006228
+}

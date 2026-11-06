@@ -71,6 +71,7 @@ impl crate::TenantHandle {
         }
         let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
         loop {
+            self.engine().check_draining()?;
             if self.engine().replication_epoch() != Some(epoch) {
                 return Err(crate::Error::new(
                     "REPLICATION_CONFLICT",

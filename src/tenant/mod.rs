@@ -27,6 +27,7 @@ pub(crate) struct TenantCore {
     pub dsl: crate::dsl::Cache,
     pub engine: Arc<Engine>,
     pub gate: RequestGate,
+    pub exported_cold: std::sync::atomic::AtomicBool,
     pub last_used: Mutex<Instant>,
     pub cursors: Mutex<HashMap<Uuid, crate::query::Cursor>>,
     pub plans: Mutex<HashMap<(Uuid, String), Arc<crate::query::LookupPlan>>>,

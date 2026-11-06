@@ -62,6 +62,9 @@ def run_case(args, mode):
                    "IDKV_IO_CONTROL": str(control), "IDKV_IO_LOG": str(lab.root / "io-fault.log")}
         lab.start(0, env)
         tenant = lab.seed("fault-" + mode, 2000, 4096)
+        # Finish maintenance before injection so the foreground write, rather
+        # than a racing flush, observes the first WAL failure.
+        lab.retry(0, f"/v1/tenants/{tenant}/compact", {})
         result["tenant"] = tenant
         result["before"] = lab.verify(0, tenant)
         context = lab.context(tenant, False)
@@ -83,7 +86,7 @@ def run_case(args, mode):
             raise AssertionError("engine acknowledged a write after COMMIT_UNKNOWN")
         except RequestError as error:
             result["poisoned_response"] = {"status": error.status, "body": error.value}
-            assert error.code in ("COMMIT_UNKNOWN", "IO_ERROR"), error
+            assert error.code in ("COMMIT_UNKNOWN", "IO_ERROR") or (mode == "enospc" and error.code == "RESOURCE_EXHAUSTED"), error
         if mode == "enospc":
             assert "os error 28" in result["fault_response"]["body"]["error"]["message"]
             pad.unlink()

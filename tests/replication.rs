@@ -517,6 +517,25 @@ async fn checkpoint_install_waits_for_readers_without_retransferring_and_other_t
         attempts + 1
     );
     assert!(pair.sb.status().unwrap().waiting_for_readers.contains(&id));
+    let deadline = Instant::now() + Duration::from_secs(12);
+    loop {
+        match pair.sb.sync_once().await {
+            Err(error) if error.code == "DEADLINE_EXCEEDED" => break,
+            result => assert!(result.is_ok(), "{result:?}"),
+        }
+        assert!(Instant::now() < deadline, "reader drain never timed out");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(pair.sb.status().unwrap().initialization_errors[&id].contains("reader drain"));
+    assert!(raced_reader.get("docs", "hot").unwrap().is_none());
+    assert!(
+        pair.b
+            .tenant(id)
+            .unwrap()
+            .get("docs", "hot")
+            .unwrap()
+            .is_none()
+    );
     drop(raced_reader);
     pair.catch_up(false).await;
     assert_eq!(

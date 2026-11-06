@@ -150,7 +150,7 @@ impl Service {
                     io,
                 )?;
                 check.verify()?;
-                if check.seq() != position {
+                if check.replication_position()? != position {
                     return Err(Error::corrupt("checkpoint position mismatch"));
                 }
                 drop(check);
@@ -170,7 +170,7 @@ impl Service {
                 let mut installation = store.begin_replica_install(source, tenant)?;
                 loop {
                     check_cancelled()?;
-                    installation.expire_readers();
+                    installation.expire_readers()?;
                     let installed = store
                         .check_replica_install(source, tenant)
                         .and_then(|_| store.install_replica(source, &path, tenant_info.clone()));
@@ -227,7 +227,7 @@ impl Service {
             if cancelled.load(Ordering::Acquire) {
                 return Err(Error::new("CANCELLED", "replica transfer stopped"));
             }
-            installation.expire_readers();
+            installation.expire_readers()?;
             match self.store().check_replica_install(source, tenant) {
                 Ok(()) => return Ok(()),
                 Err(error) if error.code == "BUSY" => {

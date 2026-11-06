@@ -1,5 +1,6 @@
 mod maintenance;
 mod read;
+mod recovery;
 mod replication;
 mod write;
 use super::{
@@ -253,6 +254,8 @@ pub struct Engine {
     metrics: Metrics,
     closed: AtomicBool,
     recovery_required: AtomicBool,
+    recovery_read_only: bool,
+    draining: AtomicBool,
     pub maintenance_error: Mutex<Option<String>>,
 }
 struct Lease {
@@ -337,13 +340,15 @@ impl Engine {
         let mem = MemTable::new();
         let mut staged = manifest.checkpoint;
         let mut active = None;
+        let synced = recovery::SyncedWals::load(&path, &info)?;
+        let mut recovery_read_only = false;
         for (i, wal_info) in manifest.wals.iter().enumerate() {
             let wal = Wal::recover(
                 &path.join("wal"),
                 wal_info,
-                info.id,
-                info.generation,
+                &info,
                 i + 1 == manifest.wals.len(),
+                synced.as_ref().and_then(|mark| mark.length(wal_info.id)),
                 &budget,
                 |seq, records| {
                     if seq <= manifest.checkpoint {
@@ -359,9 +364,12 @@ impl Engine {
                     Ok(())
                 },
             )?;
+            recovery_read_only |= wal.recovery_read_only;
             active = Some(wal);
         }
-        cleanup_unreferenced(&path, &manifest, &budget)?;
+        if !recovery_read_only {
+            cleanup_unreferenced(&path, &manifest, &budget)?;
+        }
         let disk = directory_size(&path)?;
         let versions = VersionSet::new(tables, &budget)?;
         Ok(Arc::new(Self {
@@ -400,6 +408,8 @@ impl Engine {
             metrics: Metrics::default(),
             closed: AtomicBool::new(false),
             recovery_required: AtomicBool::new(false),
+            recovery_read_only,
+            draining: AtomicBool::new(false),
             maintenance_error: Mutex::new(None),
         }))
     }
@@ -427,6 +437,7 @@ impl Engine {
         self.committed.load(Ordering::Acquire)
     }
     pub(crate) fn replication_position(&self) -> Result<u64> {
+        self.ensure_durable()?;
         let writer = self.writer.lock();
         if let Some(error) = &writer.poison {
             return Err(error.clone());
@@ -447,10 +458,24 @@ impl Engine {
     }
     pub(crate) fn wait_progress(&self, observed: u64, timeout: Duration) {
         let mut progress = self.progress.lock();
-        if self.seq() == observed {
+        if self.seq() == observed && !self.draining.load(Ordering::Acquire) {
             self.progress_wake
                 .wait_for(&mut progress, timeout.min(Duration::from_millis(10)));
         }
+    }
+    pub(crate) fn set_draining(&self, draining: bool) {
+        self.draining.store(draining, Ordering::Release);
+        let _progress = self.progress.lock();
+        self.progress_wake.notify_all();
+    }
+    pub(crate) fn check_draining(&self) -> Result<()> {
+        if self.draining.load(Ordering::Acquire) {
+            return Err(Error::new(
+                "BUSY",
+                "tenant is draining for checkpoint installation",
+            ));
+        }
+        Ok(())
     }
     fn notify_durable(&self) {
         self.durable.notify_all();
@@ -459,6 +484,7 @@ impl Engine {
     }
     pub fn writable(&self) -> bool {
         !self.closed.load(Ordering::Acquire)
+            && !self.recovery_read_only
             && self.writer.lock().poison.is_none()
             && self
                 .authority

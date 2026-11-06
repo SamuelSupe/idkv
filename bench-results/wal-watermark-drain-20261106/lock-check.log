@@ -1,0 +1,18 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.12s
+     Running tests/recovery.rs (/var/tmp/tkv-20261104-target/debug/deps/recovery-e0c3a44a7c47dba2)
+
+running 11 tests
+test incomplete_tail_is_discarded_but_complete_corruption_is_rejected ... ok
+test missing_or_foreign_sst_never_becomes_an_empty_database ... ok
+test uncertain_tenant_deletion_rejects_new_writes_until_restart ... ok
+test durable_retry_receipt_and_generated_document_recover_together ... ok
+test healthy_reopens_reuse_synced_wals_and_unsealed_recovery_rewrites_them ... ok
+test unpublished_flush_failure_is_retryable_without_checkpoint_gaps ... ok
+test recovery_rewrite_survives_abort_before_and_after_publication ... ok
+test restore_journal_survives_both_directory_switch_crashes ... ok
+test process_crashes_preserve_atomic_documents_and_indexes ... ok
+test temporal_corrections_history_heads_and_receipts_recover_atomically ... ok
+test retention_cleanup_recovers_before_and_after_atomic_progress_commits ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.07s
+

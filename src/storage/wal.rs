@@ -28,6 +28,7 @@ pub struct Wal {
     pub info: WalInfo,
     pub file: Arc<File>,
     pub len: u64,
+    pub recovery_read_only: bool,
 }
 impl Wal {
     pub fn create(dir: &Path, tenant: Uuid, generation: Uuid, start_seq: u64) -> Result<Self> {
@@ -52,14 +53,15 @@ impl Wal {
             info,
             file: Arc::new(file),
             len: HEADER as u64,
+            recovery_read_only: false,
         })
     }
     pub fn recover(
         dir: &Path,
         info: &WalInfo,
-        tenant: Uuid,
-        generation: Uuid,
+        tenant: &crate::TenantInfo,
         tail: bool,
+        synced_len: Option<u64>,
         budget: &crate::resources::Budget,
         mut apply: impl FnMut(u64, Vec<Record>) -> Result<()>,
     ) -> Result<Self> {
@@ -71,8 +73,8 @@ impl Wal {
         file.read_exact(&mut header)
             .map_err(|_| Error::corrupt("truncated WAL header"))?;
         if &header[..8] != b"TKWAL001"
-            || &header[8..24] != tenant.as_bytes()
-            || &header[24..40] != generation.as_bytes()
+            || &header[8..24] != tenant.id.as_bytes()
+            || &header[24..40] != tenant.generation.as_bytes()
             || &header[40..56] != info.id.as_bytes()
             || u64::from_le_bytes(header[56..].try_into().unwrap()) != info.start_seq
         {
@@ -121,17 +123,28 @@ impl Wal {
             apply(seq, records)?;
             offset += 24 + len as u64;
         }
-        // Retrying fsync on the old inode is insufficient after writeback errors:
-        // clean page-cache data can survive without being durable. Fresh writes
-        // to a new inode re-establish durability, including across process opens.
         let temp = dir.join(format!("{}.recover", info.id));
         if temp.exists() {
             reject_symlink(&temp)?;
             fs::remove_file(&temp)?;
         }
-        let rewritten = (|| -> Result<File> {
+        if synced_len == Some(length) && offset == length {
+            return Ok(Self {
+                info: info.clone(),
+                file: Arc::new(file),
+                len: offset,
+                recovery_read_only: false,
+            });
+        }
+        // Retrying fsync on the old inode is insufficient after writeback errors:
+        // clean page-cache data can survive without being durable. Fresh writes
+        // to a new inode re-establish durability, including across process opens.
+        let _memory = budget.reserve(64 << 10)?;
+        let rewritten = (|| -> std::io::Result<File> {
             use std::os::unix::fs::OpenOptionsExt;
-            let _memory = budget.reserve(64 << 10)?;
+            if fs2::available_space(dir)? < offset {
+                return Err(std::io::Error::from_raw_os_error(28));
+            }
             let mut output = OpenOptions::new()
                 .read(true)
                 .write(true)
@@ -152,19 +165,27 @@ impl Wal {
             output.sync_all()?;
             super::failpoint("wal_recovery_written");
             fs::rename(&temp, &path)?;
-            sync_dir(dir)?;
+            File::open(dir)?.sync_all()?;
             super::failpoint("wal_recovery_published");
             Ok(output)
         })();
         if rewritten.is_err() {
             let _ = fs::remove_file(&temp);
         }
-        file = rewritten?;
+        let recovery_read_only = match rewritten {
+            Ok(output) => {
+                file = output;
+                false
+            }
+            Err(error) if error.raw_os_error() == Some(28) => true,
+            Err(error) => return Err(error.into()),
+        };
         file.seek(SeekFrom::End(0))?;
         Ok(Self {
             info: info.clone(),
             file: Arc::new(file),
             len: offset,
+            recovery_read_only,
         })
     }
     pub fn append(&mut self, bytes: Vec<u8>, io: &IoScheduler, tenant: Uuid) -> Result<()> {

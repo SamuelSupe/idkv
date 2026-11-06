@@ -36,7 +36,7 @@ if let Some(cursor) = result.cursor { tenant.release_cursor(&cursor)?; }
 
 最低位置的一致性等待使用独立的进度互斥锁及条件变量，每至多 10 ms 检查共享截止时间、取消和历史；不再为等待进度取得 writer 锁，因此不会被从库持有 writer 锁的日志应用或 fsync 拖过自己的检查期限。其他已进入的系统 I/O 仍遵循上述协作式取消边界。
 
-从库检查点重建在下载前和安装时临时关闭该租户读入口，新 tenant() 和旧句柄上的新普通请求返回 BUSY。已有读取可收尾；宽限 1 秒后撤销引擎快照并清掉缓存游标，后续续页返回 CURSOR_EXPIRED，需要待闸门释放后重新查询。闸门不覆盖整个网络传输。嵌入式调用方仍需释放长期持有的 TenantHandle、Engine 或 Snapshot 引用，系统不会强制析构这些引用。
+从库检查点重建在下载前和安装时临时关闭该租户读入口，新 tenant() 和旧句柄上的新普通请求返回 BUSY。已有读取可收尾；宽限 1 秒后撤销引擎快照并清掉缓存游标，后续续页返回 CURSOR_EXPIRED，需要待闸门释放后重新查询。排空等待最多 10 秒，超时释放闸门恢复旧数据读取；被撤销的游标仍需重新查询。关闭闸门时会唤醒 wait_context/wait_replication，使其返回 BUSY。闸门不覆盖整个网络传输，也不能中断已经进入的 OS I/O 或原子发布。嵌入式调用方仍需释放长期持有的 TenantHandle、Engine 或 Snapshot 引用，系统不会强制析构这些引用。
 
 完整可运行示例：[examples/read_controls.rs](../examples/read_controls.rs)。
 

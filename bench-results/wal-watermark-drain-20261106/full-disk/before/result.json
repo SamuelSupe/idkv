@@ -1,0 +1,24 @@
+{
+  "result": "passed",
+  "binary_sha256": "17256d1438dd82a06ca97540a752ed2c497b99bb1eebe2ebe88b85f43890fb20",
+  "options": {
+    "global_memory_bytes": 536870912,
+    "tenant_memory_bytes": 134217728,
+    "memtable_bytes": 16777216,
+    "cache_bytes": 8388608,
+    "target_sst_bytes": 4194304,
+    "level_base_bytes": 16777216,
+    "l0_stop": 24,
+    "tenant_disk_bytes": 4294967296
+  },
+  "full_disk": true,
+  "wal_bytes": 5611769,
+  "disk_full": {
+    "available_before": 217698304,
+    "available_after": 0,
+    "filler_bytes": 217694208,
+    "mount": "TARGET                                              SOURCE     FSTYPE OPTIONS\n/var/tmp/idkv-watermark-20261106-full-before/volume /dev/loop0 ext4   rw,relatime\n"
+  },
+  "full_cold_open": "IO_ERROR",
+  "full_restart": "IO_ERROR"
+}

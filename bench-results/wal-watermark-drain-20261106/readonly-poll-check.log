@@ -1,0 +1,18 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.08s
+     Running unittests src/lib.rs (/var/tmp/tkv-20261104-target/debug/deps/tenant_kv-7def2c613512144d)
+
+running 4 tests
+test tenant::manager::tests::a_temporary_position_reader_does_not_close_a_reused_or_reopened_engine ... ok
+test tenant::manager::tests::deleted_tenant_history_does_not_consume_live_tenant_capacity ... ok
+test tenant::manager::tests::io_open_failures_are_cached_briefly_and_recover_without_manual_close ... ok
+test tenant::manager::tests::cold_export_reuses_the_open_engine_until_its_log_pages_catch_up ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 37 filtered out; finished in 1.75s
+
+    Checking tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.35s
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `release` profile [optimized] target(s) in 44.36s
+e4f552a15bd1970759073be81c4be4f7811fe7a276786819b68eeed27832f3aa  /var/tmp/tkv-20261104-target/release/tenant-kv
+19160efc5a0d6e4da535fd3c275fbefbf8a243af1f236bf1c25a557c3e40a160  /var/tmp/tkv-20261104-target/release/tenant-kv-restore

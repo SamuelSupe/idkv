@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/Users/livesite/Documents/ChatGPT/idkv/bench-results/wal-watermark-drain-20261106/wal-open.py", line 35, in <module>
+    lab.start(0)
+    ~~~~~~~~~^^^
+  File "/Users/livesite/Documents/ChatGPT/idkv/scripts/qualification.py", line 117, in start
+    assert self.processes[node].poll() is None, f"node {node} exited"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: node 0 exited

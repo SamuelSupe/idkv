@@ -138,12 +138,15 @@ impl BackupService {
             .collect();
         let fingerprint = hash(&serde_json::to_vec(&(config.service.clone(), identity))?);
         let target = jobs_path.join("TARGET");
-        if target.exists() && read_json::<String>(&target)? != fingerprint {
-            return Err(Error::invalid(
-                "backup target differs from persisted jobs; use a separate Store or archive the old backup job state first",
-            ));
+        if target.exists() {
+            if read_json::<String>(&target)? != fingerprint {
+                return Err(Error::invalid(
+                    "backup target differs from persisted jobs; use a separate Store or archive the old backup job state first",
+                ));
+            }
+        } else {
+            atomic_json(&target, &fingerprint)?;
         }
-        atomic_json(&target, &fingerprint)?;
         let runtime = NetworkRuntime(Some(
             tokio::runtime::Builder::new_multi_thread()
                 .worker_threads(2)

@@ -193,7 +193,7 @@ impl Store {
             inner.io.clone(),
         )?;
         check.verify()?;
-        let restored_seq = check.seq();
+        let restored_seq = check.replication_position()?;
         drop(check);
         // Copy and verification run without the tenant lifecycle lock. Only publication
         // needs a stopped tenant; a failed attempt leaves the serving database intact.
@@ -235,6 +235,7 @@ impl Store {
         }
         if result.is_ok() {
             slot.last_seq = Some(restored_seq);
+            slot.installing = None;
         }
         drop(registry);
         drop(slot);

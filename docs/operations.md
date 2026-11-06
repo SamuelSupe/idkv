@@ -87,7 +87,11 @@ v0.5.2 在发布删除 journal 前先关闭内存中的写入入口。发布或�
 
 后台并行引起的轻租户写尾延迟定位、备份进度同步优化及相同负载前后比较，见[尾延迟优化记录](tail-latency-optimization.md)。备份实时进度通过服务 API 查看，阶段和终态持久化；逐文件计数不会单独触发文件/目录同步。
 
-COMMIT_UNKNOWN 后不能继续写入该引擎。新请求不再复用它，后台在旧引用释放后自动关闭；同一进程后续打开及进程重启均会校验 WAL，再将有效前缀普通写入新 inode、fsync、原子替换并同步目录，之后才发布恢复位置。结果未知的完整帧可以保留，不盲目截断；恢复失败继续隔离。仍需核对原操作 ID 和条件版本。打开 IO_ERROR 缓存 1 秒以免频繁完整回放，close 可提前清除。WAL 完整记录 CRC 错误、SST 校验失败或文件缺失需要从有效备份恢复，不能当作未命中。 恢复重建临时需要最多约一个未刷盘 WAL 文件大小的额外空间，空间不足则失败，不回退到仅 fsync 旧文件。该错误也阻止生成计划切换凭据；关闭时不缓存旧序号，后续重新打开并恢复后才能重新判断完整位置。已刷盘保留 WAL 被外部删除时，后续 flush 会移除该历史引用、使旧导出租约失效并继续维护；落后副本通过 LOG_GONE 重建。活跃 WAL、SST 缺失或完整帧 CRC 错误仍拒绝恢复，不把业务数据损坏当作可忽略历史。
+COMMIT_UNKNOWN 后不能继续写入该引擎。新请求不再复用它，旧引用释放后自动关闭；后续打开先校验全部 WAL。健康关闭会在 WAL 同步成功后持久保存 WAL-SYNC 水位，按租户、generation、WAL UUID 和长度匹配；已匹配且未变化的 WAL 不再重写或再次同步，水位也不重复发布。水位缺失、损坏或长度改变时，仍以普通写入重建新 inode、同步文件、原子替换并同步目录，之后才能发布恢复位置，不能只重试旧 inode 的 fsync。未知结果可能在恢复后可见，仍须核对原操作 ID 和条件版本。
+
+重建临时需要最多约一个未刷盘 WAL 文件大小的额外空间。仅 ENOSPC/可用空间不足会降为只读实例，保留已校验数据的读取；context.writable 为 false，租户状态 stats.recovery_read_only 为 true。写入、后台修改、日志导出、复制位置确认和计划切换返回 RESOURCE_EXHAUSTED；只读回放位置不能当作升主依据。该实例继续复用，不每秒重复复制。释放空间后，释放句柄并 close，再打开以完成恢复并重新允许写入。注册表无变化的 Store 启动不再重写 control/tenants.json；新建、格式迁移或待完成的生命周期发布仍需要可写空间。其他打开 IO_ERROR 缓存 1 秒，之后自动重试，close 可提前清除。
+
+WAL 完整帧 CRC 错误、SST 校验失败或活跃文件缺失仍需要有效备份恢复，不能当作未命中或降级忽略。只有健康关闭的引擎可缓存复制位置。已刷盘保留 WAL 被外部删除时，flush 移除历史引用、使旧导出租约失效并继续维护；落后副本通过 LOG_GONE 重建。
 
 状态接口包含 commit_seq、memory_bytes、disk_bytes、各层文件数、活动快照数、维护错误，以及进程内累计的 document_bytes、wal_bytes、flush_bytes、compaction_read_bytes、compaction_write_bytes、commits、WAL fsyncs、write_lock_wait_ns，以及 scheduler.completed_jobs、cancelled_jobs、queue_wait_ns、queued_jobs。调度计数在 Store 生命周期内按租户累计；其余引擎指标在重开后清零。读取统计的 blocks_read 表示引擎文件读取，不保证绕过操作系统页缓存；decompressed_bytes 是解压后的字节数。写放大可用 `(wal_bytes + flush_bytes + compaction_write_bytes) / document_bytes` 估算，必须注明区间、索引数和合并是否追平。
 

@@ -1,0 +1,27 @@
+{
+  "result": "passed",
+  "binary_sha256": "e4f552a15bd1970759073be81c4be4f7811fe7a276786819b68eeed27832f3aa",
+  "fault": "COMMIT_UNKNOWN",
+  "persistent_fault_fence": "IO_ERROR",
+  "new_primary_ack_rev": 9,
+  "nodes": [
+    {
+      "node": 0,
+      "documents": 109,
+      "sha256": "bee554eba27bcd8066749a5ac0fd4bd9406784584efe762f2698ade33068b4df",
+      "acknowledged_mismatches": 0,
+      "uncertain_documents": 8,
+      "applied_seq": 9
+    },
+    {
+      "node": 1,
+      "documents": 109,
+      "sha256": "bee554eba27bcd8066749a5ac0fd4bd9406784584efe762f2698ade33068b4df",
+      "acknowledged_mismatches": 0,
+      "uncertain_documents": 8,
+      "applied_seq": 9
+    }
+  ],
+  "same_reported_position": true,
+  "same_data": true
+}

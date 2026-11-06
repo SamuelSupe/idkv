@@ -4,6 +4,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 impl Engine {
     pub(crate) fn log_page(&self, request: &LogRequest) -> Result<LogPage> {
+        self.ensure_durable()?;
         if request.tenant != self.info.id || request.generation != self.info.generation {
             return Err(Error::new(
                 "REPLICATION_CONFLICT",
@@ -152,6 +153,7 @@ impl Engine {
         let _decode_memory = self
             .budget
             .reserve(encoded_bytes.saturating_mul(2) + 4096)?;
+        self.ensure_durable()?;
         let mut writer = self.writer.lock();
         if let Some(error) = &writer.poison {
             return Err(error.clone());

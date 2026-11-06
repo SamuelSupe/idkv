@@ -1,0 +1,45 @@
+{
+  "result": "passed",
+  "tests_passed": 146,
+  "acknowledged_batches": 10966,
+  "acknowledged_document_operations": 167080,
+  "acknowledged_mismatches": 0,
+  "phases": [
+    {
+      "phase": "baseline",
+      "light_p99_ms": 11.788,
+      "heavy_p99_ms": 16.892,
+      "verified_backups": 0,
+      "overlap_intervals": 0
+    },
+    {
+      "phase": "combined",
+      "light_p99_ms": 18.897,
+      "heavy_p99_ms": 22.907,
+      "verified_backups": 3,
+      "overlap_intervals": 13
+    },
+    {
+      "phase": "recovery",
+      "light_p99_ms": 29.102,
+      "heavy_p99_ms": 34.708,
+      "verified_backups": 0,
+      "overlap_intervals": 5
+    }
+  ],
+  "fault_cases": 3,
+  "fault_confirmed_documents_preserved": 6000,
+  "source_files_verified": 105,
+  "binary_sha256": "e4f552a15bd1970759073be81c4be4f7811fe7a276786819b68eeed27832f3aa",
+  "healthy_open_comparison": {
+    "before_ms": 5.973466002615169,
+    "after_ms": 1.440836989786476,
+    "ratio": 4.145830544994825,
+    "before_cycle_ms": 6.494344997918233,
+    "after_cycle_ms": 1.819505007006228
+  },
+  "full_disk_reads_verified": true,
+  "validation_observations": [
+    "One parallel recovery test observed Store lock BUSY; final serial suite and parallel recovery recheck passed; root cause unresolved."
+  ]
+}

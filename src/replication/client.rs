@@ -37,6 +37,8 @@ pub struct Status {
     pub initializing: Vec<Uuid>,
     #[serde(default)]
     pub waiting_for_readers: Vec<Uuid>,
+    #[serde(default)]
+    pub initialization_errors: HashMap<Uuid, String>,
 }
 #[derive(Clone, Serialize, Deserialize)]
 pub struct UnavailableTenant {
@@ -59,6 +61,7 @@ struct Progress {
     reinitializations: u64,
     initialization_backoff: HashMap<Uuid, Duration>,
     waiting_for_readers: HashSet<Uuid>,
+    initialization_errors: HashMap<Uuid, String>,
 }
 struct Inner {
     store: Store,
@@ -177,6 +180,7 @@ impl Service {
                     reinitializations: 0,
                     initialization_backoff: HashMap::new(),
                     waiting_for_readers: HashSet::new(),
+                    initialization_errors: HashMap::new(),
                 }),
             }),
         })
@@ -222,6 +226,7 @@ impl Service {
             reinitializations: progress.reinitializations,
             initializing: progress.initializing.keys().copied().collect(),
             waiting_for_readers: progress.waiting_for_readers.iter().copied().collect(),
+            initialization_errors: progress.initialization_errors.clone(),
         })
     }
     pub fn start(&self) -> tokio::task::JoinHandle<()> {
@@ -388,6 +393,9 @@ impl Service {
             progress.confirmed.retain(|id, _| active.contains(id));
             progress.retry_at.retain(|id, _| active.contains(id));
             progress
+                .initialization_errors
+                .retain(|id, _| active.contains(id));
+            progress
                 .initialization_backoff
                 .retain(|id, _| active.contains(id));
         }
@@ -420,6 +428,7 @@ impl Service {
             progress.waiting_for_readers.remove(&id);
             if let Err(error) = result {
                 progress.initialization_failures += 1;
+                progress.initialization_errors.insert(id, error.to_string());
                 let delay = *progress
                     .initialization_backoff
                     .entry(id)
@@ -430,6 +439,7 @@ impl Service {
                     .insert(id, (delay * 2).min(Duration::from_secs(30)));
                 failure.get_or_insert(error);
             } else {
+                progress.initialization_errors.remove(&id);
                 progress.initialization_backoff.remove(&id);
                 progress.retry_at.remove(&id);
             }
@@ -732,6 +742,7 @@ impl Service {
             progress.cursors.clear();
             progress.confirmed.clear();
             progress.initialization_backoff.clear();
+            progress.initialization_errors.clear();
             progress.retry_at.clear();
         }
         Ok(state)
@@ -799,6 +810,7 @@ impl Service {
             progress.cursors.clear();
             progress.confirmed.clear();
             progress.initialization_backoff.clear();
+            progress.initialization_errors.clear();
             progress.retry_at.clear();
         }
         Ok(state)

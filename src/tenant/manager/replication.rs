@@ -355,9 +355,14 @@ impl Store {
         }
         let (handle, opened) = self.tenant_with_open_marker(request.tenant)?;
         let runtime = handle.engine().runtime_id;
+        if opened.is_some() {
+            handle.core.exported_cold.store(true, Ordering::Release);
+        }
+        let close = handle.core.exported_cold.load(Ordering::Acquire);
+        let touched = *handle.core.last_used.lock();
         let page = handle.engine().log_page(request);
         drop(handle);
-        if let Some(touched) = opened
+        if close
             && page
                 .as_ref()
                 .map_or(true, |page| page.through == page.source_position)
@@ -517,6 +522,22 @@ mod tests {
         replica
             .install_replica(&source, &checkpoint, info.clone())
             .unwrap();
+        let installation = replica.begin_replica_install(&source, info.id).unwrap();
+        primary
+            .tenant(info.id)
+            .unwrap()
+            .engine()
+            .checkpoint(&checkpoint)
+            .unwrap();
+        replica
+            .install_replica(&source, &checkpoint, info.clone())
+            .unwrap();
+        assert!(replica.slot(info.id).lock().installing.is_none());
+        assert!(
+            replica.tenant(info.id).is_ok(),
+            "position was published before reads reopened"
+        );
+        drop(installation);
         let old_disk = info.disk_bytes;
         info.disk_bytes *= 2;
         replica.slot(info.id).lock().restoring = true;

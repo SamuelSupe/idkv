@@ -50,6 +50,7 @@ impl Engine {
         self.flush_inner(true)
     }
     fn flush_inner(&self, only_if_needed: bool) -> Result<()> {
+        self.ensure_durable()?;
         let _maintenance = if only_if_needed {
             let Some(guard) = self.maintenance.try_lock() else {
                 // Foreground backpressure is preferable to waiting for an entire
@@ -274,6 +275,7 @@ impl Engine {
         result
     }
     pub fn compact(&self, force: bool) -> Result<()> {
+        self.ensure_durable()?;
         let _maintenance = if force {
             self.maintenance.lock()
         } else {

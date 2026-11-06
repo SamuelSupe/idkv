@@ -1,0 +1,2 @@
+write EIO /var/tmp/idkv-watermark-20261106-faults-final/wal-write-eio/node-0/tenants/6cd3ad93-d7df-4773-9eee-538ff95f027a/wal/75d802de-7a22-412e-b230-cd9c5457117b.wal
+write EIO /var/tmp/idkv-watermark-20261106-faults-final/wal-write-eio/node-0/tenants/6cd3ad93-d7df-4773-9eee-538ff95f027a/wal/75d802de-7a22-412e-b230-cd9c5457117b.recover

@@ -72,6 +72,7 @@ impl TenantHandle {
         }
         let deadline = std::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
         loop {
+            self.engine().check_draining()?;
             if self.history() != history {
                 return Err(Error::new(
                     "HISTORY_CONFLICT",

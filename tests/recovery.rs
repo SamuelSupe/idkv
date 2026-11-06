@@ -33,7 +33,7 @@ fn seed(root: &std::path::Path) -> uuid::Uuid {
     id
 }
 #[test]
-fn recovery_rewrites_valid_wal_to_a_fresh_inode() {
+fn healthy_reopens_reuse_synced_wals_and_unsealed_recovery_rewrites_them() {
     use std::os::unix::fs::MetadataExt;
     let dir = tempfile::tempdir().unwrap();
     let id = seed(dir.path());
@@ -52,6 +52,20 @@ fn recovery_rewrites_valid_wal_to_a_fresh_inode() {
         .unwrap()
         .path();
     let old_inode = wal.metadata().unwrap().ino();
+    for _ in 0..2 {
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        assert_eq!(
+            store
+                .tenant(id)
+                .unwrap()
+                .get("assets", "tail")
+                .unwrap()
+                .unwrap(),
+            expected
+        );
+        assert_eq!(wal.metadata().unwrap().ino(), old_inode);
+    }
+    fs::remove_file(wal.parent().unwrap().parent().unwrap().join("WAL-SYNC")).unwrap();
     let unfinished = wal.with_extension("recover");
     fs::write(&unfinished, b"interrupted recovery output").unwrap();
     let store = Store::open(dir.path(), Options::default()).unwrap();
@@ -82,6 +96,13 @@ fn recovery_rewrite_survives_abort_before_and_after_publication() {
                 .unwrap();
             tenant.get("assets", "tail").unwrap().unwrap()
         };
+        fs::remove_file(
+            dir.path()
+                .join("tenants")
+                .join(id.to_string())
+                .join("WAL-SYNC"),
+        )
+        .unwrap();
         let status = std::process::Command::new(env!("CARGO_BIN_EXE_crash-probe"))
             .arg(dir.path())
             .arg(id.to_string())

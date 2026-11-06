@@ -152,10 +152,13 @@ impl Store {
         if !matches!(registry.version, 1..=4) {
             return Err(Error::corrupt("registry version"));
         }
+        let previous = serde_json::to_vec(&registry)?;
         registry.replication_enabled |= registry.version == 2;
         registry.version = 4;
         recover_lifecycle(&root, &mut registry)?;
-        atomic_json(&registry_path, &registry)?;
+        if serde_json::to_vec(&registry)? != previous {
+            atomic_json(&registry_path, &registry)?;
+        }
         clean_lifecycle_debris(&root, &registry, true)?;
         if registry.replication_enabled && !root.join("control/replication.json").exists() {
             return Err(Error::corrupt(
@@ -244,7 +247,9 @@ impl Store {
                         slot.core
                             .as_ref()
                             .filter(|core| {
-                                slot.installing.is_none() && !core.engine.recovery_required()
+                                slot.installing.is_none()
+                                    && !core.engine.recovery_required()
+                                    && !core.engine.recovery_read_only()
                             })
                             .cloned()
                     });
@@ -498,6 +503,7 @@ impl Store {
                         dsl: crate::dsl::Cache::default(),
                         engine,
                         gate: RequestGate::new(inner.options.max_tenant_requests),
+                        exported_cold: AtomicBool::new(false),
                         last_used: Mutex::new(Instant::now()),
                         cursors: Mutex::new(HashMap::new()),
                         plans: Mutex::new(HashMap::new()),
@@ -522,7 +528,9 @@ impl Store {
         let slot = self.slot(id);
         let mut slot = slot.lock();
         if slot.core.as_ref().is_some_and(|core| {
-            core.engine.runtime_id == runtime && *core.last_used.lock() == touched
+            !core.engine.recovery_read_only()
+                && core.engine.runtime_id == runtime
+                && *core.last_used.lock() == touched
         }) {
             self.close_slot(&mut slot)?;
         }
@@ -698,7 +706,7 @@ impl Store {
         let slot = slot.lock();
         let stats = slot.core.as_ref().map(|core| serde_json::json!({
             "commit_seq":core.engine.seq(), "io":core.engine.metrics(), "memory_bytes":core.engine.memory_bytes(), "disk_bytes":core.engine.disk_bytes(), "dsl_cache":core.dsl.stats(),
-            "levels":core.engine.table_counts(), "snapshots":core.engine.active_snapshots(), "maintenance_error":core.engine.maintenance_error.lock().clone()
+            "levels":core.engine.table_counts(), "snapshots":core.engine.active_snapshots(), "recovery_read_only":core.engine.recovery_read_only(), "maintenance_error":core.engine.maintenance_error.lock().clone()
         }));
         Ok(
             serde_json::json!({"tenant":registration.info,"lifecycle":registration.lifecycle,"open":slot.core.is_some(),"installing":slot.installing.is_some(),"failure":slot.failure,"stats":stats}),
@@ -733,13 +741,17 @@ fn maintain_tenant(inner: &Arc<Inner>, slot: &Arc<Mutex<Slot>>) {
     if let Some(core) = core {
         core.cursors.lock().retain(|_, c| c.valid());
         let handle = TenantHandle { core: core.clone() };
-        let result = core.engine.maintain().and_then(|_| {
-            if inner.node.writable() {
-                handle.retention_step().and_then(|_| handle.gc_step())
-            } else {
-                Ok(())
-            }
-        });
+        let result = core
+            .engine
+            .ensure_durable()
+            .and_then(|_| core.engine.maintain())
+            .and_then(|_| {
+                if inner.node.writable() {
+                    handle.retention_step().and_then(|_| handle.gc_step())
+                } else {
+                    Ok(())
+                }
+            });
         *core.engine.maintenance_error.lock() = result.err().map(|error| error.to_string());
         drop(handle);
         drop(core);
@@ -830,6 +842,14 @@ mod tests {
         let mut pages = 0;
         loop {
             let page = store.export_logs(&request).unwrap();
+            pages += 1;
+            if page.through == page.source_position {
+                assert!(
+                    store.slot(info.id).lock().core.is_none(),
+                    "caught-up cold export stayed open"
+                );
+                break;
+            }
             let id = store
                 .slot(info.id)
                 .lock()
@@ -843,10 +863,6 @@ mod tests {
                 id,
                 "recovered the WAL again for a later page"
             );
-            pages += 1;
-            if page.through == page.source_position {
-                break;
-            }
             request.after = page.through;
             request.cursor = page.cursor;
         }
