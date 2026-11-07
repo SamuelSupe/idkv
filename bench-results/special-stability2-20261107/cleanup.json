@@ -1,0 +1,14 @@
+{
+  "active_final_processes": [],
+  "owned_ext4_volumes_detached": true,
+  "auth_files_removed": true,
+  "owned_disk_images_removed": [
+    "/var/tmp/idkv-stability2-upgrade-before-20261107/disk.img",
+    "/var/tmp/idkv-stability2-upgrade-baseline-20261107/disk.img",
+    "/var/tmp/idkv-stability2-upgrade-after-20261107/disk.img",
+    "/var/tmp/idkv-stability2-pressure-before-20261107/bytes/disk.img",
+    "/var/tmp/idkv-stability2-pressure-before-20261107/inodes/disk.img",
+    "/var/tmp/idkv-stability2-pressure-after-20261107/bytes/disk.img",
+    "/var/tmp/idkv-stability2-pressure-after-20261107/inodes/disk.img"
+  ]
+}

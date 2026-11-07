@@ -7,7 +7,6 @@ use crate::{
 };
 use fs2::FileExt;
 use parking_lot::{Mutex, RwLock};
-use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     fs::{self, File, OpenOptions},
@@ -21,33 +20,15 @@ use std::{
 };
 use uuid::Uuid;
 
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(tag = "state", rename_all = "snake_case")]
-enum Lifecycle {
-    Active,
-    Deleting,
-    Deleted,
-    Restoring { stage: Uuid, old: Uuid },
-}
-#[derive(Clone, Serialize, Deserialize)]
-struct Registration {
-    info: TenantInfo,
-    lifecycle: Lifecycle,
-}
-#[derive(Clone, Serialize, Deserialize)]
-struct Registry {
-    version: u32,
-    #[serde(default)]
-    replication_enabled: bool,
-    tenants: BTreeMap<Uuid, Registration>,
-}
 mod admission;
 mod lifecycle;
 mod quota;
+mod registry;
 mod replication;
 use lifecycle::{
     clean_lifecycle_debris, collect_lifecycle_debris, recover_lifecycle, remove_lifecycle_debris,
 };
+use registry::{Lifecycle, Registration, Registry};
 
 struct Slot {
     last_seq: Option<u64>,
@@ -89,11 +70,29 @@ pub struct Store {
 }
 
 impl Store {
-    /// Gauges for currently open engines. Engine cumulative values can decrease
+    /// Registry and open-engine gauges. Engine cumulative values can decrease
     /// when an idle tenant closes, so these are deliberately not counters.
     pub fn open_engine_metrics(&self) -> BTreeMap<String, u64> {
         let slots: Vec<_> = self.owner.inner.slots.lock().values().cloned().collect();
         let mut out = BTreeMap::new();
+        {
+            let registry = self.owner.inner.registry.read();
+            out.insert(
+                "registry_deleted_tenants".into(),
+                registry
+                    .tenants
+                    .values()
+                    .filter(|row| matches!(row.lifecycle, Lifecycle::Deleted))
+                    .count() as u64,
+            );
+        }
+        out.insert(
+            "registry_metadata_capacity_bytes".into(),
+            registry::MAX_BYTES as u64,
+        );
+        if let Ok(metadata) = fs::metadata(self.root().join("control/tenants.json")) {
+            out.insert("registry_metadata_bytes".into(), metadata.len());
+        }
         for slot in slots {
             let slot = slot.lock();
             if slot.failure.is_some() {
@@ -144,21 +143,24 @@ impl Store {
             read_json::<Registry>(&registry_path)?
         } else {
             let registry = Registry {
-                version: 4,
+                version: registry::VERSION,
                 replication_enabled: false,
                 tenants: BTreeMap::new(),
             };
             atomic_json(&registry_path, &registry)?;
             registry
         };
-        if !matches!(registry.version, 1..=4) {
+        if !matches!(registry.version, 1..=registry::VERSION) {
             return Err(Error::corrupt("registry version"));
         }
         let previous = serde_json::to_vec(&registry)?;
         registry.replication_enabled |= registry.version == 2;
-        registry.version = 4;
+        // A healthy v4 root can serve reads even on a full disk. Upgrade its
+        // representation only when a registry mutation already needs a write.
+        registry.version = registry.version.max(4);
         recover_lifecycle(&root, &mut registry)?;
         if serde_json::to_vec(&registry)? != previous {
+            registry.prepare_publish()?;
             atomic_json(&registry_path, &registry)?;
         }
         clean_lifecycle_debris(&root, &registry, true)?;
@@ -313,19 +315,21 @@ impl Store {
             }),
         }
     }
+    // BUSY is global catalog contention, suitable for an async retry. None
+    // requires tenant-local preparation in the bounded blocking admission pool.
     pub(crate) fn try_http_input_budget(&self, tenant: Option<Uuid>) -> Result<Option<Budget>> {
         let Some(id) = tenant else {
             return self.http_input_budget(None).map(Some);
         };
         let inner = &self.owner.inner;
         let Some(registry) = inner.registry.try_read() else {
-            return Ok(None);
+            return Err(Error::new("BUSY", "HTTP input registry contention"));
         };
         if !registry.tenants.contains_key(&id) {
             return Err(Error::missing("tenant"));
         }
         let Some(slots) = inner.slots.try_lock() else {
-            return Ok(None);
+            return Err(Error::new("BUSY", "HTTP input slots contention"));
         };
         let Some(slot) = slots.get(&id) else {
             return Ok(None);
@@ -649,6 +653,7 @@ impl Store {
             return Ok(());
         }
         registration.lifecycle = Lifecycle::Deleting;
+        next.prepare_publish()?;
         // A failed publication may already be durable. Never reopen the old
         // generation for writes before restart has resolved the journal.
         *registry = next;

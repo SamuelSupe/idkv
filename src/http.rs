@@ -516,7 +516,21 @@ async fn dispatch_async(
                 .min(std::time::Duration::from_secs(5))
         });
     let body_deadline = tokio::time::Instant::now() + body_timeout;
-    let input_budget = if let Some(budget) = state.store.try_http_input_budget(tenant)? {
+    let prepared_budget = loop {
+        match state.store.try_http_input_budget(tenant) {
+            Ok(budget) => break budget,
+            Err(error) if error.code == "BUSY" => {
+                tokio::time::timeout_at(
+                    body_deadline,
+                    tokio::time::sleep(std::time::Duration::from_millis(1)),
+                )
+                .await
+                .map_err(|_| Error::new("DEADLINE_EXCEEDED", "HTTP input admission deadline"))?;
+            }
+            Err(error) => return Err(error),
+        }
+    };
+    let input_budget = if let Some(budget) = prepared_budget {
         budget
     } else {
         // Keep admission permits on the blocking task after HTTP cancellation.

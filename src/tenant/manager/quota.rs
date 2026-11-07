@@ -158,10 +158,11 @@ impl Store {
     fn publish_quota(&self, slot: &mut Slot, info: &TenantInfo) -> Result<()> {
         let inner = &self.owner.inner;
         let _offline = self.offline_lock(info.id)?;
-        slot.memory.set_limit(info.memory_bytes)?;
         let mut registry = inner.registry.write();
         let mut next = registry.clone();
         next.tenants.get_mut(&info.id).unwrap().info = info.clone();
+        next.prepare_publish()?;
+        slot.memory.set_limit(info.memory_bytes)?;
         let result = (|| {
             atomic_json(&inner.root.join("control/tenants.json"), &next)?;
             *registry = next;

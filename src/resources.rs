@@ -1,5 +1,5 @@
 use crate::{Error, Result};
-use parking_lot::{Condvar, Mutex};
+use parking_lot::{Condvar, Mutex, RwLock};
 use std::{
     collections::{HashMap, VecDeque},
     sync::{
@@ -38,15 +38,18 @@ impl std::ops::Deref for Bytes {
 pub struct Counter {
     used: AtomicUsize,
     limit: AtomicUsize,
+    quota: RwLock<()>,
 }
 impl Counter {
     pub fn new(limit: usize) -> Arc<Self> {
         Arc::new(Self {
             used: AtomicUsize::new(0),
             limit: AtomicUsize::new(limit),
+            quota: RwLock::new(()),
         })
     }
     fn take(&self, size: usize) -> bool {
+        let _quota = self.quota.read();
         self.used
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
                 n.checked_add(size)
@@ -61,6 +64,7 @@ impl Counter {
         self.limit.load(Ordering::Acquire)
     }
     pub fn set_limit(&self, limit: usize) -> Result<()> {
+        let _quota = self.quota.write();
         if limit < self.used() {
             return Err(Error::limit("new quota is below current reservations"));
         }
@@ -601,5 +605,61 @@ mod tests {
         assert_eq!(read_runs.load(Ordering::Relaxed), 0);
         assert_eq!(write_runs.load(Ordering::Relaxed), 1);
         assert_eq!(io.stats(tenant)["cancelled_jobs"], 2);
+    }
+    #[test]
+    fn concurrent_quota_shrink_preserves_reservation_bound() {
+        use std::time::{Duration, Instant};
+        let tenant = Counter::new(128 << 20);
+        let budget = Budget {
+            global: Counter::new(512 << 20),
+            tenant: tenant.clone(),
+        };
+        let start = std::sync::Barrier::new(2);
+        let stop = AtomicBool::new(false);
+        let shrinks = AtomicUsize::new(0);
+        let deadline = Instant::now() + Duration::from_secs(3);
+        let mut attempts = 0usize;
+        let mut violation = None;
+        thread::scope(|scope| {
+            let setter = scope.spawn(|| {
+                start.wait();
+                while !stop.load(Ordering::Acquire) && Instant::now() < deadline {
+                    tenant.set_limit(128 << 20).unwrap();
+                    if tenant.set_limit(64 << 20).is_ok() {
+                        shrinks.fetch_add(1, Ordering::Relaxed);
+                        for _ in 0..16 {
+                            std::hint::spin_loop();
+                        }
+                    }
+                }
+            });
+            start.wait();
+            while !stop.load(Ordering::Acquire) && Instant::now() < deadline {
+                attempts += 1;
+                if let Ok(reservation) = budget.reserve(128 << 20) {
+                    for _ in 0..32 {
+                        let limit = tenant.limit();
+                        let used = tenant.used();
+                        if used > limit {
+                            violation = Some((used, limit));
+                            stop.store(true, Ordering::Release);
+                            break;
+                        }
+                        std::hint::spin_loop();
+                    }
+                    drop(reservation);
+                }
+            }
+            stop.store(true, Ordering::Release);
+            setter.join().unwrap();
+        });
+        println!(
+            "AUDIT_JSON {}",
+            serde_json::json!({"case":"concurrent-quota-shrink","attempts":attempts,"accepted_shrinks":shrinks.load(Ordering::Acquire),"overshoot":violation,"final_used":tenant.used()})
+        );
+        assert!(
+            violation.is_none(),
+            "a successful reservation exceeds concurrently accepted quota"
+        );
     }
 }

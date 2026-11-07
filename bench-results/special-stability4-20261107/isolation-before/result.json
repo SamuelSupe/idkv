@@ -1,0 +1,81 @@
+{
+  "result": "reproduced",
+  "binary_sha256": "fdf23674ec94c85d35d829c8e39ad258d12c4fbf9f892cde1cfc89f9f4173106",
+  "before": [
+    {
+      "node": 0,
+      "tenant": "6ee6d27e-a2c5-44c9-a842-b574e64bbbf2",
+      "documents": 20,
+      "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+      "acknowledged_mismatches": 0
+    },
+    {
+      "node": 0,
+      "tenant": "35d97623-e226-4b05-a86f-131cae411738",
+      "documents": 20,
+      "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+      "acknowledged_mismatches": 0
+    },
+    {
+      "node": 0,
+      "tenant": "12fab580-4a16-42df-a168-3ecdb571ff37",
+      "documents": 20,
+      "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+      "acknowledged_mismatches": 0
+    }
+  ],
+  "pending_status_polls": 8,
+  "health": {
+    "status": "ok"
+  },
+  "healthy_request": {
+    "result": "RESOURCE_EXHAUSTED",
+    "elapsed_ms": 0.12570404214784503
+  },
+  "after": [
+    {
+      "node": 0,
+      "tenant": "6ee6d27e-a2c5-44c9-a842-b574e64bbbf2",
+      "documents": 20,
+      "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+      "acknowledged_mismatches": 0
+    },
+    {
+      "node": 0,
+      "tenant": "35d97623-e226-4b05-a86f-131cae411738",
+      "documents": 20,
+      "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+      "acknowledged_mismatches": 0
+    },
+    {
+      "node": 0,
+      "tenant": "12fab580-4a16-42df-a168-3ecdb571ff37",
+      "documents": 20,
+      "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+      "acknowledged_mismatches": 0
+    }
+  ],
+  "after_restart": [
+    {
+      "node": 0,
+      "tenant": "6ee6d27e-a2c5-44c9-a842-b574e64bbbf2",
+      "documents": 20,
+      "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+      "acknowledged_mismatches": 0
+    },
+    {
+      "node": 0,
+      "tenant": "35d97623-e226-4b05-a86f-131cae411738",
+      "documents": 20,
+      "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+      "acknowledged_mismatches": 0
+    },
+    {
+      "node": 0,
+      "tenant": "12fab580-4a16-42df-a168-3ecdb571ff37",
+      "documents": 20,
+      "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+      "acknowledged_mismatches": 0
+    }
+  ]
+}

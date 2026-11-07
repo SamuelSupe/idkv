@@ -4,6 +4,49 @@ use tenant_kv::*;
 fn main() {
     let args: Vec<_> = std::env::args().collect();
     let store = Store::open(&args[1], Options::default()).unwrap();
+    if args[3] == "backup-admission-error" || args[3] == "backup-terminal-error" {
+        use tenant_kv::backup::*;
+        let id = args[2].parse().unwrap();
+        let config = serde_json::from_slice(&std::fs::read(&args[4]).unwrap()).unwrap();
+        let service = BackupService::open(store, config).unwrap();
+        let first = service.submit(id, BackupOperation::Create);
+        if args[3] == "backup-admission-error" {
+            assert_eq!(first.unwrap_err().code, "RESOURCE_EXHAUSTED");
+        } else {
+            let job = first.unwrap();
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            while service.job(id, job.id).unwrap().state != JobState::Interrupted {
+                assert!(std::time::Instant::now() < deadline);
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+        }
+        let jobs = service.jobs(id);
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(jobs[0].state, JobState::Interrupted);
+        assert_eq!(
+            service
+                .submit(id, BackupOperation::Create)
+                .unwrap_err()
+                .code,
+            "BUSY"
+        );
+        let retry = service.retry(id, jobs[0].id).unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let state = service.job(id, retry.id).unwrap();
+            if matches!(
+                state.state,
+                JobState::Completed | JobState::Failed | JobState::Interrupted
+            ) {
+                assert_eq!(state.state, JobState::Completed, "{state:?}");
+                break;
+            }
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert_eq!(service.jobs(id).len(), 1);
+        return;
+    }
     if args[3] == "create" {
         store.create_tenant(&args[2]).unwrap();
         panic!("tenant creation failpoint did not trigger");

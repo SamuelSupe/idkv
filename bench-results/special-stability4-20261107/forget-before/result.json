@@ -1,0 +1,38 @@
+{
+  "result": "reproduced",
+  "binary_sha256": "fdf23674ec94c85d35d829c8e39ad258d12c4fbf9f892cde1cfc89f9f4173106",
+  "before": {
+    "node": 0,
+    "tenant": "c1da8849-453f-4805-b4bf-d4ced7b18391",
+    "documents": 100,
+    "sha256": "3637e11aaffbec8679488a5c0fb6130da5bc4298ed806d6b73aa05213afbfc1c",
+    "acknowledged_mismatches": 0
+  },
+  "first_error": {
+    "error": {
+      "code": "IO_ERROR",
+      "message": "Input/output error (os error 5)"
+    }
+  },
+  "retry": {
+    "error": {
+      "code": "IO_ERROR",
+      "message": "No such file or directory (os error 2)"
+    }
+  },
+  "visible_jobs_after_retry": 1,
+  "after": {
+    "node": 0,
+    "tenant": "c1da8849-453f-4805-b4bf-d4ced7b18391",
+    "documents": 100,
+    "sha256": "3637e11aaffbec8679488a5c0fb6130da5bc4298ed806d6b73aa05213afbfc1c",
+    "acknowledged_mismatches": 0
+  },
+  "after_restart": {
+    "node": 0,
+    "tenant": "c1da8849-453f-4805-b4bf-d4ced7b18391",
+    "documents": 100,
+    "sha256": "3637e11aaffbec8679488a5c0fb6130da5bc4298ed806d6b73aa05213afbfc1c",
+    "acknowledged_mismatches": 0
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "remaining_test_or_service_processes": [],
+  "removed_generated_fixtures": [],
+  "remaining_tmp_entries": 0,
+  "tmp_filesystem": "btrfs",
+  "isolated_probe_sources_match": true,
+  "platform": "Linux-7.2.12-orbstack-00394-gbecdd6130068-aarch64-with-glibc2.42",
+  "toolchain": "rustc 1.90.0 (1159e78c4 2025-09-14)"
+}

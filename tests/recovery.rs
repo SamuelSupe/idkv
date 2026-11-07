@@ -33,6 +33,53 @@ fn seed(root: &std::path::Path) -> uuid::Uuid {
     id
 }
 #[test]
+fn uncertain_backup_publication_retries_the_same_job_without_duplicate_restart_state() {
+    for (mode, point) in [
+        ("backup-admission-error", "backup_job_queued_published"),
+        ("backup-terminal-error", "backup_job_terminal_publish"),
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("data");
+        let id = seed(&root);
+        let config = tenant_kv::backup::BackupConfig {
+            service: "fs".into(),
+            options: std::collections::HashMap::from([(
+                "root".into(),
+                dir.path().join("remote").to_string_lossy().into(),
+            )]),
+            ..Default::default()
+        };
+        let path = dir.path().join("backup.json");
+        fs::write(&path, serde_json::to_vec(&config).unwrap()).unwrap();
+        let status = std::process::Command::new(env!("CARGO_BIN_EXE_crash-probe"))
+            .arg(&root)
+            .arg(id.to_string())
+            .arg(mode)
+            .arg(path)
+            .env("TKV_ERRORPOINT", point)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let store = Store::open(&root, Options::default()).unwrap();
+        let service = tenant_kv::backup::BackupService::open(store.clone(), config).unwrap();
+        assert_eq!(service.jobs(id).len(), 1);
+        assert_eq!(
+            service.jobs(id)[0].state,
+            tenant_kv::backup::JobState::Completed
+        );
+        assert_eq!(
+            store
+                .tenant(id)
+                .unwrap()
+                .get("assets", "old")
+                .unwrap()
+                .unwrap()["owner"],
+            "old-owner"
+        );
+    }
+}
+
+#[test]
 fn healthy_reopens_reuse_synced_wals_and_unsealed_recovery_rewrites_them() {
     use std::os::unix::fs::MetadataExt;
     let dir = tempfile::tempdir().unwrap();

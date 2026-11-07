@@ -290,9 +290,12 @@ impl Telemetry {
             ));
         }
         for (name, value) in store.open_engine_metrics() {
-            out.push_str(&format!(
-                "# TYPE tkv_open_engines_{name} gauge\ntkv_open_engines_{name} {value}\n"
-            ));
+            let family = if name.starts_with("registry_") {
+                format!("tkv_{name}")
+            } else {
+                format!("tkv_open_engines_{name}")
+            };
+            out.push_str(&format!("# TYPE {family} gauge\n{family} {value}\n"));
         }
         for (route, value) in self.0.measurements.lock().iter() {
             let route = route

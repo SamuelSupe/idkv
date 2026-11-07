@@ -958,9 +958,15 @@ async fn authenticated_http_workflow_and_cross_tenant_cursor_denial() {
         .0,
         StatusCode::GONE
     );
+    let api = call(&app, "GET", "/openapi.json", None, json!({})).await.1;
+    assert_eq!(api["openapi"], "3.1.0");
+    let (status, capabilities) = call(&app, "GET", "/v1/capabilities", None, json!({})).await;
+    assert_eq!(status, StatusCode::OK);
+    let registry: Value = storage::read_json(&dir.path().join("control/tenants.json")).unwrap();
+    assert_eq!(capabilities["storage_registry"], registry["version"]);
     assert_eq!(
-        call(&app, "GET", "/openapi.json", None, json!({})).await.1["openapi"],
-        "3.1.0"
+        api["components"]["schemas"]["Capabilities"]["properties"]["storage_registry"]["const"],
+        registry["version"]
     );
     let body = format!(
         "{{\"document\":{{\"payload\":[{}0]}}}}",

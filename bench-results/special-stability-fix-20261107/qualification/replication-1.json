@@ -1,0 +1,8 @@
+{
+  "cluster": "069b5366-b969-4c10-afe7-ece38ff4a697",
+  "role": "replica",
+  "peer_url": "http://127.0.0.1:59929",
+  "token_file": "/var/tmp/idkv-special-fix-qualification-20261107/peer-token",
+  "poll_ms": 50,
+  "log_retention_bytes": 268435456
+}

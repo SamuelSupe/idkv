@@ -1,0 +1,8 @@
+{
+  "cluster": "054017af-501f-4ab1-8a89-1d1aec6b9154",
+  "role": "primary",
+  "peer_url": "http://127.0.0.1:57337",
+  "token_file": "/var/tmp/idkv-special-fix-faults-20261107/wal-write-eio/peer-token",
+  "poll_ms": 50,
+  "log_retention_bytes": 268435456
+}

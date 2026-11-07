@@ -1,0 +1,8 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running unittests src/lib.rs (/var/tmp/idkv-special-fix-probe-target-20261107/debug/deps/tenant_kv-321137334cf1859a)
+
+running 1 test
+test tenant::manager::tests::audit_real_background_recovery_after_failed_drain ... AUDIT_JSON {"acknowledged_documents_checked":16384,"acknowledged_mismatches":0,"active_builds":0,"automatic_workers":true,"case":"automatic-failed-drain-index","catalog_seq":135,"inspections":45,"manual_recovery_calls":0,"observed_for_ms":2309,"recovery_catalog":18446744073709551615,"reopen_control_state":"READY","state_before_reopen":"READY"}
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 83 filtered out; finished in 5.08s

@@ -90,8 +90,11 @@ async fn transient_log_busy_uses_short_backoff_without_resetting_initialization_
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
         sb.sync_once().await.unwrap();
+        // Installation publishes its position before task completion is collected.
+        // Finish that cleanup before injecting retry state.
         if b.tenant(info.id)
             .is_ok_and(|t| t.engine().seq() == tenant.engine().seq())
+            && !sb.inner.progress.lock().initializing.contains_key(&info.id)
         {
             break;
         }

@@ -1,0 +1,9 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.06s
+     Running tests/recovery.rs (/var/tmp/idkv-stability4-target-20261107/debug/deps/recovery-b80c83e5a5568a35)
+
+running 1 test
+test uncertain_backup_admission_retries_the_same_job_without_duplicate_restart_state ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 14 filtered out; finished in 1.05s
+

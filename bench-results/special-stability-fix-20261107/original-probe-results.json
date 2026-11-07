@@ -1,0 +1,69 @@
+[
+  {
+    "case": "audit_concurrent_quota_shrink_must_respect_reservations",
+    "attempt": 1,
+    "exit_code": 0,
+    "observed": [
+      {
+        "accepted_shrinks": 6669904,
+        "attempts": 12703873,
+        "case": "concurrent-quota-shrink",
+        "final_used": 0,
+        "overshoot": null
+      }
+    ],
+    "log": "original-audit_concurrent_quota_shrink_must_respect_reservations-1.log"
+  },
+  {
+    "case": "audit_concurrent_quota_shrink_must_respect_reservations",
+    "attempt": 2,
+    "exit_code": 0,
+    "observed": [
+      {
+        "accepted_shrinks": 6775415,
+        "attempts": 13220733,
+        "case": "concurrent-quota-shrink",
+        "final_used": 0,
+        "overshoot": null
+      }
+    ],
+    "log": "original-audit_concurrent_quota_shrink_must_respect_reservations-2.log"
+  },
+  {
+    "case": "audit_concurrent_quota_shrink_must_respect_reservations",
+    "attempt": 3,
+    "exit_code": 0,
+    "observed": [
+      {
+        "accepted_shrinks": 6679390,
+        "attempts": 13044005,
+        "case": "concurrent-quota-shrink",
+        "final_used": 0,
+        "overshoot": null
+      }
+    ],
+    "log": "original-audit_concurrent_quota_shrink_must_respect_reservations-3.log"
+  },
+  {
+    "case": "audit_real_background_recovery_after_failed_drain",
+    "attempt": 1,
+    "exit_code": 0,
+    "observed": [
+      {
+        "acknowledged_documents_checked": 16384,
+        "acknowledged_mismatches": 0,
+        "active_builds": 0,
+        "automatic_workers": true,
+        "case": "automatic-failed-drain-index",
+        "catalog_seq": 135,
+        "inspections": 45,
+        "manual_recovery_calls": 0,
+        "observed_for_ms": 2309,
+        "recovery_catalog": 18446744073709551615,
+        "reopen_control_state": "READY",
+        "state_before_reopen": "READY"
+      }
+    ],
+    "log": "original-audit_real_background_recovery_after_failed_drain-1.log"
+  }
+]

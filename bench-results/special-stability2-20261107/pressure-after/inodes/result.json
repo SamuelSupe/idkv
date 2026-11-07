@@ -1,0 +1,40 @@
+{
+  "case": "inodes",
+  "result": "passed",
+  "before": {
+    "node": 0,
+    "tenant": "feb13cfb-10ab-48d3-8ef5-90a2d1bb4c25",
+    "documents": 100,
+    "sha256": "3637e11aaffbec8679488a5c0fb6130da5bc4298ed806d6b73aa05213afbfc1c",
+    "acknowledged_mismatches": 0
+  },
+  "wal_bytes": 161104,
+  "exhaustion": {
+    "files": 65502,
+    "available_inodes": 0,
+    "available_bytes": 227389440
+  },
+  "restart_ms": 26.356682006735355,
+  "exhausted_read": {
+    "node": 0,
+    "tenant": "feb13cfb-10ab-48d3-8ef5-90a2d1bb4c25",
+    "documents": 100,
+    "sha256": "3637e11aaffbec8679488a5c0fb6130da5bc4298ed806d6b73aa05213afbfc1c",
+    "acknowledged_mismatches": 0
+  },
+  "write_rejected": "RESOURCE_EXHAUSTED",
+  "after_recovery": {
+    "node": 0,
+    "tenant": "feb13cfb-10ab-48d3-8ef5-90a2d1bb4c25",
+    "documents": 101,
+    "sha256": "f291117237c977de3b23f3738613df7d7287751c5038911a969552784b23a9dd",
+    "acknowledged_mismatches": 0
+  },
+  "after_second_restart": {
+    "node": 0,
+    "tenant": "feb13cfb-10ab-48d3-8ef5-90a2d1bb4c25",
+    "documents": 101,
+    "sha256": "f291117237c977de3b23f3738613df7d7287751c5038911a969552784b23a9dd",
+    "acknowledged_mismatches": 0
+  }
+}

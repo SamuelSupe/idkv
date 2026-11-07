@@ -1,0 +1,47 @@
+{
+  "result": "reproduced",
+  "binary_sha256": "fdf23674ec94c85d35d829c8e39ad258d12c4fbf9f892cde1cfc89f9f4173106",
+  "before": {
+    "node": 0,
+    "tenant": "dca7cb88-3129-4822-8fd1-97f8b126ec57",
+    "documents": 1500,
+    "sha256": "95aff19a8dda6301c5e49df26899e10939c1d0cd5eca96328df56b87e94b001a",
+    "acknowledged_mismatches": 0
+  },
+  "first_error": "could not persist final job status; inspect remote completion before retry",
+  "visible_jobs_after_error": [
+    {
+      "backup": "de5e477c-0dea-42dc-a93e-eb78c3961359",
+      "checkpoint_seq": 26,
+      "created_ms": 1794063441034,
+      "error": "could not persist final job status; inspect remote completion before retry",
+      "id": "d1612e85-e226-43f3-96b4-a5f45f0da938",
+      "operation": {
+        "operation": "create"
+      },
+      "processed_files": 13,
+      "result": null,
+      "reused_bytes": 0,
+      "state": "interrupted",
+      "tenant": "dca7cb88-3129-4822-8fd1-97f8b126ec57",
+      "updated_ms": 1794063453366,
+      "uploaded_bytes": 6348713
+    }
+  ],
+  "second_submission": "accepted",
+  "restart_error": "CORRUPTION: multiple active backup jobs for tenant\n",
+  "data_without_backup_service": {
+    "node": 2,
+    "tenant": "dca7cb88-3129-4822-8fd1-97f8b126ec57",
+    "documents": 1500,
+    "sha256": "95aff19a8dda6301c5e49df26899e10939c1d0cd5eca96328df56b87e94b001a",
+    "acknowledged_mismatches": 0
+  },
+  "healthy": {
+    "node": 2,
+    "tenant": "11298327-3c18-46e2-894d-c5c3fc5279eb",
+    "documents": 20,
+    "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+    "acknowledged_mismatches": 0
+  }
+}

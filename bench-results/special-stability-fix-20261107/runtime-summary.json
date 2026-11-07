@@ -1,0 +1,300 @@
+{
+  "qualification_passed": true,
+  "qualification_state_checks": 36200,
+  "acknowledged_mismatches": 0,
+  "restart_to_write_and_replica_caught_up_ms": 72.94322398956865,
+  "phases": [
+    {
+      "phase": "baseline",
+      "actual_seconds": 10.010747927008197,
+      "operations": {
+        "heavy_writer": {
+          "calls": 399,
+          "calls_per_second": 39.882,
+          "p50_ms": 6.636,
+          "p95_ms": 10.632,
+          "p99_ms": 19.139,
+          "errors": {}
+        },
+        "index_query_20": {
+          "calls": 501,
+          "calls_per_second": 50.077,
+          "p50_ms": 0.523,
+          "p95_ms": 1.281,
+          "p99_ms": 1.986,
+          "errors": {}
+        },
+        "lookup_20": {
+          "calls": 1001,
+          "calls_per_second": 100.046,
+          "p50_ms": 0.519,
+          "p95_ms": 1.249,
+          "p99_ms": 2.24,
+          "errors": {}
+        },
+        "get": {
+          "calls": 2000,
+          "calls_per_second": 199.865,
+          "p50_ms": 0.416,
+          "p95_ms": 0.986,
+          "p99_ms": 1.42,
+          "errors": {}
+        },
+        "light_writer": {
+          "calls": 201,
+          "calls_per_second": 20.084,
+          "p50_ms": 4.927,
+          "p95_ms": 7.92,
+          "p99_ms": 11.044,
+          "errors": {}
+        }
+      },
+      "completed_verified_backups": 0,
+      "admission_retries": {},
+      "overlap_sample_intervals": 0
+    },
+    {
+      "phase": "combined",
+      "actual_seconds": 45.07248218503082,
+      "operations": {
+        "get": {
+          "calls": 8995,
+          "calls_per_second": 199.884,
+          "p50_ms": 0.305,
+          "p95_ms": 0.755,
+          "p99_ms": 1.123,
+          "errors": {}
+        },
+        "heavy_writer": {
+          "calls": 1793,
+          "calls_per_second": 39.843,
+          "p50_ms": 6.31,
+          "p95_ms": 9.522,
+          "p99_ms": 14.764,
+          "errors": {}
+        },
+        "lookup_20": {
+          "calls": 4499,
+          "calls_per_second": 99.972,
+          "p50_ms": 0.397,
+          "p95_ms": 0.908,
+          "p99_ms": 1.351,
+          "errors": {}
+        },
+        "index_query_20": {
+          "calls": 2250,
+          "calls_per_second": 49.996,
+          "p50_ms": 0.391,
+          "p95_ms": 0.908,
+          "p99_ms": 1.307,
+          "errors": {}
+        },
+        "light_writer": {
+          "calls": 901,
+          "calls_per_second": 20.019,
+          "p50_ms": 4.813,
+          "p95_ms": 7.532,
+          "p99_ms": 12.767,
+          "errors": {}
+        }
+      },
+      "completed_verified_backups": 2,
+      "admission_retries": {
+        "BUSY": 1
+      },
+      "overlap_sample_intervals": 2
+    },
+    {
+      "phase": "recovery",
+      "actual_seconds": 60.03718950704206,
+      "operations": {
+        "light_writer": {
+          "calls": 1200,
+          "calls_per_second": 20.0,
+          "p50_ms": 4.603,
+          "p95_ms": 7.667,
+          "p99_ms": 11.989,
+          "errors": {}
+        },
+        "heavy_writer": {
+          "calls": 2389,
+          "calls_per_second": 39.816,
+          "p50_ms": 6.197,
+          "p95_ms": 9.487,
+          "p99_ms": 14.059,
+          "errors": {}
+        },
+        "index_query_20": {
+          "calls": 2998,
+          "calls_per_second": 49.965,
+          "p50_ms": 0.429,
+          "p95_ms": 0.973,
+          "p99_ms": 1.445,
+          "errors": {}
+        },
+        "get": {
+          "calls": 11990,
+          "calls_per_second": 199.821,
+          "p50_ms": 0.328,
+          "p95_ms": 0.741,
+          "p99_ms": 1.156,
+          "errors": {}
+        },
+        "lookup_20": {
+          "calls": 5998,
+          "calls_per_second": 99.959,
+          "p50_ms": 0.411,
+          "p95_ms": 0.91,
+          "p99_ms": 1.376,
+          "errors": {}
+        }
+      },
+      "completed_verified_backups": 3,
+      "admission_retries": {
+        "BUSY": 204
+      },
+      "overlap_sample_intervals": 7
+    }
+  ],
+  "admission_retries_total": {
+    "BUSY": 262
+  },
+  "gc_lag_ms": 0,
+  "fault_prior_confirmed_documents_preserved": 6000,
+  "faults": [
+    {
+      "case": "enospc",
+      "result": "passed",
+      "tenant": "84e79d71-54a1-4715-9602-14923d07bbaf",
+      "before": {
+        "node": 0,
+        "tenant": "84e79d71-54a1-4715-9602-14923d07bbaf",
+        "documents": 2000,
+        "sha256": "982e513df21fb5971d7ab40a97768152f222e52bf1b9acb919aa0e32c4adf612",
+        "acknowledged_mismatches": 0
+      },
+      "disk_full": {
+        "available_before": 220516352,
+        "available_after": 0,
+        "filler_bytes": 220512256,
+        "mount": "TARGET                                                  SOURCE     FSTYPE OPTIONS\n/var/tmp/idkv-special-fix-faults-20261107/enospc/volume /dev/loop0 ext4   rw,relatime\n"
+      },
+      "fault_response": {
+        "status": 500,
+        "body": {
+          "error": {
+            "code": "COMMIT_UNKNOWN",
+            "message": "IO_ERROR: No space left on device (os error 28)"
+          }
+        }
+      },
+      "poisoned_response": {
+        "status": 429,
+        "body": {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "WAL recovery needs free disk space; read-only until closed and reopened"
+          }
+        }
+      },
+      "uncertain_batch_visible_before_retry": 0,
+      "restart_to_safe_retry_ms": 42.01153997564688,
+      "after": {
+        "node": 0,
+        "tenant": "84e79d71-54a1-4715-9602-14923d07bbaf",
+        "documents": 2008,
+        "sha256": "1aaa210c39c8e38123dcf85fa7fa56209fb46f224665b75cbecb6c405006eed1",
+        "acknowledged_mismatches": 0
+      },
+      "failure_through_validation_ms": 119.85168099636212,
+      "confirmed_documents_preserved": 2000,
+      "confirmed_documents_missing": 0
+    },
+    {
+      "case": "wal-write-eio",
+      "result": "passed",
+      "tenant": "298b5c10-0223-404b-b9d6-64d4dfdd5631",
+      "before": {
+        "node": 0,
+        "tenant": "298b5c10-0223-404b-b9d6-64d4dfdd5631",
+        "documents": 2000,
+        "sha256": "982e513df21fb5971d7ab40a97768152f222e52bf1b9acb919aa0e32c4adf612",
+        "acknowledged_mismatches": 0
+      },
+      "fault_response": {
+        "status": 500,
+        "body": {
+          "error": {
+            "code": "COMMIT_UNKNOWN",
+            "message": "IO_ERROR: Input/output error (os error 5)"
+          }
+        }
+      },
+      "poisoned_response": {
+        "status": 500,
+        "body": {
+          "error": {
+            "code": "IO_ERROR",
+            "message": "Input/output error (os error 5)"
+          }
+        }
+      },
+      "uncertain_batch_visible_before_retry": 0,
+      "restart_to_safe_retry_ms": 36.59764403710142,
+      "after": {
+        "node": 0,
+        "tenant": "298b5c10-0223-404b-b9d6-64d4dfdd5631",
+        "documents": 2008,
+        "sha256": "1aaa210c39c8e38123dcf85fa7fa56209fb46f224665b75cbecb6c405006eed1",
+        "acknowledged_mismatches": 0
+      },
+      "failure_through_validation_ms": 117.21583700273186,
+      "confirmed_documents_preserved": 2000,
+      "confirmed_documents_missing": 0
+    },
+    {
+      "case": "wal-sync-eio",
+      "result": "passed",
+      "tenant": "4cb1cf6d-a4e3-4242-aa1e-8d7b7898721d",
+      "before": {
+        "node": 0,
+        "tenant": "4cb1cf6d-a4e3-4242-aa1e-8d7b7898721d",
+        "documents": 2000,
+        "sha256": "982e513df21fb5971d7ab40a97768152f222e52bf1b9acb919aa0e32c4adf612",
+        "acknowledged_mismatches": 0
+      },
+      "fault_response": {
+        "status": 500,
+        "body": {
+          "error": {
+            "code": "COMMIT_UNKNOWN",
+            "message": "IO_ERROR: Input/output error (os error 5)"
+          }
+        }
+      },
+      "poisoned_response": {
+        "status": 500,
+        "body": {
+          "error": {
+            "code": "IO_ERROR",
+            "message": "Input/output error (os error 5)"
+          }
+        }
+      },
+      "uncertain_batch_visible_before_retry": 8,
+      "restart_to_safe_retry_ms": 31.101706030312926,
+      "after": {
+        "node": 0,
+        "tenant": "4cb1cf6d-a4e3-4242-aa1e-8d7b7898721d",
+        "documents": 2008,
+        "sha256": "1aaa210c39c8e38123dcf85fa7fa56209fb46f224665b75cbecb6c405006eed1",
+        "acknowledged_mismatches": 0
+      },
+      "failure_through_validation_ms": 111.59293999662623,
+      "confirmed_documents_preserved": 2000,
+      "confirmed_documents_missing": 0
+    }
+  ],
+  "compatibility_state_checks": 200,
+  "old_reader_rejected": true
+}

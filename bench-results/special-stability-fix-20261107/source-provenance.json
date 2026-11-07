@@ -1,0 +1,59 @@
+{
+  "base_commit": "cd83246cc8b450f7c901a4726626f54c1d7481be",
+  "baseline_audit_source": "../special-stability-20261107/source-provenance.json",
+  "final_source": "validated-source.json",
+  "full_test_passed": 209,
+  "new_regression_tests": 4,
+  "source_matches_full_tests_clippy_fmt_release": true,
+  "cargo_incremental": "0",
+  "target": "/var/tmp/idkv-special-fix-target-20261107",
+  "probe_source": "probe-source.json",
+  "original_probe_inputs_identical": true,
+  "original_probe_results": "original-probe-results.json",
+  "binaries": {
+    "tenant-kv": "2bc72c8f5fca9e53dfe1c7aaffbf87c35e2b0e7310bca0f39099def4470afbb0",
+    "tenant-kv-restore": "ce507a7b4ba981696625914fe0e74cb0040146e630367c929c30663ce3b18d3c"
+  },
+  "unchanged_runtime_scripts": {
+    "scripts/qualification.py": "95b06478ffbec39d71c880daf3aaf488c23d8caedb90a570c28a6b39c609e786",
+    "scripts/qualification_faults.py": "cda72fcda67d1a459993419abc4bf04197077bd72a1bdc1b7e33adefbf7ad17c",
+    "scripts/recovery_drill.py": "d4ec78b4cc4b816087bec7d9f388810cd2bfed050a98f94dd800dbe0fe8160c9",
+    "scripts/wal_io_fault.c": "6e8fc64226454eb176e1b83983207345ccdc82d16cf59ad16e7417d747c2392f"
+  },
+  "runtime_summary": "runtime-summary.json",
+  "registry_version": 5,
+  "old_versions_read": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "old_binary_rejects_v5": true,
+  "registry_format_limit_bytes": 16777216,
+  "registry_optimization": "compact terminal records; lifetime capacity remains finite",
+  "cleanup": "cleanup-verification.json",
+  "openapi_matches": true,
+  "validation_commands": [
+    "TMPDIR=/var/tmp/idkv-special-fix-tmp-20261107 CARGO_INCREMENTAL=0 cargo test --features failpoints -- --test-threads=1",
+    "cargo clippy --all-targets --features failpoints -- -D warnings",
+    "cargo fmt --all -- --check",
+    "cargo build --release --bins"
+  ],
+  "runtime_commands": [
+    "python3 -B scripts/qualification.py --root /var/tmp/idkv-special-fix-qualification-20261107 --binary /var/tmp/idkv-special-fix-bin-20261107/tenant-kv --restore-binary /var/tmp/idkv-special-fix-bin-20261107/tenant-kv-restore --rows 5000 --baseline-seconds 10 --combined-seconds 45 --recovery-seconds 60",
+    "python3 -B scripts/qualification_faults.py --root /var/tmp/idkv-special-fix-faults-20261107 --binary /var/tmp/idkv-special-fix-bin-20261107/tenant-kv",
+    "python3 -B bench-results/special-stability-fix-20261107/check-v5-compat.py --root /var/tmp/idkv-special-fix-compat-20261107 --binary /var/tmp/idkv-special-fix-bin-20261107/tenant-kv --old-binary /var/tmp/idkv-special-audit-bin-20261107/tenant-kv"
+  ],
+  "publication": "Uncommitted local changes; no GitHub push requested for this repair",
+  "verification": {
+    "source_and_binary_hashes": true,
+    "archive_hashes": true,
+    "document_links": 102,
+    "artifact_counts": {
+      "json": 41,
+      "jsonl": 13,
+      "gzip": 15,
+      "python": 1
+    }
+  }
+}

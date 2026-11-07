@@ -1,0 +1,15 @@
+{
+  "source_unchanged": true,
+  "probe_source_manifest_match": true,
+  "failed_behavioral_probes": 4,
+  "concurrent_budget_repeat_failures": 3,
+  "qualification_passed": true,
+  "qualification_state_checks": 36200,
+  "qualification_acknowledged_mismatches": 0,
+  "artifact_checks": {
+    "json": 18,
+    "jsonl": 6,
+    "gzip": 15,
+    "python": 1
+  }
+}

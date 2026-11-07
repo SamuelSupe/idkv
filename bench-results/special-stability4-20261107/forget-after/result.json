@@ -1,0 +1,33 @@
+{
+  "result": "passed",
+  "binary_sha256": "e9fb9657f3ee523f096ab6220a160cc36571a610b90d13d6f2015f645cae3a2c",
+  "before": {
+    "node": 0,
+    "tenant": "84d4c0aa-84d4-4c90-a401-29b15d102070",
+    "documents": 100,
+    "sha256": "3637e11aaffbec8679488a5c0fb6130da5bc4298ed806d6b73aa05213afbfc1c",
+    "acknowledged_mismatches": 0
+  },
+  "first_error": {
+    "error": {
+      "code": "IO_ERROR",
+      "message": "Input/output error (os error 5)"
+    }
+  },
+  "retry": "ok",
+  "visible_jobs_after_retry": 0,
+  "after": {
+    "node": 0,
+    "tenant": "84d4c0aa-84d4-4c90-a401-29b15d102070",
+    "documents": 100,
+    "sha256": "3637e11aaffbec8679488a5c0fb6130da5bc4298ed806d6b73aa05213afbfc1c",
+    "acknowledged_mismatches": 0
+  },
+  "after_restart": {
+    "node": 0,
+    "tenant": "84d4c0aa-84d4-4c90-a401-29b15d102070",
+    "documents": 100,
+    "sha256": "3637e11aaffbec8679488a5c0fb6130da5bc4298ed806d6b73aa05213afbfc1c",
+    "acknowledged_mismatches": 0
+  }
+}

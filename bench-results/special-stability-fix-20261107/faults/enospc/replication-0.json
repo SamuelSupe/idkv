@@ -1,0 +1,8 @@
+{
+  "cluster": "d3cc743b-34fb-42a4-af00-58c0f03912d8",
+  "role": "primary",
+  "peer_url": "http://127.0.0.1:38521",
+  "token_file": "/var/tmp/idkv-special-fix-faults-20261107/enospc/peer-token",
+  "poll_ms": 50,
+  "log_retention_bytes": 268435456
+}

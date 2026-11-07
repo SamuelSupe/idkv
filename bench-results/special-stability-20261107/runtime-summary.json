@@ -1,0 +1,179 @@
+{
+  "result": "passed",
+  "document_state_checks": 36200,
+  "acknowledged_mismatches": 0,
+  "restart_to_write_and_replica_caught_up_ms": 66.7039470281452,
+  "phases": [
+    {
+      "phase": "baseline",
+      "actual_seconds": 10.015500255976804,
+      "operations": {
+        "index_query_20": {
+          "calls": 501,
+          "calls_per_second": 50.063,
+          "p50_ms": 0.517,
+          "p95_ms": 1.308,
+          "p99_ms": 1.942,
+          "errors": {}
+        },
+        "lookup_20": {
+          "calls": 1001,
+          "calls_per_second": 100.025,
+          "p50_ms": 0.511,
+          "p95_ms": 1.339,
+          "p99_ms": 1.919,
+          "errors": {}
+        },
+        "get": {
+          "calls": 1996,
+          "calls_per_second": 199.445,
+          "p50_ms": 0.385,
+          "p95_ms": 1.054,
+          "p99_ms": 1.766,
+          "errors": {}
+        },
+        "light_writer": {
+          "calls": 201,
+          "calls_per_second": 20.079,
+          "p50_ms": 4.808,
+          "p95_ms": 8.309,
+          "p99_ms": 9.666,
+          "errors": {}
+        },
+        "heavy_writer": {
+          "calls": 401,
+          "calls_per_second": 40.041,
+          "p50_ms": 7.005,
+          "p95_ms": 10.356,
+          "p99_ms": 14.602,
+          "errors": {}
+        }
+      },
+      "completed_verified_backups": 0,
+      "admission_retries": {},
+      "overlap_sample_intervals": 0
+    },
+    {
+      "phase": "combined",
+      "actual_seconds": 45.09559938701568,
+      "operations": {
+        "heavy_writer": {
+          "calls": 1787,
+          "calls_per_second": 39.711,
+          "p50_ms": 6.327,
+          "p95_ms": 10.948,
+          "p99_ms": 27.183,
+          "errors": {}
+        },
+        "get": {
+          "calls": 8992,
+          "calls_per_second": 199.81,
+          "p50_ms": 0.292,
+          "p95_ms": 0.7,
+          "p99_ms": 1.154,
+          "errors": {}
+        },
+        "lookup_20": {
+          "calls": 4498,
+          "calls_per_second": 99.942,
+          "p50_ms": 0.378,
+          "p95_ms": 0.887,
+          "p99_ms": 1.419,
+          "errors": {}
+        },
+        "light_writer": {
+          "calls": 900,
+          "calls_per_second": 19.996,
+          "p50_ms": 5.194,
+          "p95_ms": 10.049,
+          "p99_ms": 21.015,
+          "errors": {}
+        },
+        "index_query_20": {
+          "calls": 2249,
+          "calls_per_second": 49.967,
+          "p50_ms": 0.381,
+          "p95_ms": 0.942,
+          "p99_ms": 1.601,
+          "errors": {}
+        }
+      },
+      "completed_verified_backups": 2,
+      "admission_retries": {},
+      "overlap_sample_intervals": 2
+    },
+    {
+      "phase": "recovery",
+      "actual_seconds": 60.04931278794538,
+      "operations": {
+        "light_writer": {
+          "calls": 1198,
+          "calls_per_second": 19.964,
+          "p50_ms": 4.913,
+          "p95_ms": 9.936,
+          "p99_ms": 32.437,
+          "errors": {}
+        },
+        "index_query_20": {
+          "calls": 2997,
+          "calls_per_second": 49.942,
+          "p50_ms": 0.361,
+          "p95_ms": 0.773,
+          "p99_ms": 1.345,
+          "errors": {}
+        },
+        "get": {
+          "calls": 11993,
+          "calls_per_second": 199.852,
+          "p50_ms": 0.286,
+          "p95_ms": 0.66,
+          "p99_ms": 1.109,
+          "errors": {}
+        },
+        "lookup_20": {
+          "calls": 5996,
+          "calls_per_second": 99.91,
+          "p50_ms": 0.355,
+          "p95_ms": 0.758,
+          "p99_ms": 1.216,
+          "errors": {}
+        },
+        "heavy_writer": {
+          "calls": 2379,
+          "calls_per_second": 39.641,
+          "p50_ms": 6.359,
+          "p95_ms": 11.02,
+          "p99_ms": 27.592,
+          "errors": {}
+        }
+      },
+      "completed_verified_backups": 3,
+      "admission_retries": {
+        "BUSY": 212
+      },
+      "overlap_sample_intervals": 7
+    }
+  ],
+  "gc_drained": {
+    "expiration_lag_ms": 0,
+    "gc": {
+      "completed_rounds": 626,
+      "history_sweep_active": false,
+      "knowledge_floor": 0,
+      "migration_complete": true,
+      "reclaimed_records": 4700,
+      "watermark_ms": 1794053089395
+    },
+    "next_expiration_ms": null,
+    "physical_reclamation": "as snapshots release and compaction completes",
+    "policy": {
+      "activated_seq": 477,
+      "legacy_expires_at_ms": 1794052980485,
+      "retention_seconds": 20
+    }
+  },
+  "admission_retries_total": {
+    "BUSY": 328
+  },
+  "scope": "real HTTP primary/replica, SIGKILL and offline backup restore, OpenDAL fs backend; not power loss or hardware EIO"
+}

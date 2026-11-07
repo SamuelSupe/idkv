@@ -1,0 +1,17 @@
+[
+  {
+    "attempt": 1,
+    "exit_code": 0,
+    "log": "baseline-existing-backoff-test-1.log"
+  },
+  {
+    "attempt": 2,
+    "exit_code": 0,
+    "log": "baseline-existing-backoff-test-2.log"
+  },
+  {
+    "attempt": 3,
+    "exit_code": 0,
+    "log": "baseline-existing-backoff-test-3.log"
+  }
+]

@@ -1,0 +1,19 @@
+{
+  "checked_experiment_roots": [
+    "/var/tmp/idkv-stability3-backup-before-20261107",
+    "/var/tmp/idkv-stability3-local-before-20261107",
+    "/var/tmp/idkv-stability3-local-baseline-20261107",
+    "/var/tmp/idkv-stability3-local-before-finalprobe-20261107",
+    "/var/tmp/idkv-stability3-local-baseline-final-20261107",
+    "/var/tmp/idkv-stability3-backup-baseline-20261107",
+    "/var/tmp/idkv-stability3-local-after-20261107",
+    "/var/tmp/idkv-stability3-backup-after-20261107",
+    "/var/tmp/idkv-stability3-backup-proof-after-20261107",
+    "/var/tmp/idkv-stability3-backup-proof-before-20261107",
+    "/var/tmp/idkv-stability3-wal-after-20261107",
+    "/var/tmp/idkv-stability3-wal-before-20261107"
+  ],
+  "auth_and_peer_files_removed": true,
+  "fault_controls_and_shared_libraries_removed": true,
+  "active_experiment_processes": []
+}

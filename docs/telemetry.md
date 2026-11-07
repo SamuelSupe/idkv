@@ -40,6 +40,11 @@ v0.10.1 的详细引擎统计 `scheduler.cancelled_jobs` 记录出队时跳过�
 | tkv_replication_initialization_attempts_total | 实际启动的检查点初始化尝试，包含新租户和日志过期重建；重复调度在途任务不计数 |
 | tkv_replication_initialization_failures_total | 初始化任务失败并由复制循环收集的次数，包含对端 BUSY/超时等失败；正常停止取消不计数 |
 | tkv_replication_reinitializations_total | 本地已有租户因 LOG_GONE 实际启动重建的次数；是尝试数，不是成功数 |
+| tkv_registry_metadata_bytes | 当前持久根注册表大小，包含校验封装 |
+| tkv_registry_metadata_capacity_bytes | 根注册表格式上限，当前 16 MiB |
+| tkv_registry_deleted_tenants | 保留 UUID 和状态信息的历史删除租户数 |
+
+可对 `tkv_registry_metadata_bytes / tkv_registry_metadata_capacity_bytes > 0.8` 持续五分钟告警，并根据租户周转率提前安排容量管理。v5 压缩历史记录，格式容量仍有界，删除租户不代表删除其身份墓碑。
 
 可以在从库对 `increase(tkv_replication_reinitializations_total[15m]) >= 3` 持续 5 分钟告警，并结合失败计数、last_error 及实际源/副本位置检查日志窗口和传输吞吐；阈值需按租户数和部署条件调整。首次安装反复失败时还应监测初始化尝试与失败计数，不能只看重建计数。此处提供告警表达式，不自动安装监控规则。
 

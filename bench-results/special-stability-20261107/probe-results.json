@@ -1,0 +1,82 @@
+[
+  {
+    "case": "audit_failed_drain_must_resume_interrupted_index",
+    "exit_code": 101,
+    "observed": [
+      {
+        "acknowledged_documents_checked": 2048,
+        "acknowledged_mismatches": 0,
+        "active_builds": 0,
+        "case": "failed-drain-index",
+        "catalog_unchanged": true,
+        "management_error": "BUSY",
+        "reopen_control_state": "READY",
+        "state_after_20_recovery_checks": "BUILDING"
+      }
+    ],
+    "result": "invariant failed",
+    "log": "audit_failed_drain_must_resume_interrupted_index.log"
+  },
+  {
+    "case": "audit_deleted_registry_should_allow_new_tenant_after_churn",
+    "exit_code": 101,
+    "observed": [
+      {
+        "acknowledged_mismatches": 0,
+        "case": "deleted-registry-capacity",
+        "confirmed_sentinel_checks": 3,
+        "create_after_restarts": [
+          "RESOURCE_EXHAUSTED",
+          "RESOURCE_EXHAUSTED",
+          "RESOURCE_EXHAUSTED"
+        ],
+        "create_with_no_live_tenants": "RESOURCE_EXHAUSTED",
+        "fixture_deleted_tenants": 56870,
+        "live_tenants_after_delete": 0,
+        "registry_bytes": 16777152
+      }
+    ],
+    "result": "invariant failed",
+    "log": "audit_deleted_registry_should_allow_new_tenant_after_churn.log"
+  },
+  {
+    "case": "audit_concurrent_quota_shrink_must_respect_reservations",
+    "exit_code": 101,
+    "observed": [
+      {
+        "accepted_shrinks": 308,
+        "attempts": 55,
+        "case": "concurrent-quota-shrink",
+        "final_used": 0,
+        "overshoot": [
+          134217728,
+          67108864
+        ]
+      }
+    ],
+    "result": "invariant failed",
+    "log": "counter-repeat-1.log"
+  },
+  {
+    "case": "audit_real_background_recovery_after_failed_drain",
+    "exit_code": 101,
+    "observed": [
+      {
+        "acknowledged_documents_checked": 16384,
+        "acknowledged_mismatches": 0,
+        "active_builds": 0,
+        "automatic_workers": true,
+        "case": "automatic-failed-drain-index",
+        "catalog_seq": 66,
+        "inspections": 96,
+        "manual_recovery_calls": 0,
+        "observed_for_ms": 5052,
+        "recovery_catalog": 66,
+        "reopen_control_state": "READY",
+        "state_before_reopen": "BUILDING"
+      }
+    ],
+    "result": "invariant failed",
+    "log": "audit_real_background_recovery_after_failed_drain.log"
+  }
+]

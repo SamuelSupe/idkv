@@ -1,0 +1,26 @@
+[
+  {
+    "case": "management_interrupts_index_backpressure_and_preserves_recoverable_builds",
+    "exit_code": 101,
+    "result": "expected behavioral failure on cd83246",
+    "filesystem": "native Btrfs",
+    "tmpdir": "/var/tmp/idkv-cd83246-control-test-tmp-20261107",
+    "log": "control-management_interrupts_index_backpressure_and_preserves_recoverable_builds.log"
+  },
+  {
+    "case": "full_cold_admission_pool_does_not_reject_global_lock_contention",
+    "exit_code": 101,
+    "result": "expected behavioral failure on cd83246",
+    "filesystem": "native Btrfs",
+    "tmpdir": "/var/tmp/idkv-cd83246-control-test-tmp-20261107",
+    "log": "control-full_cold_admission_pool_does_not_reject_global_lock_contention.log"
+  },
+  {
+    "case": "management_drain_keeps_a_writable_index_build_resumable",
+    "exit_code": 101,
+    "result": "expected behavioral failure on cd83246",
+    "filesystem": "native Btrfs",
+    "tmpdir": "/var/tmp/idkv-cd83246-control-test-tmp-20261107",
+    "log": "control-management_drain_keeps_a_writable_index_build_resumable.log"
+  }
+]

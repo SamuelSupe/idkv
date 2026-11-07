@@ -31,6 +31,10 @@ v0.5 的 [主从复制](replication.md) 与此备份能力独立。启用复制�
 4. 持久化本地任务 manifest，上传不存在的对象，全部完成后条件创建远端 manifest。
 5. 最后条件创建 `COMPLETED`，其中保存 manifest 的 SHA-256，再将本地任务标记为 completed。
 
+检查点复制完成后即释放在线租户句柄，后续校验、哈希和上传只依赖私有副本及捕获的 TenantInfo；本地同步备份也在校验副本前释放在线句柄。因此，较慢的副本校验或限速哈希不再单独阻止 close 或增加配额。复制阶段、其他请求/快照和调用方保留的句柄仍可能导致一秒排空超时；后台任务的共享内存计费继续生效，缩配额仍须满足在用预算。本地备份仍占用本租户维护名额，校验请求等其他维护操作不能同时运行。
+
+释放在线引用也允许哈希期间出现 COMMIT_UNKNOWN 的引擎自动关闭和重开；故障解除后的重试仍必须使用原操作 ID 和 history 核对未知结果。副本处理不改变备份固定时刻，之后才确认的写入不属于这份备份的恢复点。
+
 只有带有效 COMPLETED 的备份可见。`POST` 返回 202 仅表示已持久记录任务，不能据此宣称备份成功。若远端成功而本地状态未写完，重启时核对完成标记，不重复创建备份。已持久化检查点的上传中断会重用原检查点及已存在对象；单个未完成 multipart 文件从头重传，不保留分片续传令牌。检查点尚未完成时，重启会重新获取检查点，因此 202 时还没有固定备份序号。
 
 上传按块计算 SHA-256，与 manifest 比较。S3 默认请求 CRC32C 传输校验，且对象带摘要 metadata；已有 S3 对象用长度与摘要 metadata 判断复用。没有 metadata 的后端读取完整对象验证。显式 verify 和所有恢复都会完整读取并计算 SHA-256，不把 ETag 当作文件摘要。摘要用于损坏检测，不是对有写权限的恶意备份仓库的签名认证。
@@ -80,6 +84,10 @@ curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
 ```
 
 状态为 queued、checkpointing、uploading、verifying、restoring、pruning、completed、failed、interrupted。进度的 uploaded_bytes、reused_bytes、processed_files 按当前尝试计数，重启恢复/显式重试时清零。completed 的 create 结果包含 checkpoint_seq、checkpoint_ms、文件数和总字节。checkpoint_ms 是捕获检查点的时间记录，不是按时间精确回放 WAL 的索引。
+
+排队或结束状态写盘失败时，该任务在当前进程可显示 interrupted，并保留该租户的任务身份；错误不证明控制文件未落盘。先查看任务列表和远端完成状态，再以原任务 ID 重试 create/verify/prune，或显式 forget 后新建；restore/import 继续禁止 retry，必须检查实际数据后处理。此期间同租户新建备份操作返回 BUSY，其他租户不受这份任务所有权限制。重启依据实际持久状态恢复，不应反复新建任务来处理未知发布结果。
+
+任务元信息写入、目录同步及 forget 清理在全局状态锁外执行，同租户提交、重试、工作者和 forget 按租户串行。状态查询可在慢速写盘期间返回上一次已发布状态；Completed 在清理结束并释放租户所有权时一起对外可见。已删除任务文件但目录同步失败时，再次 forget 可继续完成；远端备份仍保留。
 
 任务阶段、检查点清单和终态结果持久化后才发布；逐文件进度只更新内存，在下一阶段或终态时一同保存，避免每个文件的计数更新都同步磁盘。通过任务 HTTP/API 查看实时进度，不依赖内部任务 JSON 文件的计数实时变化。续传根据检查点清单、已上传对象和完成标记恢复，重启后仍按原规则重置本次进度。实现与验证见[后台备份进度与写入尾延迟优化](tail-latency-optimization.md)。
 

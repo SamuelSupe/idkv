@@ -1,0 +1,47 @@
+{
+  "result": "passed",
+  "binary_sha256": "e9fb9657f3ee523f096ab6220a160cc36571a610b90d13d6f2015f645cae3a2c",
+  "before": {
+    "node": 0,
+    "tenant": "09cf33ae-2f20-4242-bb95-fa890ee00866",
+    "documents": 1500,
+    "sha256": "95aff19a8dda6301c5e49df26899e10939c1d0cd5eca96328df56b87e94b001a",
+    "acknowledged_mismatches": 0
+  },
+  "first_error": "could not persist final job status; inspect remote completion before retry",
+  "visible_jobs_after_error": [
+    {
+      "backup": "1a84b8c0-8f5f-4c8a-8948-1d0acc834b4b",
+      "checkpoint_seq": 26,
+      "created_ms": 1794063961970,
+      "error": "could not persist final job status; inspect remote completion before retry",
+      "id": "fe4721df-1e5f-47cf-90f8-4ec07e322f4c",
+      "operation": {
+        "operation": "create"
+      },
+      "processed_files": 16,
+      "result": null,
+      "reused_bytes": 0,
+      "state": "interrupted",
+      "tenant": "09cf33ae-2f20-4242-bb95-fa890ee00866",
+      "updated_ms": 1794063974353,
+      "uploaded_bytes": 6349036
+    }
+  ],
+  "second_submission": "BUSY",
+  "same_job_retry_completed": true,
+  "after_restart": {
+    "node": 0,
+    "tenant": "09cf33ae-2f20-4242-bb95-fa890ee00866",
+    "documents": 1500,
+    "sha256": "95aff19a8dda6301c5e49df26899e10939c1d0cd5eca96328df56b87e94b001a",
+    "acknowledged_mismatches": 0
+  },
+  "healthy": {
+    "node": 0,
+    "tenant": "6cac80e1-372f-48c1-8641-bf8b2b5e8834",
+    "documents": 20,
+    "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+    "acknowledged_mismatches": 0
+  }
+}

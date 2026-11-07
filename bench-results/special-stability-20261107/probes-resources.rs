@@ -1,0 +1,45 @@
+    #[test]
+    fn audit_concurrent_quota_shrink_must_respect_reservations() {
+        use std::time::{Duration, Instant};
+        let tenant = Counter::new(128 << 20);
+        let budget = Budget { global: Counter::new(512 << 20), tenant: tenant.clone() };
+        let start = std::sync::Barrier::new(2);
+        let stop = AtomicBool::new(false);
+        let shrinks = AtomicUsize::new(0);
+        let deadline = Instant::now() + Duration::from_secs(3);
+        let mut attempts = 0usize;
+        let mut violation = None;
+        thread::scope(|scope| {
+            let setter = scope.spawn(|| {
+                start.wait();
+                while !stop.load(Ordering::Acquire) && Instant::now() < deadline {
+                    tenant.set_limit(128 << 20).unwrap();
+                    if tenant.set_limit(64 << 20).is_ok() {
+                        shrinks.fetch_add(1, Ordering::Relaxed);
+                        for _ in 0..16 { std::hint::spin_loop(); }
+                    }
+                }
+            });
+            start.wait();
+            while !stop.load(Ordering::Acquire) && Instant::now() < deadline {
+                attempts += 1;
+                if let Ok(reservation) = budget.reserve(128 << 20) {
+                    for _ in 0..32 {
+                        let limit = tenant.limit();
+                        let used = tenant.used();
+                        if used > limit {
+                            violation = Some((used, limit));
+                            stop.store(true, Ordering::Release);
+                            break;
+                        }
+                        std::hint::spin_loop();
+                    }
+                    drop(reservation);
+                }
+            }
+            stop.store(true, Ordering::Release);
+            setter.join().unwrap();
+        });
+        println!("AUDIT_JSON {}", serde_json::json!({"case":"concurrent-quota-shrink","attempts":attempts,"accepted_shrinks":shrinks.load(Ordering::Acquire),"overshoot":violation,"final_used":tenant.used()}));
+        assert!(violation.is_none(), "a successful reservation exceeds concurrently accepted quota");
+    }

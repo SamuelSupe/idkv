@@ -1,0 +1,8 @@
+{
+  "cluster": "1f6b0c5c-d186-4a7b-a751-d2b24a5f5c1c",
+  "role": "replica",
+  "peer_url": "http://127.0.0.1:50119",
+  "token_file": "/var/tmp/idkv-special-fix-faults-20261107/wal-sync-eio/peer-token",
+  "poll_ms": 50,
+  "log_retention_bytes": 268435456
+}

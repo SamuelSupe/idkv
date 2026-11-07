@@ -1,0 +1,55 @@
+{
+  "passed": 213,
+  "suites": [
+    {
+      "suite": "unittests src/lib.rs",
+      "passed": 85,
+      "failed": 0
+    },
+    {
+      "suite": "tests/backup.rs",
+      "passed": 11,
+      "failed": 0
+    },
+    {
+      "suite": "tests/dsl.rs",
+      "passed": 7,
+      "failed": 0
+    },
+    {
+      "suite": "tests/engine.rs",
+      "passed": 28,
+      "failed": 0
+    },
+    {
+      "suite": "tests/http.rs",
+      "passed": 13,
+      "failed": 0
+    },
+    {
+      "suite": "tests/identity.rs",
+      "passed": 5,
+      "failed": 0
+    },
+    {
+      "suite": "tests/middleware.rs",
+      "passed": 14,
+      "failed": 0
+    },
+    {
+      "suite": "tests/recovery.rs",
+      "passed": 15,
+      "failed": 0
+    },
+    {
+      "suite": "tests/reliability.rs",
+      "passed": 4,
+      "failed": 0
+    },
+    {
+      "suite": "tests/replication.rs",
+      "passed": 31,
+      "failed": 0
+    }
+  ]
+}

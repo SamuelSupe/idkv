@@ -1,0 +1,52 @@
+{
+  "result": "passed",
+  "binary_sha256": "e9fb9657f3ee523f096ab6220a160cc36571a610b90d13d6f2015f645cae3a2c",
+  "before": {
+    "node": 0,
+    "tenant": "b47eb3c1-13d4-4c02-b176-6008ab60656e",
+    "documents": 1500,
+    "sha256": "95aff19a8dda6301c5e49df26899e10939c1d0cd5eca96328df56b87e94b001a",
+    "acknowledged_mismatches": 0
+  },
+  "first_error": {
+    "error": {
+      "code": "IO_ERROR",
+      "message": "Input/output error (os error 5)"
+    }
+  },
+  "visible_jobs_after_error": [
+    {
+      "backup": "ba300042-6286-4911-abe2-97fa666881ac",
+      "checkpoint_seq": null,
+      "created_ms": 1794063946728,
+      "error": "job admission uncertain; inspect, retry or forget this job: IO_ERROR: Input/output error (os error 5)",
+      "id": "936ca59b-727d-4823-bc20-60343ed4f621",
+      "operation": {
+        "operation": "create"
+      },
+      "processed_files": 0,
+      "result": null,
+      "reused_bytes": 0,
+      "state": "interrupted",
+      "tenant": "b47eb3c1-13d4-4c02-b176-6008ab60656e",
+      "updated_ms": 1794063946728,
+      "uploaded_bytes": 0
+    }
+  ],
+  "second_submission": "BUSY",
+  "same_job_retry_completed": true,
+  "after_restart": {
+    "node": 0,
+    "tenant": "b47eb3c1-13d4-4c02-b176-6008ab60656e",
+    "documents": 1500,
+    "sha256": "95aff19a8dda6301c5e49df26899e10939c1d0cd5eca96328df56b87e94b001a",
+    "acknowledged_mismatches": 0
+  },
+  "healthy": {
+    "node": 0,
+    "tenant": "a71a13ff-1163-4a3a-8ed1-e8ac7288d6b2",
+    "documents": 20,
+    "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+    "acknowledged_mismatches": 0
+  }
+}

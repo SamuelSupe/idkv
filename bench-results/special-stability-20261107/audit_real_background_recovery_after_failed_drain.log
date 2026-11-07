@@ -1,0 +1,22 @@
+   Compiling tenant-kv v0.10.1 (/var/tmp/idkv-special-audit-source-20261107)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.69s
+     Running unittests src/lib.rs (/var/tmp/idkv-special-audit-target-20261107/debug/deps/tenant_kv-321137334cf1859a)
+
+running 1 test
+test tenant::manager::tests::audit_real_background_recovery_after_failed_drain ... 
+thread 'tenant::manager::tests::audit_real_background_recovery_after_failed_drain' panicked at src/tenant/manager.rs:1454:9:
+assertion `left == right` failed: normal background worker stranded interrupted index after failed drain
+  left: Building
+ right: Ready
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+AUDIT_JSON {"acknowledged_documents_checked":16384,"acknowledged_mismatches":0,"active_builds":0,"automatic_workers":true,"case":"automatic-failed-drain-index","catalog_seq":66,"inspections":96,"manual_recovery_calls":0,"observed_for_ms":5052,"recovery_catalog":66,"reopen_control_state":"READY","state_before_reopen":"BUILDING"}
+FAILED
+
+failures:
+
+failures:
+    tenant::manager::tests::audit_real_background_recovery_after_failed_drain
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 81 filtered out; finished in 9.19s
+
+error: test failed, to rerun pass `--lib`

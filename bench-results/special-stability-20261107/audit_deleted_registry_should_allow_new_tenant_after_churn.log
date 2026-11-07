@@ -1,0 +1,21 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running unittests src/lib.rs (/var/tmp/idkv-special-audit-target-20261107/debug/deps/tenant_kv-321137334cf1859a)
+
+running 1 test
+test tenant::manager::tests::audit_deleted_registry_should_allow_new_tenant_after_churn ... AUDIT_JSON {"acknowledged_mismatches":0,"case":"deleted-registry-capacity","confirmed_sentinel_checks":3,"create_after_restarts":["RESOURCE_EXHAUSTED","RESOURCE_EXHAUSTED","RESOURCE_EXHAUSTED"],"create_with_no_live_tenants":"RESOURCE_EXHAUSTED","fixture_deleted_tenants":56870,"live_tenants_after_delete":0,"registry_bytes":16777152}
+
+thread 'tenant::manager::tests::audit_deleted_registry_should_allow_new_tenant_after_churn' panicked at src/tenant/manager.rs:1373:9:
+assertion `left == right` failed: deleted history permanently exhausts tenant creation capacity
+  left: "RESOURCE_EXHAUSTED"
+ right: "OK"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    tenant::manager::tests::audit_deleted_registry_should_allow_new_tenant_after_churn
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 80 filtered out; finished in 8.85s
+
+error: test failed, to rerun pass `--lib`

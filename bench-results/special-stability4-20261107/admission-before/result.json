@@ -1,0 +1,34 @@
+{
+  "result": "reproduced",
+  "binary_sha256": "fdf23674ec94c85d35d829c8e39ad258d12c4fbf9f892cde1cfc89f9f4173106",
+  "before": {
+    "node": 0,
+    "tenant": "f43460f1-e68f-414a-a501-970454febfb9",
+    "documents": 1500,
+    "sha256": "95aff19a8dda6301c5e49df26899e10939c1d0cd5eca96328df56b87e94b001a",
+    "acknowledged_mismatches": 0
+  },
+  "first_error": {
+    "error": {
+      "code": "IO_ERROR",
+      "message": "Input/output error (os error 5)"
+    }
+  },
+  "visible_jobs_after_error": [],
+  "second_submission": "accepted",
+  "restart_error": "CORRUPTION: multiple active backup jobs for tenant\n",
+  "data_without_backup_service": {
+    "node": 2,
+    "tenant": "f43460f1-e68f-414a-a501-970454febfb9",
+    "documents": 1500,
+    "sha256": "95aff19a8dda6301c5e49df26899e10939c1d0cd5eca96328df56b87e94b001a",
+    "acknowledged_mismatches": 0
+  },
+  "healthy": {
+    "node": 2,
+    "tenant": "9e8b4bbf-cb7b-4138-b651-0727e6d87736",
+    "documents": 20,
+    "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+    "acknowledged_mismatches": 0
+  }
+}

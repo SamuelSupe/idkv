@@ -30,19 +30,20 @@ impl Store {
             path: path.clone(),
             journaled: false,
         };
-        Engine::create(&path, &info)?;
-        crate::storage::failpoint("tenant_create_staged");
         let mut next = registry.clone();
         next.tenants.insert(
             info.id,
             Registration {
-                info,
+                info: info.clone(),
                 lifecycle: Lifecycle::Restoring {
                     stage,
                     old: Uuid::new_v4(),
                 },
             },
         );
+        next.prepare_publish()?;
+        Engine::create(&path, &info)?;
+        crate::storage::failpoint("tenant_create_staged");
         // Publication may have renamed the journal before reporting an error.
         // Keep its stage and fence the registration until startup resolves it.
         preparation.journaled = true;
@@ -99,6 +100,18 @@ impl Store {
         {
             return Err(Error::limit("tenant registry limit"));
         }
+        let mut next = registry.clone();
+        next.tenants.insert(
+            info.id,
+            Registration {
+                info: info.clone(),
+                lifecycle: Lifecycle::Restoring {
+                    stage,
+                    old: Uuid::new_v4(),
+                },
+            },
+        );
+        next.prepare_publish()?;
         // source is the already verified, same-filesystem private backup workspace.
         // Journal before publication so startup can finish an interrupted import.
         atomic_json(&source.join("TENANT.meta"), &info)?;
@@ -109,17 +122,6 @@ impl Store {
                 .ok_or_else(|| Error::invalid("import source"))?,
         )?;
         sync_dir(&inner.root.join("staging"))?;
-        let mut next = registry.clone();
-        next.tenants.insert(
-            info.id,
-            Registration {
-                info,
-                lifecycle: Lifecycle::Restoring {
-                    stage,
-                    old: Uuid::new_v4(),
-                },
-            },
-        );
         // Fence the registration even when durable publication returns an uncertain
         // I/O result. Reopening Store resolves the existing lifecycle journal.
         *registry = next;
@@ -158,14 +160,14 @@ impl Store {
                 remaining,
                 self.options().maintenance_reserve_free_bytes,
             )?;
+            let info = tenant.info();
+            let budget = tenant.engine().budget.clone();
+            drop(tenant);
             let check = Engine::open(
                 destination.clone(),
-                tenant.info(),
+                info,
                 self.options().clone(),
-                Budget {
-                    global: self.owner.inner.memory.clone(),
-                    tenant: tenant.engine().budget.tenant.clone(),
-                },
+                budget,
                 self.owner.inner.io.clone(),
             )?;
             check.verify()?;
@@ -312,6 +314,7 @@ impl Store {
             stage,
             old: Uuid::new_v4(),
         };
+        next.prepare_publish()?;
         // An fsync/rename error can leave a durable journal. Preserve its staged files
         // and fence this tenant until the manager is reopened.
         preparation.journaled = true;

@@ -1,0 +1,63 @@
+{
+  "base_commit": "cd83246cc8b450f7c901a4726626f54c1d7481be",
+  "validated_source": "validated-source.json",
+  "source_matches_final_full_tests_clippy_fmt_and_release": true,
+  "cargo_incremental": "0",
+  "target": "/var/tmp/idkv-cd83246-review-target-20261107",
+  "control_source": "/var/tmp/idkv-cd83246-control-source-20261107",
+  "control_target": "/var/tmp/idkv-cd83246-control-target-20261107",
+  "commands": [
+    "cargo test --features failpoints -- --test-threads=1",
+    "cargo clippy --all-targets --features failpoints -- -D warnings",
+    "cargo fmt --all -- --check",
+    "cargo build --release --bins"
+  ],
+  "full_test_passed": 204,
+  "new_regressions": 2,
+  "baseline_expected_behavioral_failures": [
+    {
+      "case": "management_interrupts_index_backpressure_and_preserves_recoverable_builds",
+      "exit_code": 101,
+      "result": "expected behavioral failure on cd83246",
+      "log": "control-management_interrupts_index_backpressure_and_preserves_recoverable_builds.log"
+    },
+    {
+      "case": "full_cold_admission_pool_does_not_reject_global_lock_contention",
+      "exit_code": 101,
+      "result": "expected behavioral failure on cd83246",
+      "log": "control-full_cold_admission_pool_does_not_reject_global_lock_contention.log"
+    }
+  ],
+  "confirmed_document_state_checks": 4096,
+  "index_result_checks": 4096,
+  "management_operations_covered": [
+    "close",
+    "quota",
+    "delete"
+  ],
+  "cold_pool_capacity_in_regression": 1,
+  "global_contention_cases": [
+    "registry",
+    "slots"
+  ],
+  "global_contention_deadline_ms": 20,
+  "openapi_matches": true,
+  "native_environment": {
+    "platform": "Linux-7.2.12-orbstack-00394-gbecdd6130068-aarch64-with-glibc2.42",
+    "toolchain": "rustc 1.90.0 (1159e78c4 2025-09-14)",
+    "temp_directory": "/tmp",
+    "temp_filesystem": "tmpfs",
+    "release_binary_sha256": {
+      "tenant-kv": "23097e5a7aa9300b3d3341674b8f9b723957fe46d84798a8066c3986bc588eef",
+      "tenant-kv-restore": "73b61f740e9dc65c6a3527cfb2ad99fe484a71e4155c51180de63a011cbc94fe"
+    }
+  },
+  "runtime_scope": "Linux unit/integration and Router behavior, recovery and data assertions; no new mixed-load qualification, ENOSPC or EIO campaign",
+  "publication": "Validation snapshot before commit; no new GitHub publication requested in this turn",
+  "checks": {
+    "source_hashes": true,
+    "artifact_json_parse": true,
+    "document_links": true,
+    "control_test_input_matches_final": true
+  }
+}

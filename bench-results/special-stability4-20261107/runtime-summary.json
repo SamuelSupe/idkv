@@ -1,0 +1,421 @@
+{
+  "full_tests": 213,
+  "cases": {
+    "admission-before": {
+      "result": "reproduced",
+      "binary_sha256": "fdf23674ec94c85d35d829c8e39ad258d12c4fbf9f892cde1cfc89f9f4173106",
+      "before": {
+        "node": 0,
+        "tenant": "f43460f1-e68f-414a-a501-970454febfb9",
+        "documents": 1500,
+        "sha256": "95aff19a8dda6301c5e49df26899e10939c1d0cd5eca96328df56b87e94b001a",
+        "acknowledged_mismatches": 0
+      },
+      "first_error": {
+        "error": {
+          "code": "IO_ERROR",
+          "message": "Input/output error (os error 5)"
+        }
+      },
+      "visible_jobs_after_error": [],
+      "second_submission": "accepted",
+      "restart_error": "CORRUPTION: multiple active backup jobs for tenant\n",
+      "data_without_backup_service": {
+        "node": 2,
+        "tenant": "f43460f1-e68f-414a-a501-970454febfb9",
+        "documents": 1500,
+        "sha256": "95aff19a8dda6301c5e49df26899e10939c1d0cd5eca96328df56b87e94b001a",
+        "acknowledged_mismatches": 0
+      },
+      "healthy": {
+        "node": 2,
+        "tenant": "9e8b4bbf-cb7b-4138-b651-0727e6d87736",
+        "documents": 20,
+        "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+        "acknowledged_mismatches": 0
+      }
+    },
+    "admission-after": {
+      "result": "passed",
+      "binary_sha256": "e9fb9657f3ee523f096ab6220a160cc36571a610b90d13d6f2015f645cae3a2c",
+      "before": {
+        "node": 0,
+        "tenant": "b47eb3c1-13d4-4c02-b176-6008ab60656e",
+        "documents": 1500,
+        "sha256": "95aff19a8dda6301c5e49df26899e10939c1d0cd5eca96328df56b87e94b001a",
+        "acknowledged_mismatches": 0
+      },
+      "first_error": {
+        "error": {
+          "code": "IO_ERROR",
+          "message": "Input/output error (os error 5)"
+        }
+      },
+      "visible_jobs_after_error": [
+        {
+          "backup": "ba300042-6286-4911-abe2-97fa666881ac",
+          "checkpoint_seq": null,
+          "created_ms": 1794063946728,
+          "error": "job admission uncertain; inspect, retry or forget this job: IO_ERROR: Input/output error (os error 5)",
+          "id": "936ca59b-727d-4823-bc20-60343ed4f621",
+          "operation": {
+            "operation": "create"
+          },
+          "processed_files": 0,
+          "result": null,
+          "reused_bytes": 0,
+          "state": "interrupted",
+          "tenant": "b47eb3c1-13d4-4c02-b176-6008ab60656e",
+          "updated_ms": 1794063946728,
+          "uploaded_bytes": 0
+        }
+      ],
+      "second_submission": "BUSY",
+      "same_job_retry_completed": true,
+      "after_restart": {
+        "node": 0,
+        "tenant": "b47eb3c1-13d4-4c02-b176-6008ab60656e",
+        "documents": 1500,
+        "sha256": "95aff19a8dda6301c5e49df26899e10939c1d0cd5eca96328df56b87e94b001a",
+        "acknowledged_mismatches": 0
+      },
+      "healthy": {
+        "node": 0,
+        "tenant": "a71a13ff-1163-4a3a-8ed1-e8ac7288d6b2",
+        "documents": 20,
+        "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+        "acknowledged_mismatches": 0
+      }
+    },
+    "terminal-before": {
+      "result": "reproduced",
+      "binary_sha256": "fdf23674ec94c85d35d829c8e39ad258d12c4fbf9f892cde1cfc89f9f4173106",
+      "before": {
+        "node": 0,
+        "tenant": "dca7cb88-3129-4822-8fd1-97f8b126ec57",
+        "documents": 1500,
+        "sha256": "95aff19a8dda6301c5e49df26899e10939c1d0cd5eca96328df56b87e94b001a",
+        "acknowledged_mismatches": 0
+      },
+      "first_error": "could not persist final job status; inspect remote completion before retry",
+      "visible_jobs_after_error": [
+        {
+          "backup": "de5e477c-0dea-42dc-a93e-eb78c3961359",
+          "checkpoint_seq": 26,
+          "created_ms": 1794063441034,
+          "error": "could not persist final job status; inspect remote completion before retry",
+          "id": "d1612e85-e226-43f3-96b4-a5f45f0da938",
+          "operation": {
+            "operation": "create"
+          },
+          "processed_files": 13,
+          "result": null,
+          "reused_bytes": 0,
+          "state": "interrupted",
+          "tenant": "dca7cb88-3129-4822-8fd1-97f8b126ec57",
+          "updated_ms": 1794063453366,
+          "uploaded_bytes": 6348713
+        }
+      ],
+      "second_submission": "accepted",
+      "restart_error": "CORRUPTION: multiple active backup jobs for tenant\n",
+      "data_without_backup_service": {
+        "node": 2,
+        "tenant": "dca7cb88-3129-4822-8fd1-97f8b126ec57",
+        "documents": 1500,
+        "sha256": "95aff19a8dda6301c5e49df26899e10939c1d0cd5eca96328df56b87e94b001a",
+        "acknowledged_mismatches": 0
+      },
+      "healthy": {
+        "node": 2,
+        "tenant": "11298327-3c18-46e2-894d-c5c3fc5279eb",
+        "documents": 20,
+        "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+        "acknowledged_mismatches": 0
+      }
+    },
+    "terminal-after": {
+      "result": "passed",
+      "binary_sha256": "e9fb9657f3ee523f096ab6220a160cc36571a610b90d13d6f2015f645cae3a2c",
+      "before": {
+        "node": 0,
+        "tenant": "09cf33ae-2f20-4242-bb95-fa890ee00866",
+        "documents": 1500,
+        "sha256": "95aff19a8dda6301c5e49df26899e10939c1d0cd5eca96328df56b87e94b001a",
+        "acknowledged_mismatches": 0
+      },
+      "first_error": "could not persist final job status; inspect remote completion before retry",
+      "visible_jobs_after_error": [
+        {
+          "backup": "1a84b8c0-8f5f-4c8a-8948-1d0acc834b4b",
+          "checkpoint_seq": 26,
+          "created_ms": 1794063961970,
+          "error": "could not persist final job status; inspect remote completion before retry",
+          "id": "fe4721df-1e5f-47cf-90f8-4ec07e322f4c",
+          "operation": {
+            "operation": "create"
+          },
+          "processed_files": 16,
+          "result": null,
+          "reused_bytes": 0,
+          "state": "interrupted",
+          "tenant": "09cf33ae-2f20-4242-bb95-fa890ee00866",
+          "updated_ms": 1794063974353,
+          "uploaded_bytes": 6349036
+        }
+      ],
+      "second_submission": "BUSY",
+      "same_job_retry_completed": true,
+      "after_restart": {
+        "node": 0,
+        "tenant": "09cf33ae-2f20-4242-bb95-fa890ee00866",
+        "documents": 1500,
+        "sha256": "95aff19a8dda6301c5e49df26899e10939c1d0cd5eca96328df56b87e94b001a",
+        "acknowledged_mismatches": 0
+      },
+      "healthy": {
+        "node": 0,
+        "tenant": "6cac80e1-372f-48c1-8641-bf8b2b5e8834",
+        "documents": 20,
+        "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+        "acknowledged_mismatches": 0
+      }
+    },
+    "isolation-before": {
+      "result": "reproduced",
+      "binary_sha256": "fdf23674ec94c85d35d829c8e39ad258d12c4fbf9f892cde1cfc89f9f4173106",
+      "before": [
+        {
+          "node": 0,
+          "tenant": "6ee6d27e-a2c5-44c9-a842-b574e64bbbf2",
+          "documents": 20,
+          "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 0,
+          "tenant": "35d97623-e226-4b05-a86f-131cae411738",
+          "documents": 20,
+          "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 0,
+          "tenant": "12fab580-4a16-42df-a168-3ecdb571ff37",
+          "documents": 20,
+          "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+          "acknowledged_mismatches": 0
+        }
+      ],
+      "pending_status_polls": 8,
+      "health": {
+        "status": "ok"
+      },
+      "healthy_request": {
+        "result": "RESOURCE_EXHAUSTED",
+        "elapsed_ms": 0.12570404214784503
+      },
+      "after": [
+        {
+          "node": 0,
+          "tenant": "6ee6d27e-a2c5-44c9-a842-b574e64bbbf2",
+          "documents": 20,
+          "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 0,
+          "tenant": "35d97623-e226-4b05-a86f-131cae411738",
+          "documents": 20,
+          "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 0,
+          "tenant": "12fab580-4a16-42df-a168-3ecdb571ff37",
+          "documents": 20,
+          "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+          "acknowledged_mismatches": 0
+        }
+      ],
+      "after_restart": [
+        {
+          "node": 0,
+          "tenant": "6ee6d27e-a2c5-44c9-a842-b574e64bbbf2",
+          "documents": 20,
+          "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 0,
+          "tenant": "35d97623-e226-4b05-a86f-131cae411738",
+          "documents": 20,
+          "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 0,
+          "tenant": "12fab580-4a16-42df-a168-3ecdb571ff37",
+          "documents": 20,
+          "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+          "acknowledged_mismatches": 0
+        }
+      ]
+    },
+    "isolation-after": {
+      "result": "passed",
+      "binary_sha256": "e9fb9657f3ee523f096ab6220a160cc36571a610b90d13d6f2015f645cae3a2c",
+      "before": [
+        {
+          "node": 0,
+          "tenant": "206f791b-e8d8-4b6f-a5a6-959864df9aec",
+          "documents": 20,
+          "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 0,
+          "tenant": "30fed71c-2425-4623-8a1b-41d4b72f53c3",
+          "documents": 20,
+          "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 0,
+          "tenant": "c91f9e51-a5a5-4133-8150-b273ca296536",
+          "documents": 20,
+          "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+          "acknowledged_mismatches": 0
+        }
+      ],
+      "pending_status_polls": 0,
+      "health": {
+        "status": "ok"
+      },
+      "healthy_request": {
+        "result": "ok",
+        "elapsed_ms": 0.20708399824798107
+      },
+      "after": [
+        {
+          "node": 0,
+          "tenant": "206f791b-e8d8-4b6f-a5a6-959864df9aec",
+          "documents": 20,
+          "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 0,
+          "tenant": "30fed71c-2425-4623-8a1b-41d4b72f53c3",
+          "documents": 20,
+          "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 0,
+          "tenant": "c91f9e51-a5a5-4133-8150-b273ca296536",
+          "documents": 20,
+          "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+          "acknowledged_mismatches": 0
+        }
+      ],
+      "after_restart": [
+        {
+          "node": 0,
+          "tenant": "206f791b-e8d8-4b6f-a5a6-959864df9aec",
+          "documents": 20,
+          "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 0,
+          "tenant": "30fed71c-2425-4623-8a1b-41d4b72f53c3",
+          "documents": 20,
+          "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 0,
+          "tenant": "c91f9e51-a5a5-4133-8150-b273ca296536",
+          "documents": 20,
+          "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+          "acknowledged_mismatches": 0
+        }
+      ]
+    },
+    "forget-before": {
+      "result": "reproduced",
+      "binary_sha256": "fdf23674ec94c85d35d829c8e39ad258d12c4fbf9f892cde1cfc89f9f4173106",
+      "before": {
+        "node": 0,
+        "tenant": "c1da8849-453f-4805-b4bf-d4ced7b18391",
+        "documents": 100,
+        "sha256": "3637e11aaffbec8679488a5c0fb6130da5bc4298ed806d6b73aa05213afbfc1c",
+        "acknowledged_mismatches": 0
+      },
+      "first_error": {
+        "error": {
+          "code": "IO_ERROR",
+          "message": "Input/output error (os error 5)"
+        }
+      },
+      "retry": {
+        "error": {
+          "code": "IO_ERROR",
+          "message": "No such file or directory (os error 2)"
+        }
+      },
+      "visible_jobs_after_retry": 1,
+      "after": {
+        "node": 0,
+        "tenant": "c1da8849-453f-4805-b4bf-d4ced7b18391",
+        "documents": 100,
+        "sha256": "3637e11aaffbec8679488a5c0fb6130da5bc4298ed806d6b73aa05213afbfc1c",
+        "acknowledged_mismatches": 0
+      },
+      "after_restart": {
+        "node": 0,
+        "tenant": "c1da8849-453f-4805-b4bf-d4ced7b18391",
+        "documents": 100,
+        "sha256": "3637e11aaffbec8679488a5c0fb6130da5bc4298ed806d6b73aa05213afbfc1c",
+        "acknowledged_mismatches": 0
+      }
+    },
+    "forget-after": {
+      "result": "passed",
+      "binary_sha256": "e9fb9657f3ee523f096ab6220a160cc36571a610b90d13d6f2015f645cae3a2c",
+      "before": {
+        "node": 0,
+        "tenant": "84d4c0aa-84d4-4c90-a401-29b15d102070",
+        "documents": 100,
+        "sha256": "3637e11aaffbec8679488a5c0fb6130da5bc4298ed806d6b73aa05213afbfc1c",
+        "acknowledged_mismatches": 0
+      },
+      "first_error": {
+        "error": {
+          "code": "IO_ERROR",
+          "message": "Input/output error (os error 5)"
+        }
+      },
+      "retry": "ok",
+      "visible_jobs_after_retry": 0,
+      "after": {
+        "node": 0,
+        "tenant": "84d4c0aa-84d4-4c90-a401-29b15d102070",
+        "documents": 100,
+        "sha256": "3637e11aaffbec8679488a5c0fb6130da5bc4298ed806d6b73aa05213afbfc1c",
+        "acknowledged_mismatches": 0
+      },
+      "after_restart": {
+        "node": 0,
+        "tenant": "84d4c0aa-84d4-4c90-a401-29b15d102070",
+        "documents": 100,
+        "sha256": "3637e11aaffbec8679488a5c0fb6130da5bc4298ed806d6b73aa05213afbfc1c",
+        "acknowledged_mismatches": 0
+      }
+    }
+  },
+  "final_document_state_checks": 6520,
+  "mismatches": 0,
+  "scope": "Repeated ACK model checks; controlled metadata I/O delays/EIO and process termination, not hardware power loss or S3 qualification"
+}

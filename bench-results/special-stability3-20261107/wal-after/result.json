@@ -1,0 +1,49 @@
+{
+  "result": "passed",
+  "binary_sha256": "fdf23674ec94c85d35d829c8e39ad258d12c4fbf9f892cde1cfc89f9f4173106",
+  "before": {
+    "node": 0,
+    "tenant": "d06bb1bb-0af1-47e6-9ce7-95dc4cea1c05",
+    "documents": 1500,
+    "sha256": "95aff19a8dda6301c5e49df26899e10939c1d0cd5eca96328df56b87e94b001a",
+    "acknowledged_mismatches": 0
+  },
+  "fault": {
+    "error": {
+      "code": "COMMIT_UNKNOWN",
+      "message": "IO_ERROR: Input/output error (os error 5)"
+    }
+  },
+  "recovered_while_hashing": true,
+  "recovery_attempt_errors": {},
+  "hash_still_active_at_recovery_check": true,
+  "safe_retry_ms": 4.95906500145793,
+  "healthy_during_fault": {
+    "node": 0,
+    "tenant": "33500ef1-f3dd-4388-8b37-9dba612eaf10",
+    "documents": 20,
+    "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+    "acknowledged_mismatches": 0
+  },
+  "after_recovery": {
+    "node": 0,
+    "tenant": "d06bb1bb-0af1-47e6-9ce7-95dc4cea1c05",
+    "documents": 1501,
+    "sha256": "e187d9000713d4c019fa2364b600fcd25e03e1886a100168b6076b2b76720cd8",
+    "acknowledged_mismatches": 0
+  },
+  "after_restart": {
+    "node": 0,
+    "tenant": "d06bb1bb-0af1-47e6-9ce7-95dc4cea1c05",
+    "documents": 1501,
+    "sha256": "e187d9000713d4c019fa2364b600fcd25e03e1886a100168b6076b2b76720cd8",
+    "acknowledged_mismatches": 0
+  },
+  "healthy_after_restart": {
+    "node": 0,
+    "tenant": "33500ef1-f3dd-4388-8b37-9dba612eaf10",
+    "documents": 20,
+    "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+    "acknowledged_mismatches": 0
+  }
+}

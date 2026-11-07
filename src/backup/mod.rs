@@ -37,7 +37,7 @@ use uuid::Uuid;
 
 struct State {
     jobs: BTreeMap<Uuid, BackupJob>,
-    active: HashSet<Uuid>,
+    active: HashMap<Uuid, Uuid>,
 }
 struct Inner {
     store: Store,
@@ -179,7 +179,7 @@ impl BackupService {
         };
         let op = op_result?;
         let mut jobs = BTreeMap::new();
-        let mut active = HashSet::new();
+        let mut active = HashMap::new();
         let mut resume = Vec::new();
         for entry in fs::read_dir(&jobs_path)? {
             let path = entry?.path();
@@ -202,7 +202,7 @@ impl BackupService {
                             .into(),
                     );
                 } else {
-                    if !active.insert(job.tenant) {
+                    if active.insert(job.tenant, job.id).is_some() {
                         return Err(Error::corrupt("multiple active backup jobs for tenant"));
                     }
                     job.state = JobState::Queued;
@@ -284,8 +284,12 @@ impl BackupService {
         {
             return Err(Error::invalid("keep_last must be 1..4096"));
         }
+        let lock = inner.tenant_lock(tenant);
+        let _tenant = lock
+            .try_lock()
+            .ok_or_else(|| Error::new("BUSY", "tenant backup operation active"))?;
         let mut state = inner.state.lock();
-        if state.active.contains(&tenant) {
+        if state.active.contains_key(&tenant) {
             return Err(Error::new("BUSY", "tenant already has a backup operation"));
         }
         if state.jobs.len() >= inner.config.max_jobs {
@@ -312,13 +316,10 @@ impl BackupService {
             result: None,
             error: None,
         };
-        atomic_json(&inner.job_path(job.id), &job)?;
         state.jobs.insert(job.id, job.clone());
-        state.active.insert(tenant);
-        inner
-            .sender
-            .try_send(job.id)
-            .map_err(|_| Error::limit("backup queue"))?;
+        state.active.insert(tenant, job.id);
+        drop(state);
+        inner.queue_job(&job)?;
         Ok(job)
     }
     pub fn job(&self, tenant: Uuid, id: Uuid) -> Result<BackupJob> {
@@ -347,8 +348,16 @@ impl BackupService {
     /// operation after inspecting the database, because their result can be unknown.
     pub fn retry(&self, tenant: Uuid, id: Uuid) -> Result<BackupJob> {
         let inner = &self.owner.inner;
+        let lock = inner.tenant_lock(tenant);
+        let _tenant = lock
+            .try_lock()
+            .ok_or_else(|| Error::new("BUSY", "tenant backup operation active"))?;
         let mut state = inner.state.lock();
-        if state.active.contains(&tenant) {
+        if state
+            .active
+            .get(&tenant)
+            .is_some_and(|active| *active != id)
+        {
             return Err(Error::new("BUSY", "tenant backup operation active"));
         }
         let mut job = state
@@ -357,6 +366,9 @@ impl BackupService {
             .filter(|j| j.tenant == tenant)
             .cloned()
             .ok_or_else(|| Error::missing("backup job"))?;
+        if state.active.get(&tenant) == Some(&id) && !job.state.terminal() {
+            return Err(Error::new("BUSY", "tenant backup operation active"));
+        }
         if !matches!(job.state, JobState::Failed | JobState::Interrupted)
             || matches!(
                 job.operation,
@@ -373,23 +385,26 @@ impl BackupService {
         job.uploaded_bytes = 0;
         job.reused_bytes = 0;
         job.processed_files = 0;
-        atomic_json(&inner.job_path(id), &job)?;
         state.jobs.insert(id, job.clone());
-        state.active.insert(tenant);
-        inner
-            .sender
-            .try_send(id)
-            .map_err(|_| Error::limit("backup queue"))?;
+        state.active.insert(tenant, id);
+        drop(state);
+        inner.queue_job(&job)?;
         Ok(job)
     }
     /// Remove local terminal-job state and staging only; remote backups are retained.
     pub fn forget(&self, tenant: Uuid, id: Uuid) -> Result<()> {
         let inner = &self.owner.inner;
-        let mut state = inner.state.lock();
-        let job = state
+        let lock = inner.tenant_lock(tenant);
+        let _tenant = lock
+            .try_lock()
+            .ok_or_else(|| Error::new("BUSY", "tenant backup operation active"))?;
+        let job = inner
+            .state
+            .lock()
             .jobs
             .get(&id)
             .filter(|j| j.tenant == tenant)
+            .cloned()
             .ok_or_else(|| Error::missing("backup job"))?;
         if !job.state.terminal() {
             return Err(Error::new("BUSY", "backup job is active"));
@@ -400,9 +415,16 @@ impl BackupService {
             reject_symlink(&path)?;
             fs::remove_dir_all(path)?;
         }
-        fs::remove_file(inner.job_path(id))?;
+        match fs::remove_file(inner.job_path(id)) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(error.into()),
+            _ => {}
+        }
         sync_dir(&inner.jobs_path)?;
+        let mut state = inner.state.lock();
         state.jobs.remove(&id);
+        if state.active.get(&tenant) == Some(&id) {
+            state.active.remove(&tenant);
+        }
         Ok(())
     }
     /// Lists only fully published remote snapshots. This is a blocking network operation.
@@ -419,6 +441,27 @@ impl BackupService {
     }
 }
 impl Inner {
+    // Admission reserves the row and tenant before publishing. An fsync error
+    // may follow rename: retain that ownership until retry/forget or restart
+    // resolves the same job, instead of admitting a second durable queued job.
+    fn queue_job(&self, job: &BackupJob) -> Result<()> {
+        let result = (|| {
+            atomic_json(&self.job_path(job.id), job)?;
+            crate::storage::errorpoint("backup_job_queued_published")?;
+            self.sender
+                .try_send(job.id)
+                .map_err(|_| Error::limit("backup queue"))
+        })();
+        if let Err(error) = &result {
+            let mut state = self.state.lock();
+            let current = state.jobs.get_mut(&job.id).unwrap();
+            current.state = JobState::Interrupted;
+            current.error = Some(format!(
+                "job admission uncertain; inspect, retry or forget this job: {error}"
+            ));
+        }
+        result
+    }
     fn job_path(&self, id: Uuid) -> PathBuf {
         self.jobs_path.join(format!("{id}.json"))
     }
@@ -430,17 +473,27 @@ impl Inner {
             .clone()
     }
     fn update(&self, id: Uuid, f: impl FnOnce(&mut BackupJob)) -> Result<()> {
-        let mut state = self.state.lock();
-        let mut job = state
+        let job = self.persist_update(id, f)?;
+        self.state.lock().jobs.insert(id, job);
+        Ok(())
+    }
+    fn persist_update(&self, id: Uuid, f: impl FnOnce(&mut BackupJob)) -> Result<BackupJob> {
+        let mut job = self
+            .state
+            .lock()
             .jobs
             .get(&id)
             .ok_or_else(|| Error::missing("backup job"))?
             .clone();
         f(&mut job);
         job.updated_ms = now_ms();
+        if job.state.terminal() {
+            crate::storage::errorpoint("backup_job_terminal_publish")?;
+        }
         atomic_json(&self.job_path(id), &job)?;
-        state.jobs.insert(id, job);
-        Ok(())
+        // The worker owns the tenant through terminal publication and cleanup;
+        // readers can observe the previous durable phase while this I/O runs.
+        Ok(job)
     }
 
     fn progress(&self, id: Uuid, uploaded_bytes: u64, reused_bytes: u64) -> Result<()> {
@@ -473,4 +526,68 @@ pub(crate) fn remote_error(e: opendal::Error) -> Error {
 }
 fn hash(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn readers_and_forget_remain_usable_after_slow_or_uncertain_metadata_updates() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path().join("data"), crate::Options::default()).unwrap();
+        let id = store.create_tenant("metadata").unwrap().id;
+        let service = BackupService::open(
+            store,
+            BackupConfig {
+                service: "fs".into(),
+                options: HashMap::from([(
+                    "root".into(),
+                    dir.path().join("remote").to_string_lossy().into(),
+                )]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let job = service.submit(id, BackupOperation::Create).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while service.job(id, job.id).unwrap().state != JobState::Completed {
+            assert!(Instant::now() < deadline);
+            thread::sleep(Duration::from_millis(10));
+        }
+        let inner = service.owner.inner.clone();
+        let (entered, ready) = mpsc::channel();
+        let (release, wait) = mpsc::channel();
+        let updating = thread::spawn(move || {
+            let lock = inner.tenant_lock(id);
+            let _tenant = lock.lock();
+            inner
+                .update(job.id, |_| {
+                    entered.send(()).unwrap();
+                    wait.recv_timeout(Duration::from_secs(5)).unwrap();
+                })
+                .unwrap();
+        });
+        ready.recv_timeout(Duration::from_secs(5)).unwrap();
+        let reader = service.clone();
+        let (sent, received) = mpsc::channel();
+        let reading = thread::spawn(move || {
+            sent.send(reader.jobs(id)).unwrap();
+        });
+        let observed = received.recv_timeout(Duration::from_millis(200));
+        release.send(()).unwrap();
+        updating.join().unwrap();
+        reading.join().unwrap();
+        assert_eq!(
+            observed
+                .expect("task status blocked behind another metadata update")
+                .len(),
+            1
+        );
+        // A failed directory sync after unlink can leave only the in-memory row.
+        // Retrying forget must finish this state instead of being stuck at ENOENT.
+        fs::remove_file(service.owner.inner.job_path(job.id)).unwrap();
+        service.forget(id, job.id).unwrap();
+        assert!(service.jobs(id).is_empty());
+    }
 }

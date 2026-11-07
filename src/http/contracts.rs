@@ -125,7 +125,7 @@ pub(super) fn extend(api: &mut Value) {
         &["ready", "draining", "role"],
     );
     schemas["Capabilities"] = object(
-        json!({"version":text,"replication_protocol":{"const":3},"storage_registry":{"const":4},"features":{"type":"array","items":text}}),
+        json!({"version":text,"replication_protocol":{"const":3},"storage_registry":{"const":crate::tenant::STORAGE_REGISTRY_VERSION},"features":{"type":"array","items":text}}),
         &[
             "version",
             "replication_protocol",

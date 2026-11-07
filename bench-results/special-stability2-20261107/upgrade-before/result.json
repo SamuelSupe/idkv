@@ -1,0 +1,44 @@
+{
+  "result": "reproduced",
+  "binary_sha256": "2bc72c8f5fca9e53dfe1c7aaffbf87c35e2b0e7310bca0f39099def4470afbb0",
+  "before": {
+    "node": 0,
+    "tenant": "055d0631-ab9c-47d7-a0f7-a0c0da343f4a",
+    "documents": 100,
+    "sha256": "3637e11aaffbec8679488a5c0fb6130da5bc4298ed806d6b73aa05213afbfc1c",
+    "acknowledged_mismatches": 0
+  },
+  "full_disk": {
+    "available_before": 228864000,
+    "available_after": 0,
+    "filler_bytes": 228859904,
+    "mount": "TARGET                                                    SOURCE     FSTYPE OPTIONS\n/var/tmp/idkv-stability2-upgrade-baseline-20261107/volume /dev/loop0 ext4   rw,relatime\n"
+  },
+  "legacy_restart_ms": 26.372154999990016,
+  "legacy_full_disk": {
+    "node": 0,
+    "tenant": "055d0631-ab9c-47d7-a0f7-a0c0da343f4a",
+    "documents": 100,
+    "sha256": "3637e11aaffbec8679488a5c0fb6130da5bc4298ed806d6b73aa05213afbfc1c",
+    "acknowledged_mismatches": 0
+  },
+  "new_full_disk": "startup_failed",
+  "startup_error": "IO_ERROR: No space left on device (os error 28)\n",
+  "after_freeing_space": {
+    "node": 0,
+    "tenant": "055d0631-ab9c-47d7-a0f7-a0c0da343f4a",
+    "documents": 100,
+    "sha256": "3637e11aaffbec8679488a5c0fb6130da5bc4298ed806d6b73aa05213afbfc1c",
+    "acknowledged_mismatches": 0
+  },
+  "persisted_registry": 5,
+  "advertised_registry": 4,
+  "openapi_registry": 4,
+  "after_v5_restart": {
+    "node": 0,
+    "tenant": "055d0631-ab9c-47d7-a0f7-a0c0da343f4a",
+    "documents": 100,
+    "sha256": "3637e11aaffbec8679488a5c0fb6130da5bc4298ed806d6b73aa05213afbfc1c",
+    "acknowledged_mismatches": 0
+  }
+}

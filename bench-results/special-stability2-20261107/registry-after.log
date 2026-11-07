@@ -1,0 +1,12 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.76s
+     Running unittests src/lib.rs (/var/tmp/idkv-stability2-target-20261107/debug/deps/tenant_kv-321137334cf1859a)
+
+running 3 tests
+test tenant::manager::registry::tests::legacy_read_startup_defers_upgrade_until_registry_publication ... ok
+test tenant::manager::registry::tests::capacity_rejection_keeps_registry_and_staging_unchanged ... ok
+REGISTRY_JSON {"compact_bytes":8645372,"confirmed_checks":3,"legacy_bytes":16777152,"legacy_deleted_tenants":56870,"restarts_with_successful_create":3,"uuid_reuse_rejected":true}
+test tenant::manager::registry::tests::legacy_full_history_migrates_without_losing_status_or_uuid_protection ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 80 filtered out; finished in 10.97s
+

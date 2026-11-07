@@ -1,0 +1,21 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.05s
+     Running unittests src/lib.rs (/var/tmp/idkv-cd83246-control-target-20261107/debug/deps/tenant_kv-321137334cf1859a)
+
+running 1 test
+test tenant::manager::admission::tests::management_interrupts_index_backpressure_and_preserves_recoverable_builds ... FAILED
+
+failures:
+
+---- tenant::manager::admission::tests::management_interrupts_index_backpressure_and_preserves_recoverable_builds stdout ----
+
+thread 'tenant::manager::admission::tests::management_interrupts_index_backpressure_and_preserves_recoverable_builds' panicked at src/tenant/manager/admission.rs:226:21:
+called `Result::unwrap()` on an `Err` value: Error { code: "BUSY", message: "tenant handles did not drain within one second", location: None }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tenant::manager::admission::tests::management_interrupts_index_backpressure_and_preserves_recoverable_builds
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 76 filtered out; finished in 5.65s
+
+error: test failed, to rerun pass `--lib`

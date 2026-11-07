@@ -1,0 +1,56 @@
+{
+  "base_git_head": "cd83246cc8b450f7c901a4726626f54c1d7481be",
+  "baseline_source": "../special-stability2-20261107/validated-source.json",
+  "baseline_binary": "/var/tmp/idkv-stability2-bin-20261107/tenant-kv",
+  "baseline_sha256": "bd0f6b04d5e27a049893a8ff1456309f9ae25efa76b90a903c5046aa922622b9",
+  "changed_since_previous_source": [
+    "src/backup/jobs.rs",
+    "src/tenant/manager/lifecycle.rs"
+  ],
+  "source": "validated-source.json",
+  "includes_prior_uncommitted_repairs": true,
+  "target": "/var/tmp/idkv-stability3-target-20261107",
+  "tmpdir": "/var/tmp/idkv-stability3-tmp-20261107",
+  "cargo_incremental": 0,
+  "runtime": "OrbStack Ubuntu Linux aarch64, native Btrfs TMPDIR and target; real HTTP service with OpenDAL fs",
+  "probe_sources": {
+    "backup-drain.py": "ee2dae14b693b2ba800abec1afe2fea0b782e1278e97471f1ef58b032d36b7f4",
+    "backup-wal-recovery.py": "2a5ac5c5d61a9662923e96e72edea35a8f87adda43260a5ccd119e326acf2d10",
+    "checkpoint-read-delay.c": "8a2d19154d4568a1ac988ba5ac024b0f01a20888cb5fa1ccd785716467132934",
+    "local-backup-drain.py": "755c708694a20af244b7c1a339ca7e7fb0824bf73a327db99740994775ecea2a"
+  },
+  "unchanged_helpers": {
+    "scripts/qualification.py": "95b06478ffbec39d71c880daf3aaf488c23d8caedb90a570c28a6b39c609e786",
+    "scripts/recovery_drill.py": "d4ec78b4cc4b816087bec7d9f388810cd2bfed050a98f94dd800dbe0fe8160c9",
+    "scripts/replication_demo.py": "8b357110e4876188a05cb095bbd63599ade8162d690b67a9967bd711fd61073b",
+    "scripts/wal_io_fault.c": "6e8fc64226454eb176e1b83983207345ccdc82d16cf59ad16e7417d747c2392f"
+  },
+  "probe_adjustment": "The first local probe used Lab.verify during the paused local backup; its /check conflicts with the existing per-tenant maintenance permit. Final probes compare ordinary reads during the pause and use full verification after release. The interposer is built with -U_FORTIFY_SOURCE to define libc pread entry points; production build flags are unchanged.",
+  "publication": "local uncommitted changes; no commit or push requested",
+  "full_test_passed": 211,
+  "source_matches_full_tests_clippy_fmt_release": true,
+  "binaries": {
+    "tenant-kv": "fdf23674ec94c85d35d829c8e39ad258d12c4fbf9f892cde1cfc89f9f4173106",
+    "tenant-kv-restore": "d7bee3dbc88df9a7ce1f65e6c5b619bed1807bb34887e89ccd95d4c2aca11580"
+  },
+  "regression": "one new test, demonstrated failing before the fix",
+  "clippy": "all-targets, failpoints, -D warnings: passed",
+  "format": "passed",
+  "release_build": "passed",
+  "runtime_summary": "runtime-summary.json",
+  "supplemental_remote_probe_sha256": "7958992a531b3caa8c616ba8f03c2d50a127f8836449aa58a727c63435d7ddab",
+  "validation_commands": [
+    "CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/var/tmp/idkv-stability3-target-20261107 TMPDIR=/var/tmp/idkv-stability3-tmp-20261107 cargo test --features failpoints -- --test-threads=1",
+    "cargo clippy --all-targets --features failpoints -- -D warnings",
+    "cargo fmt --all -- --check",
+    "cargo build --release --bins"
+  ],
+  "runtime_commands": [
+    "backup-drain.py --binary /var/tmp/idkv-stability2-bin-20261107/tenant-kv --root /var/tmp/idkv-stability3-backup-proof-before-20261107 --expect-busy",
+    "backup-drain.py --binary /var/tmp/idkv-stability3-bin-20261107/tenant-kv --root /var/tmp/idkv-stability3-backup-proof-after-20261107",
+    "local-backup-drain.py --binary /var/tmp/idkv-stability2-bin-20261107/tenant-kv --root /var/tmp/idkv-stability3-local-baseline-final-20261107 --expect-busy",
+    "local-backup-drain.py --binary /var/tmp/idkv-stability3-bin-20261107/tenant-kv --root /var/tmp/idkv-stability3-local-after-20261107",
+    "backup-wal-recovery.py --binary /var/tmp/idkv-stability2-bin-20261107/tenant-kv --root /var/tmp/idkv-stability3-wal-before-20261107 --expect-blocked",
+    "backup-wal-recovery.py --binary /var/tmp/idkv-stability3-bin-20261107/tenant-kv --root /var/tmp/idkv-stability3-wal-after-20261107"
+  ]
+}

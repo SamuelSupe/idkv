@@ -1,0 +1,98 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.07s
+     Running unittests src/lib.rs (/var/tmp/idkv-cd83246-review-target-20261107/debug/deps/tenant_kv-321137334cf1859a)
+
+running 77 tests
+test backup::transfer::tests::staging_counts_uncovered_files_and_failed_workspaces ... ok
+test codec::typed::tests::typed_records_match_json_decoder_and_reject_malformed_nodes ... ok
+test http::body::tests::response_budget_failure_preserves_completed_mutation_status ... ok
+test http::transport::tests::connections_are_bounded_and_stalled_writes_expire ... ok
+test http::transport::tests::header_and_keep_alive_deadlines_release_idle_connections ... ok
+test http::transport::tests::slow_handler_is_not_a_socket_write_timeout ... ok
+test identity::time::tests::normal_clock_discipline_refreshes_the_anchor_but_jumps_still_fail_closed ... ok
+test identity::time::tests::timezone_precision_and_clock_discontinuities ... ok
+test replication::client::tests::checkpoint_free_space_reserve_rejects_replication_and_local_backup_without_poisoning_writes ... ok
+test replication::client::tests::checkpoint_preparation_does_not_lock_out_other_tenant_log_progress ... ok
+test replication::client::tests::export_cleanup_failure_does_not_fail_logs_and_is_retried ... ok
+test replication::client::tests::failed_preparation_releases_the_slot_for_a_new_export ... ok
+test replication::client::tests::transient_log_busy_uses_short_backoff_without_resetting_initialization_state ... FAILED
+test replication::client::tests::unwinding_checkpoint_preparation_releases_the_reserved_export ... ok
+test resources::tests::abandoned_reads_skip_io_but_dropped_write_handles_still_execute ... ok
+test resources::tests::durable_io_bypasses_read_backlog_without_starving_reads ... ok
+test resources::tests::reads_overtake_bulk_output_while_background_io_still_progresses ... ok
+test storage::cache::tests::a_failed_reservation_reclaims_only_the_cache_space_it_needs ... ok
+test storage::engine::maintenance::tests::compaction_flushes_growing_memtables_before_finishing_the_merge ... ok
+test storage::engine::maintenance::tests::disk_reconciliation_accounts_for_concurrent_wal_growth ... ok
+test storage::engine::maintenance::tests::flush_output_overtakes_a_read_backlog_and_keeps_confirmed_data ... ok
+test storage::engine::maintenance::tests::idle_disk_accounting_tracks_wal_growth_and_checks_drift_near_quota ... ok
+test storage::engine::maintenance::tests::missing_checkpointed_wal_does_not_block_flush_or_lose_current_data ... ok
+test storage::engine::maintenance::tests::wal_rotation_does_not_hold_writer_lock_during_durable_publication ... ok
+test storage::engine::read::tests::disjoint_ranges_preserve_spanning_versions_and_tombstones ... ok
+test storage::engine::read::tests::keys_created_after_a_snapshot_still_consume_the_scan_budget ... ok
+test storage::engine::replication::tests::malformed_page_is_rejected_before_mutation_and_valid_replay_survives_restart ... ok
+test storage::engine::write::tests::active_replication_leases_survive_long_preparation_and_transfer_but_not_idle_expiry ... ok
+test storage::engine::write::tests::cleanup_can_use_reserved_disk_headroom_when_user_writes_are_backpressured ... ok
+test storage::engine::write::tests::consistency_deadline_does_not_wait_for_the_writer_mutex ... ok
+test storage::engine::write::tests::hot_retries_do_not_keep_an_uncertain_engine_alive ... ok
+test storage::engine::write::tests::index_admission_waits_for_compaction_before_running_the_transaction_once ... ok
+test storage::engine::write::tests::query_deadline_does_not_become_a_total_write_or_maintenance_deadline ... ok
+test storage::engine::write::tests::read_only_transaction_waits_for_the_observed_group_commit ... ok
+test storage::engine::write::tests::saturated_read_queue_cannot_poison_another_tenants_writer ... ok
+test storage::engine::write::tests::snapshot_admission_failure_does_not_leak_disk_reservations ... ok
+test storage::engine::write::tests::transaction_evaluation_does_not_block_preceding_commit_confirmation ... ok
+test storage::engine::write::tests::transaction_prefix_scans_charge_tombstones_and_leave_failed_work_uncommitted ... ok
+test storage::engine::write::tests::transaction_snapshot_contains_its_write_when_flush_rotates_during_evaluation ... ok
+test storage::engine::write::tests::uncertain_wal_tail_cannot_be_fenced_or_cached_as_the_old_position ... ok
+test storage::sst::point_get_preserves_versions_and_tombstones_across_index_partitions ... ok
+test storage::sst::prefix_compressed_keys_cannot_bypass_the_decoded_frame_budget ... ok
+test storage::wal::tests::buffered_replication_preserves_frames_limits_and_pinned_end ... ok
+test tenant::catalog::tests::collection_resolution_preserves_snapshot_generations ... ok
+test tenant::manager::admission::tests::draining_interrupts_consistency_waits_and_timeout_reopens_old_readers ... ok
+test tenant::manager::admission::tests::failed_management_drain_preserves_snapshots_and_does_not_pin_node_authority ... ok
+test tenant::manager::admission::tests::full_cold_admission_pool_does_not_reject_global_lock_contention ... ok
+test tenant::manager::admission::tests::management_interrupts_index_backpressure_and_preserves_recoverable_builds ... ok
+test tenant::manager::lifecycle::tests::a_tenant_backup_lock_does_not_block_another_tenants_backup ... ok
+test tenant::manager::quota::tests::a_failed_shrink_keeps_existing_data_readable_across_restart ... ok
+test tenant::manager::quota::tests::quota_validation_does_not_hold_the_node_barrier_or_slot_during_io ... ok
+test tenant::manager::quota::tests::replica_quota_shrink_flushes_a_lagging_checkpoint_under_the_old_budget ... ok
+test tenant::manager::replication::tests::cached_role_positions_retry_brief_contention_and_bound_a_persistent_lock ... ok
+test tenant::manager::replication::tests::replica_quota_updates_wait_until_restore_preparation_finishes ... ok
+test tenant::manager::tests::a_full_maintenance_queue_keeps_scheduling_later_tenants ... ok
+test tenant::manager::tests::a_temporary_position_reader_does_not_close_a_reused_or_reopened_engine ... ok
+test tenant::manager::tests::cancelled_cold_get_admission_does_not_hold_execution_permits ... ok
+test tenant::manager::tests::cold_export_reuses_the_open_engine_until_its_log_pages_catch_up ... ok
+test tenant::manager::tests::deleted_tenant_history_does_not_consume_live_tenant_capacity ... ok
+test tenant::manager::tests::io_open_failures_are_cached_briefly_and_recover_without_manual_close ... ok
+test tenant::manager::tests::locked_cold_tenant_does_not_block_async_health_or_timers ... ok
+test tenant::manager::tests::management_drains_overlapping_short_readers_before_changing_quota ... ok
+test tenant::manager::tests::replica_checkpoint_validation_shares_the_serving_tenant_budget ... ok
+test tenant::retention::tests::cached_retention_metadata_observes_changes_within_the_same_atomic_batch ... ok
+test tenant::retention::tests::expired_receipts_never_repeat_generated_writes_and_current_documents_survive ... ok
+test tenant::retention::tests::expiry_batches_resume_after_tombstones_and_revisit_backdated_insertions ... ok
+test tenant::retention::tests::knowledge_and_history_gc_advance_through_tombstones_without_rolling_back_expiry ... ok
+test tenant::retention::tests::later_history_sweeps_seek_past_the_previously_reclaimed_identifier_tail ... ok
+test tenant::retention::tests::persisted_expiry_watermark_rejects_retry_after_clock_rollback ... ok
+test tenant::retention::tests::physical_gc_page_observes_deletions_staged_in_the_same_transaction ... ok
+test tenant::retention::tests::receipt_metadata_does_not_reduce_the_public_document_batch_limit ... ok
+test tenant::retention::tests::retention_makes_progress_with_small_byte_batches_and_long_receipt_keys ... ok
+test tenant::retention::tests::retention_migration_pages_physical_records_instead_of_stalling_at_tombstones ... ok
+test tenant::retention::tests::rolling_publications_continue_beyond_the_collection_limit ... ok
+test tenant::retention::tests::shortening_policy_cannot_remove_receipts_while_the_original_token_is_valid ... ok
+test tenant::retention::tests::superseded_publications_preserve_shared_current_collections_and_old_snapshots ... ok
+test tenant::retention::tests::temporal_gc_keeps_predecessor_baselines_including_empty_timelines_and_latest_state ... ok
+
+failures:
+
+---- replication::client::tests::transient_log_busy_uses_short_backoff_without_resetting_initialization_state stdout ----
+
+thread 'replication::client::tests::transient_log_busy_uses_short_backoff_without_resetting_initialization_state' panicked at src/replication/client_tests.rs:121:44:
+no entry found for key
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+tenant 556b5f4e-7c3a-49c2-b321-d128498e10f6 clean-close watermark: IO_ERROR: No such file or directory (os error 2)
+
+
+failures:
+    replication::client::tests::transient_log_busy_uses_short_backoff_without_resetting_initialization_state
+
+test result: FAILED. 76 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 78.08s
+
+error: test failed, to rerun pass `--lib`

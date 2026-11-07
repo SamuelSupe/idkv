@@ -1,0 +1,28 @@
+{
+  "result": "passed",
+  "registry_version": 5,
+  "old_reader_exit_code": 1,
+  "old_reader_rejected_without_registry_change": true,
+  "retired_status_preserved": true,
+  "metrics": {
+    "tkv_registry_deleted_tenants": 1,
+    "tkv_registry_metadata_bytes": 522,
+    "tkv_registry_metadata_capacity_bytes": 16777216
+  },
+  "verification": [
+    {
+      "node": 0,
+      "tenant": "3fc06408-2c1e-48c0-8362-930914ef91be",
+      "documents": 100,
+      "sha256": "b350ebc82b11c5a9c88b6b18e2549a33d7bc86e7cc052335a7371647fd8e8f88",
+      "acknowledged_mismatches": 0
+    },
+    {
+      "node": 0,
+      "tenant": "3fc06408-2c1e-48c0-8362-930914ef91be",
+      "documents": 100,
+      "sha256": "b350ebc82b11c5a9c88b6b18e2549a33d7bc86e7cc052335a7371647fd8e8f88",
+      "acknowledged_mismatches": 0
+    }
+  ]
+}

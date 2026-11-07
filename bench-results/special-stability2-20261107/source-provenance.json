@@ -1,0 +1,59 @@
+{
+  "base_git_head": "cd83246cc8b450f7c901a4726626f54c1d7481be",
+  "includes_prior_uncommitted_repairs": true,
+  "changed_since_previous_validated_source": [
+    "src/http/contracts.rs",
+    "src/replication/mod.rs",
+    "src/tenant/manager/lifecycle.rs",
+    "src/tenant/manager/quota.rs",
+    "src/tenant/manager/registry.rs",
+    "src/tenant/manager/replication.rs",
+    "src/tenant/manager.rs",
+    "src/tenant/mod.rs",
+    "tests/http.rs"
+  ],
+  "baseline_binary": "/var/tmp/idkv-special-fix-bin-20261107/tenant-kv",
+  "baseline_binary_sha256": "2bc72c8f5fca9e53dfe1c7aaffbf87c35e2b0e7310bca0f39099def4470afbb0",
+  "legacy_binary": "/var/tmp/idkv-special-audit-bin-20261107/tenant-kv",
+  "legacy_binary_sha256": "5084cb2163e1039464d737df77dc97e624f134058440df7bd89eb9d85607a6e8",
+  "environment": "OrbStack Ubuntu Linux aarch64, rustc/cargo 1.90.0, native Btrfs target and TMPDIR; real isolated 256 MiB ext4 loop volumes",
+  "target": "/var/tmp/idkv-stability2-target-20261107",
+  "tmpdir": "/var/tmp/idkv-stability2-tmp-20261107",
+  "cargo_incremental": 0,
+  "repro_scripts": {
+    "full-disk-upgrade.py": "fa49f095536a98ab885fa68de03bd63323b15499b85ab6add66f18d08d72243e",
+    "recovery-pressure.py": "99acf15be87ec7b403bd211038cfe28c7436d5d53955b2a2af419aba584a9734"
+  },
+  "repro_helpers": {
+    "scripts/qualification.py": "95b06478ffbec39d71c880daf3aaf488c23d8caedb90a570c28a6b39c609e786",
+    "scripts/qualification_faults.py": "cda72fcda67d1a459993419abc4bf04197077bd72a1bdc1b7e33adefbf7ad17c",
+    "scripts/recovery_drill.py": "d4ec78b4cc4b816087bec7d9f388810cd2bfed050a98f94dd800dbe0fe8160c9",
+    "bench-results/special-stability-fix-20261107/check-v5-compat.py": "a0b0508a096f782ecbe63a3b9b8b220d5f5ff1e5d48de1b737ce4227bc03e3bf"
+  },
+  "full_test_passed": 210,
+  "regressions": "one new test and one extension of the existing HTTP workflow; both demonstrated failures before their production fixes",
+  "source_matches_full_test": true,
+  "binaries": {
+    "tenant-kv": "bd0f6b04d5e27a049893a8ff1456309f9ae25efa76b90a903c5046aa922622b9",
+    "tenant-kv-restore": "886ae96e5476e779e990312eb3cdd4c2f6a52db1ceea7c29c2704c2fed12b2d3"
+  },
+  "source_matches_full_tests_clippy_fmt_release": true,
+  "clippy": "all-targets, failpoints, -D warnings: passed",
+  "format": "passed",
+  "release_build": "passed",
+  "runtime_summary": "runtime-summary.json",
+  "publication": "local uncommitted changes; no commit or push requested",
+  "validation_commands": [
+    "CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/var/tmp/idkv-stability2-target-20261107 TMPDIR=/var/tmp/idkv-stability2-tmp-20261107 cargo test --features failpoints -- --test-threads=1",
+    "cargo clippy --all-targets --features failpoints -- -D warnings",
+    "cargo fmt --all -- --check",
+    "cargo build --release --bins"
+  ],
+  "runtime_commands": [
+    "full-disk-upgrade.py --legacy /var/tmp/idkv-special-audit-bin-20261107/tenant-kv --binary /var/tmp/idkv-special-fix-bin-20261107/tenant-kv --root /var/tmp/idkv-stability2-upgrade-baseline-20261107 --expect-failure",
+    "full-disk-upgrade.py --legacy /var/tmp/idkv-special-audit-bin-20261107/tenant-kv --binary /var/tmp/idkv-stability2-bin-20261107/tenant-kv --root /var/tmp/idkv-stability2-upgrade-after-20261107",
+    "recovery-pressure.py --binary /var/tmp/idkv-special-fix-bin-20261107/tenant-kv --root /var/tmp/idkv-stability2-pressure-before-20261107",
+    "recovery-pressure.py --binary /var/tmp/idkv-stability2-bin-20261107/tenant-kv --root /var/tmp/idkv-stability2-pressure-after-20261107",
+    "check-v5-compat.py --root /var/tmp/idkv-stability2-compat-after-20261107 --binary /var/tmp/idkv-stability2-bin-20261107/tenant-kv --old-binary /var/tmp/idkv-special-audit-bin-20261107/tenant-kv"
+  ]
+}

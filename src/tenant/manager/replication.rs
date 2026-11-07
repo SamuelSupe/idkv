@@ -45,8 +45,8 @@ impl Store {
         {
             let mut registry = self.owner.inner.registry.write();
             let mut next = registry.clone();
-            next.version = 4;
             next.replication_enabled = true;
+            next.prepare_publish()?;
             atomic_json(&self.root().join("control/tenants.json"), &next)?;
             *registry = next;
         }

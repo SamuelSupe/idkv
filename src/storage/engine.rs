@@ -507,7 +507,7 @@ impl Engine {
         if self.draining.load(Ordering::Acquire) {
             return Err(Error::new(
                 "BUSY",
-                "tenant is draining for checkpoint installation",
+                "tenant is draining for an offline operation",
             ));
         }
         Ok(())

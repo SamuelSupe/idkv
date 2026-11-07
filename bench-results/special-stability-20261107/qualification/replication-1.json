@@ -1,0 +1,8 @@
+{
+  "cluster": "c4f5bbac-2993-4eaf-96d4-125ae51fce31",
+  "role": "replica",
+  "peer_url": "http://127.0.0.1:57759",
+  "token_file": "/var/tmp/idkv-special-audit-qualification-20261107/peer-token",
+  "poll_ms": 50,
+  "log_retention_bytes": 268435456
+}

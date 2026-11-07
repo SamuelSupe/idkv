@@ -1,0 +1,71 @@
+{
+  "result": "passed",
+  "binary_sha256": "fdf23674ec94c85d35d829c8e39ad258d12c4fbf9f892cde1cfc89f9f4173106",
+  "before": {
+    "node": 0,
+    "tenant": "7b0c6ba4-a647-4315-bce6-d27ddcf84f15",
+    "documents": 100,
+    "sha256": "3637e11aaffbec8679488a5c0fb6130da5bc4298ed806d6b73aa05213afbfc1c",
+    "acknowledged_mismatches": 0
+  },
+  "healthy_before": {
+    "node": 0,
+    "tenant": "138c72f6-609a-47a4-a98c-df48f57ea22e",
+    "documents": 20,
+    "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+    "acknowledged_mismatches": 0
+  },
+  "delayed_private_file": "/var/tmp/idkv-stability3-local-after-20261107/node-0/backups/7b0c6ba4-a647-4315-bce6-d27ddcf84f15/49578d93-bfaf-45aa-9259-ad9316339faa/sst/a70bab2b-74a8-4e51-8e87-a957f5b818de.sst",
+  "management": [
+    {
+      "operation": "close",
+      "result": "ok",
+      "elapsed_ms": 1.8666749820113182
+    },
+    {
+      "operation": "quota",
+      "result": "ok",
+      "elapsed_ms": 2.579469990450889
+    }
+  ],
+  "during_verification": {
+    "documents": 100,
+    "acknowledged_mismatches": 0
+  },
+  "healthy_during_verification": {
+    "documents": 20,
+    "acknowledged_mismatches": 0
+  },
+  "backup": {
+    "backup": "49578d93-bfaf-45aa-9259-ad9316339faa"
+  },
+  "after": {
+    "node": 0,
+    "tenant": "7b0c6ba4-a647-4315-bce6-d27ddcf84f15",
+    "documents": 100,
+    "sha256": "3637e11aaffbec8679488a5c0fb6130da5bc4298ed806d6b73aa05213afbfc1c",
+    "acknowledged_mismatches": 0
+  },
+  "restored": {
+    "node": 0,
+    "tenant": "7b0c6ba4-a647-4315-bce6-d27ddcf84f15",
+    "documents": 100,
+    "sha256": "3637e11aaffbec8679488a5c0fb6130da5bc4298ed806d6b73aa05213afbfc1c",
+    "acknowledged_mismatches": 0
+  },
+  "quota_after_restore": 268435456,
+  "after_restart": {
+    "node": 0,
+    "tenant": "7b0c6ba4-a647-4315-bce6-d27ddcf84f15",
+    "documents": 100,
+    "sha256": "3637e11aaffbec8679488a5c0fb6130da5bc4298ed806d6b73aa05213afbfc1c",
+    "acknowledged_mismatches": 0
+  },
+  "healthy_after_restart": {
+    "node": 0,
+    "tenant": "138c72f6-609a-47a4-a98c-df48f57ea22e",
+    "documents": 20,
+    "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+    "acknowledged_mismatches": 0
+  }
+}

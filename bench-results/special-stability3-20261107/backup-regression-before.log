@@ -1,0 +1,19 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.56s
+     Running unittests src/lib.rs (/var/tmp/idkv-stability3-target-20261107/debug/deps/tenant_kv-321137334cf1859a)
+
+running 1 test
+
+thread 'backup::jobs::tests::checkpoint_hashing_does_not_keep_the_serving_tenant_open' panicked at src/backup/jobs.rs:326:37:
+private checkpoint hashing pinned the serving tenant: Error { code: "BUSY", message: "tenant handles did not drain within one second", location: None }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test backup::jobs::tests::checkpoint_hashing_does_not_keep_the_serving_tenant_open ... FAILED
+
+failures:
+
+failures:
+    backup::jobs::tests::checkpoint_hashing_does_not_keep_the_serving_tenant_open
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 83 filtered out; finished in 1.35s
+
+error: test failed, to rerun pass `--lib`

@@ -1,0 +1,9 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.16s
+     Running unittests src/lib.rs (/var/tmp/idkv-stability4-target-20261107/debug/deps/tenant_kv-321137334cf1859a)
+
+running 1 test
+test backup::tests::readers_and_forget_remain_usable_after_slow_or_uncertain_metadata_updates ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 84 filtered out; finished in 0.36s
+

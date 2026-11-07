@@ -1,0 +1,53 @@
+[
+  {
+    "attempt": 1,
+    "exit_code": 101,
+    "observed": [
+      {
+        "accepted_shrinks": 308,
+        "attempts": 55,
+        "case": "concurrent-quota-shrink",
+        "final_used": 0,
+        "overshoot": [
+          134217728,
+          67108864
+        ]
+      }
+    ],
+    "log": "counter-repeat-1.log"
+  },
+  {
+    "attempt": 2,
+    "exit_code": 101,
+    "observed": [
+      {
+        "accepted_shrinks": 254,
+        "attempts": 352,
+        "case": "concurrent-quota-shrink",
+        "final_used": 0,
+        "overshoot": [
+          134217728,
+          67108864
+        ]
+      }
+    ],
+    "log": "counter-repeat-2.log"
+  },
+  {
+    "attempt": 3,
+    "exit_code": 101,
+    "observed": [
+      {
+        "accepted_shrinks": 134,
+        "attempts": 75,
+        "case": "concurrent-quota-shrink",
+        "final_used": 0,
+        "overshoot": [
+          134217728,
+          67108864
+        ]
+      }
+    ],
+    "log": "counter-repeat-3.log"
+  }
+]

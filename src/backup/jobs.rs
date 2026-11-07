@@ -7,11 +7,13 @@ impl Inner {
         let Some(job) = self.state.lock().jobs.get(&id).cloned() else {
             return;
         };
+        let lock = self.tenant_lock(job.tenant);
+        let _tenant = lock.lock();
         let result =
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.execute(job.clone())))
                 .unwrap_or_else(|_| Err(Error::new("INTERNAL", "backup worker panicked")));
         let completed = result.is_ok();
-        let persisted = self.update(id, |j| match result {
+        let persisted = self.persist_update(id, |j| match result {
             Ok(result) => {
                 j.state = JobState::Completed;
                 j.result = Some(result);
@@ -26,22 +28,33 @@ impl Inner {
                 j.error = Some(error.to_string());
             }
         });
-        if persisted.is_err() {
-            if let Some(j) = self.state.lock().jobs.get_mut(&id) {
-                j.state = JobState::Interrupted;
-                j.error = Some(
-                    "could not persist final job status; inspect remote completion before retry"
-                        .into(),
-                );
-            }
-        } else if completed {
+        let published = persisted.is_ok();
+        if published && completed {
             let _staging = self.staging.lock();
             let work = self.work_path.join(id.to_string());
             if work.exists() {
                 let _ = fs::remove_dir_all(work);
             }
         }
-        self.state.lock().active.remove(&job.tenant);
+        let mut state = self.state.lock();
+        match persisted {
+            Ok(job) => {
+                state.jobs.insert(id, job);
+            }
+            Err(_) => {
+                if let Some(j) = state.jobs.get_mut(&id) {
+                    j.state = JobState::Interrupted;
+                    j.error = Some("could not persist final job status; inspect remote completion before retry".into());
+                }
+            }
+        }
+        if published {
+            state.active.remove(&job.tenant);
+        }
+        // Publish the terminal state and release tenant ownership together.
+        // Seeing Completed must not race with cleanup or a still-held gate.
+        drop(_tenant);
+        drop(state);
     }
     fn execute(&self, job: BackupJob) -> Result<serde_json::Value> {
         let (budget, io) = if matches!(job.operation, BackupOperation::Import { .. }) {
@@ -60,8 +73,6 @@ impl Inner {
                 Err(_) => thread::sleep(Duration::from_millis(20)),
             }
         };
-        let lock = self.tenant_lock(job.tenant);
-        let _tenant = lock.lock();
         let context = Context {
             inner: self,
             job: job.clone(),
@@ -139,13 +150,15 @@ impl Context<'_> {
                 fs::remove_dir_all(&checkpoint)?;
             }
             let tenant = self.inner.store.tenant(self.job.tenant)?;
+            let info = tenant.info();
             let seq = tenant.engine().checkpoint_limited(
                 &checkpoint,
                 self.inner.config.max_backup_bytes,
                 self.inner.config.reserve_free_bytes,
             )?;
             let checkpoint_ms = now_ms();
-            self.checkpoint_verify(&checkpoint, tenant.info(), seq)?;
+            drop(tenant);
+            self.checkpoint_verify(&checkpoint, info.clone(), seq)?;
             let mut paths = vec!["TENANT.meta".to_string(), "CURRENT".to_string()];
             let current = fs::read_to_string(checkpoint.join("CURRENT"))?;
             if !valid_file(&current) || !current.starts_with("MANIFEST-") {
@@ -176,7 +189,7 @@ impl Context<'_> {
             let manifest = BackupManifest {
                 version: 1,
                 backup: self.job.backup,
-                tenant: tenant.info(),
+                tenant: info,
                 checkpoint_seq: seq,
                 checkpoint_ms,
                 total_bytes: total,
@@ -288,5 +301,86 @@ impl Context<'_> {
             .restore_checkpoint(self.job.tenant, &checkpoint)?;
         crate::storage::failpoint("backup_restore_switched");
         Ok(serde_json::to_value(manifest.summary())?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Options;
+    use serde_json::json;
+
+    #[test]
+    fn checkpoint_hashing_does_not_keep_the_serving_tenant_open() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path().join("data"), Options::default()).unwrap();
+        let info = store.create_tenant("hash-drain").unwrap();
+        let ack = {
+            let tenant = store.tenant(info.id).unwrap();
+            tenant.create_collection("docs").unwrap();
+            tenant
+                .put("docs", json!({"_key":"ack","value":7}), None)
+                .unwrap()
+        };
+        let service = BackupService::open(
+            store.clone(),
+            BackupConfig {
+                service: "fs".into(),
+                options: HashMap::from([(
+                    "root".into(),
+                    dir.path().join("remote").to_string_lossy().into(),
+                )]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        // A delayed hash read exposes the ownership boundary without needing a
+        // large fixture. The private checkpoint must outlive the serving core.
+        *service.owner.inner.bandwidth.lock() = Instant::now() + Duration::from_secs(3);
+        let job = service.submit(info.id, BackupOperation::Create).unwrap();
+        let checkpoint = store
+            .root()
+            .join("backup-work")
+            .join(job.id.to_string())
+            .join("checkpoint");
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !checkpoint.join("WAL-SYNC").exists() {
+            assert!(
+                Instant::now() < deadline,
+                "checkpoint verification did not finish"
+            );
+            thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(
+            service.job(info.id, job.id).unwrap().state,
+            JobState::Checkpointing
+        );
+        store
+            .close_tenant(info.id)
+            .expect("private checkpoint hashing pinned the serving tenant");
+        store
+            .set_quota(info.id, info.memory_bytes * 2, info.disk_bytes)
+            .unwrap();
+        loop {
+            let current = service.job(info.id, job.id).unwrap();
+            if current.state.terminal() {
+                assert_eq!(current.state, JobState::Completed, "{current:?}");
+                break;
+            }
+            assert!(Instant::now() < deadline, "backup did not finish");
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(service.list(info.id).unwrap().len(), 1);
+        drop(service);
+        drop(store);
+        let store = Store::open(dir.path().join("data"), Options::default()).unwrap();
+        let doc = store
+            .tenant(info.id)
+            .unwrap()
+            .get("docs", "ack")
+            .unwrap()
+            .unwrap();
+        assert_eq!(doc["_rev"], ack.rev);
+        assert_eq!(doc["value"], 7);
     }
 }

@@ -1,0 +1,67 @@
+{
+  "result": "reproduced",
+  "binary_sha256": "bd0f6b04d5e27a049893a8ff1456309f9ae25efa76b90a903c5046aa922622b9",
+  "before": {
+    "node": 0,
+    "tenant": "96ecc43a-5a82-4d35-8f84-9932c6e0acad",
+    "documents": 1500,
+    "sha256": "95aff19a8dda6301c5e49df26899e10939c1d0cd5eca96328df56b87e94b001a",
+    "acknowledged_mismatches": 0
+  },
+  "management": [
+    {
+      "operation": "close",
+      "result": "BUSY",
+      "elapsed_ms": 1003.4146970137954
+    },
+    {
+      "operation": "quota",
+      "result": "BUSY",
+      "elapsed_ms": 1001.7979409894906
+    }
+  ],
+  "during_hash": {
+    "node": 0,
+    "tenant": "96ecc43a-5a82-4d35-8f84-9932c6e0acad",
+    "documents": 1500,
+    "sha256": "95aff19a8dda6301c5e49df26899e10939c1d0cd5eca96328df56b87e94b001a",
+    "acknowledged_mismatches": 0
+  },
+  "healthy_during_hash": {
+    "node": 0,
+    "tenant": "949b860e-d483-46fb-b7c0-d1e38c49219f",
+    "documents": 20,
+    "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+    "acknowledged_mismatches": 0
+  },
+  "backup_bytes": 6349763,
+  "after": {
+    "node": 0,
+    "tenant": "96ecc43a-5a82-4d35-8f84-9932c6e0acad",
+    "documents": 1500,
+    "sha256": "95aff19a8dda6301c5e49df26899e10939c1d0cd5eca96328df56b87e94b001a",
+    "acknowledged_mismatches": 0
+  },
+  "restored": {
+    "node": 0,
+    "tenant": "96ecc43a-5a82-4d35-8f84-9932c6e0acad",
+    "documents": 1500,
+    "sha256": "95aff19a8dda6301c5e49df26899e10939c1d0cd5eca96328df56b87e94b001a",
+    "acknowledged_mismatches": 0
+  },
+  "quota_after_restore": 134217728,
+  "after_restart": {
+    "node": 0,
+    "tenant": "96ecc43a-5a82-4d35-8f84-9932c6e0acad",
+    "documents": 1500,
+    "sha256": "95aff19a8dda6301c5e49df26899e10939c1d0cd5eca96328df56b87e94b001a",
+    "acknowledged_mismatches": 0
+  },
+  "healthy_after_restart": {
+    "node": 0,
+    "tenant": "949b860e-d483-46fb-b7c0-d1e38c49219f",
+    "documents": 20,
+    "sha256": "0fce4f28d52132c9fc140fc51a2214f732772d1bd5874157c26fed889de1bec1",
+    "acknowledged_mismatches": 0
+  }
+}

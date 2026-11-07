@@ -20,6 +20,8 @@ use std::{
 };
 use uuid::Uuid;
 
+pub(crate) const STORAGE_REGISTRY_VERSION: u32 = 5;
+
 pub(crate) struct TenantCore {
     pub identity_clock: std::sync::OnceLock<crate::identity::ClockAnchor>,
     pub collection_id: parking_lot::RwLock<Option<catalog::CachedCollection>>,

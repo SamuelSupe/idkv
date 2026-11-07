@@ -1,0 +1,60 @@
+[
+  {
+    "case": "audit_failed_drain_must_resume_interrupted_index",
+    "exit_code": 101,
+    "observed": [
+      {
+        "acknowledged_documents_checked": 2048,
+        "acknowledged_mismatches": 0,
+        "active_builds": 0,
+        "case": "failed-drain-index",
+        "catalog_unchanged": true,
+        "management_error": "BUSY",
+        "reopen_control_state": "READY",
+        "state_after_20_recovery_checks": "BUILDING"
+      }
+    ],
+    "result": "invariant failed",
+    "log": "audit_failed_drain_must_resume_interrupted_index.log"
+  },
+  {
+    "case": "audit_deleted_registry_should_allow_new_tenant_after_churn",
+    "exit_code": 101,
+    "observed": [
+      {
+        "acknowledged_mismatches": 0,
+        "case": "deleted-registry-capacity",
+        "confirmed_sentinel_checks": 3,
+        "create_after_restarts": [
+          "RESOURCE_EXHAUSTED",
+          "RESOURCE_EXHAUSTED",
+          "RESOURCE_EXHAUSTED"
+        ],
+        "create_with_no_live_tenants": "RESOURCE_EXHAUSTED",
+        "fixture_deleted_tenants": 56870,
+        "live_tenants_after_delete": 0,
+        "registry_bytes": 16777152
+      }
+    ],
+    "result": "invariant failed",
+    "log": "audit_deleted_registry_should_allow_new_tenant_after_churn.log"
+  },
+  {
+    "case": "audit_concurrent_quota_shrink_must_respect_reservations",
+    "exit_code": 101,
+    "observed": [
+      {
+        "accepted_shrinks": 270,
+        "attempts": 424,
+        "case": "concurrent-quota-shrink",
+        "final_used": 0,
+        "overshoot": [
+          1024,
+          512
+        ]
+      }
+    ],
+    "result": "invariant failed",
+    "log": "counter-mini-initial.log"
+  }
+]

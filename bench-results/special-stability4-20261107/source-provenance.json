@@ -1,0 +1,61 @@
+{
+  "base_git_head": "cd83246cc8b450f7c901a4726626f54c1d7481be",
+  "baseline_source": "../special-stability3-20261107/validated-source.json",
+  "baseline_binary": "/var/tmp/idkv-stability3-bin-20261107/tenant-kv",
+  "baseline_binary_sha256": "fdf23674ec94c85d35d829c8e39ad258d12c4fbf9f892cde1cfc89f9f4173106",
+  "source": "validated-source.json",
+  "changed_since_previous_source": [
+    "src/backup/jobs.rs",
+    "src/backup/mod.rs",
+    "src/bin/crash_probe.rs",
+    "tests/recovery.rs"
+  ],
+  "target": "/var/tmp/idkv-stability4-target-20261107",
+  "tmpdir": "/var/tmp/idkv-stability4-tmp-20261107",
+  "cargo_incremental": 0,
+  "runtime": "OrbStack Ubuntu Linux aarch64, native Btrfs target and TMPDIR; controlled backup metadata I/O faults; OpenDAL fs",
+  "probe_sources": {
+    "backup-metadata-io.c": "d2771e4469942aef6ea0d915c56c2961810a645509db7943d7e0c9372efaf0bd",
+    "metadata-isolation.py": "29d468e003558b1ba00a672eb9a389178639aad6345c7b2e39eb130dd8b1ebf6",
+    "forget-recovery.py": "624a7cbcf6e98f19a6ffc4f3452eb39aabf0acc1362bc1d29c29a237dae07d3a",
+    "metadata-recovery.py": "c400f49208f663917aee7101cc175214111a422f0fdfc61c6c51ed7bf2a28650"
+  },
+  "helpers": {
+    "scripts/qualification.py": "95b06478ffbec39d71c880daf3aaf488c23d8caedb90a570c28a6b39c609e786",
+    "scripts/recovery_drill.py": "d4ec78b4cc4b816087bec7d9f388810cd2bfed050a98f94dd800dbe0fe8160c9",
+    "scripts/replication_demo.py": "8b357110e4876188a05cb095bbd63599ade8162d690b67a9967bd711fd61073b"
+  },
+  "initial_validation": "full-tests-initial.log and validated-source-initial.json cover the intermediate queued-publication fix; the final source also retains ownership after terminal-publication failure",
+  "publication": "uncommitted local changes; no push requested",
+  "full_test_passed": 213,
+  "source_matches_full_tests_clippy_fmt_release": true,
+  "binaries": {
+    "tenant-kv": "e9fb9657f3ee523f096ab6220a160cc36571a610b90d13d6f2015f645cae3a2c",
+    "tenant-kv-restore": "8c6868a447b6d14debc393b527dcc9da6f88bf8ea975aa6e60a9f17d9cc80a07"
+  },
+  "clippy": "all-targets, failpoints, -D warnings: passed",
+  "format": "passed",
+  "release_build": "passed",
+  "runtime_summary": "runtime-summary.json",
+  "regressions": "two new test functions; publication test covers both admission and terminal failure",
+  "validation_commands": [
+    "CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/var/tmp/idkv-stability4-target-20261107 TMPDIR=/var/tmp/idkv-stability4-tmp-20261107 cargo test --features failpoints -- --test-threads=1",
+    "cargo clippy --all-targets --features failpoints -- -D warnings",
+    "cargo fmt --all -- --check",
+    "cargo build --release --bins"
+  ],
+  "runtime_commands": [
+    "metadata-recovery.py --binary BASELINE --root /var/tmp/idkv-stability4-metadata-before-20261107 --expect-broken",
+    "metadata-recovery.py --binary FINAL --root /var/tmp/idkv-stability4-metadata-after-20261107",
+    "metadata-recovery.py --binary BASELINE --root /var/tmp/idkv-stability4-terminal-before-20261107 --expect-broken --terminal",
+    "metadata-recovery.py --binary FINAL --root /var/tmp/idkv-stability4-terminal-after-20261107 --terminal",
+    "metadata-isolation.py --binary BASELINE --root /var/tmp/idkv-stability4-isolation-before-20261107 --expect-blocked",
+    "metadata-isolation.py --binary FINAL --root /var/tmp/idkv-stability4-isolation-after-20261107",
+    "forget-recovery.py --binary BASELINE --root /var/tmp/idkv-stability4-forget-before-20261107 --expect-broken",
+    "forget-recovery.py --binary FINAL --root /var/tmp/idkv-stability4-forget-after-20261107"
+  ],
+  "runtime_binaries": {
+    "BASELINE": "/var/tmp/idkv-stability3-bin-20261107/tenant-kv",
+    "FINAL": "/var/tmp/idkv-stability4-bin-20261107/tenant-kv"
+  }
+}

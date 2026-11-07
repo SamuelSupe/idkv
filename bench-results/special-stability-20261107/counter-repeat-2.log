@@ -1,0 +1,19 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.05s
+     Running unittests src/lib.rs (/var/tmp/idkv-special-audit-target-20261107/debug/deps/tenant_kv-321137334cf1859a)
+
+running 1 test
+test resources::tests::audit_concurrent_quota_shrink_must_respect_reservations ... AUDIT_JSON {"accepted_shrinks":254,"attempts":352,"case":"concurrent-quota-shrink","final_used":0,"overshoot":[134217728,67108864]}
+FAILED
+
+failures:
+
+failures:
+    resources::tests::audit_concurrent_quota_shrink_must_respect_reservations
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 81 filtered out; finished in 0.00s
+
+
+thread 'resources::tests::audit_concurrent_quota_shrink_must_respect_reservations' panicked at src/resources.rs:648:9:
+a successful reservation exceeds concurrently accepted quota
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+error: test failed, to rerun pass `--lib`

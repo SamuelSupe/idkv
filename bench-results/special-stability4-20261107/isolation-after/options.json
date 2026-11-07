@@ -1,0 +1,12 @@
+{
+  "global_memory_bytes": 536870912,
+  "tenant_memory_bytes": 134217728,
+  "memtable_bytes": 2097152,
+  "cache_bytes": 8388608,
+  "target_sst_bytes": 4194304,
+  "level_base_bytes": 16777216,
+  "l0_stop": 24,
+  "tenant_disk_bytes": 4294967296,
+  "max_http_requests": 8,
+  "max_tenant_requests": 4
+}

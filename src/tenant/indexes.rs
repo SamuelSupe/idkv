@@ -150,6 +150,7 @@ impl TenantHandle {
         restart: bool,
         stop: Option<&std::sync::atomic::AtomicBool>,
     ) -> Result<IndexDefinition> {
+        self.check_index_build(stop)?;
         validate_spec(&spec)?;
         let generation = Uuid::new_v4();
         self.core.builds.lock().insert(generation);
@@ -197,7 +198,11 @@ impl TenantHandle {
                 })?;
             let built = self.populate_index(&collection, &mut definition, &snapshot, stop);
             if let Err(error) = built {
-                if stop.is_some_and(|stop| stop.load(std::sync::atomic::Ordering::Acquire)) {
+                // Draining is resumable, like shutdown. Do not acquire another
+                // transaction to mark FAILED while management waits for us.
+                if error.code == "BUSY"
+                    || stop.is_some_and(|stop| stop.load(std::sync::atomic::Ordering::Acquire))
+                {
                     return Err(error);
                 }
                 let key = named(&prefix(b'J', collection.id), &definition.spec.name);
@@ -224,8 +229,19 @@ impl TenantHandle {
             self.core.plans.lock().clear();
             Ok(definition)
         })();
-        self.core.builds.lock().remove(&generation);
+        let mut builds = self.core.builds.lock();
+        builds.remove(&generation);
+        self.core
+            .recovery_catalog
+            .store(u64::MAX, std::sync::atomic::Ordering::Release);
         result
+    }
+    fn check_index_build(&self, stop: Option<&std::sync::atomic::AtomicBool>) -> Result<()> {
+        self.engine().check_draining()?;
+        if stop.is_some_and(|stop| stop.load(std::sync::atomic::Ordering::Acquire)) {
+            return Err(Error::new("CANCELLED", "index recovery stopping"));
+        }
+        Ok(())
     }
     fn populate_index(
         &self,
@@ -234,13 +250,8 @@ impl TenantHandle {
         snapshot: &Snapshot,
         stop: Option<&std::sync::atomic::AtomicBool>,
     ) -> Result<()> {
-        let check_stop = || {
-            if stop.is_some_and(|stop| stop.load(std::sync::atomic::Ordering::Acquire)) {
-                Err(Error::new("CANCELLED", "index recovery stopping"))
-            } else {
-                Ok(())
-            }
-        };
+        let check_stop = || self.check_index_build(stop);
+        check_stop()?;
         let docs = prefix(b'D', collection.id);
         let mut stats = ReadStats::default();
         let mut scan = snapshot.scan(docs.clone(), codec::prefix_end(&docs), None, &mut stats)?;
@@ -292,6 +303,7 @@ impl TenantHandle {
                     }
                     let mut bytes = 0;
                     for (key, value) in pending {
+                        check_stop()?;
                         let _memory = self.engine().budget.reserve(value.len() * 2 + 512)?;
                         let update = Delta::decode(&value)?;
                         maintain_index(tx, definition, update.old.as_ref(), update.new.as_ref())?;
@@ -330,6 +342,7 @@ impl TenantHandle {
         snapshot: &Snapshot,
         stop: Option<&std::sync::atomic::AtomicBool>,
     ) -> Result<()> {
+        self.check_index_build(stop)?;
         if self.engine().needs_flush() {
             self.engine().flush_if_needed()?;
         }
@@ -341,17 +354,14 @@ impl TenantHandle {
                     index.generation,
                 )?;
                 for entry in entries {
+                    self.check_index_build(stop)?;
                     maintain_index(tx, index, None, Some(entry))?;
                 }
                 Ok(())
             },
             &|| {
                 snapshot.check()?;
-                if stop.is_some_and(|stop| stop.load(std::sync::atomic::Ordering::Acquire)) {
-                    Err(Error::new("CANCELLED", "index recovery stopping"))
-                } else {
-                    Ok(())
-                }
+                self.check_index_build(stop)
             },
             stop.is_none().then_some(std::time::Duration::from_secs(5)),
         )
@@ -370,22 +380,32 @@ impl TenantHandle {
             return Ok(());
         }
         let snapshot = self.engine().snapshot()?;
+        if snapshot.seq() < catalog {
+            return Ok(());
+        }
+        let mut active = Vec::new();
         for collection in list_snapshot::<Collection>(&snapshot, b"C", 1024)? {
             for index in
                 list_snapshot::<IndexDefinition>(&snapshot, &prefix(b'J', collection.id), 32)?
             {
-                if index.state == IndexState::Building
-                    && !self.core.builds.lock().contains(&index.generation)
-                {
-                    drop(snapshot);
-                    self.build_index(&collection.name, index.spec, true, Some(stop))?;
-                    return Ok(());
+                if index.state == IndexState::Building {
+                    if !self.core.builds.lock().contains(&index.generation) {
+                        drop(snapshot);
+                        self.build_index(&collection.name, index.spec, true, Some(stop))?;
+                        return Ok(());
+                    }
+                    active.push(index.generation);
                 }
             }
         }
-        self.core
-            .recovery_catalog
-            .store(catalog, std::sync::atomic::Ordering::Release);
+        // Publish under the same lock as build exit. A late inspection must
+        // not overwrite the invalidation of an abandoned generation.
+        let builds = self.core.builds.lock();
+        if active.iter().all(|generation| builds.contains(generation)) {
+            self.core
+                .recovery_catalog
+                .store(catalog, std::sync::atomic::Ordering::Release);
+        }
         Ok(())
     }
 }

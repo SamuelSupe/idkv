@@ -1,0 +1,21 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running unittests src/lib.rs (/var/tmp/idkv-cd83246-control-target-20261107/debug/deps/tenant_kv-321137334cf1859a)
+
+running 1 test
+test tenant::manager::admission::tests::full_cold_admission_pool_does_not_reject_global_lock_contention ... FAILED
+
+failures:
+
+---- tenant::manager::admission::tests::full_cold_admission_pool_does_not_reject_global_lock_contention stdout ----
+
+thread 'tenant::manager::admission::tests::full_cold_admission_pool_does_not_reject_global_lock_contention' panicked at src/tenant/manager/admission.rs:425:17:
+assertion failed: success
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tenant::manager::admission::tests::full_cold_admission_pool_does_not_reject_global_lock_contention
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 76 filtered out; finished in 0.33s
+
+error: test failed, to rerun pass `--lib`

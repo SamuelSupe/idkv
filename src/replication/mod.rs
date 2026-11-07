@@ -13,7 +13,7 @@ pub const PAGE_BYTES: usize = 1 << 20;
 pub const MAX_WIRE_BYTES: usize = 96 << 20;
 pub const PROTOCOL: u32 = 3;
 pub fn capabilities() -> serde_json::Value {
-    serde_json::json!({"version":env!("CARGO_PKG_VERSION"), "replication_protocol":PROTOCOL, "storage_registry":4,
+    serde_json::json!({"version":env!("CARGO_PKG_VERSION"), "replication_protocol":PROTOCOL, "storage_registry":crate::tenant::STORAGE_REGISTRY_VERSION,
         "features":["request_read_controls_v1", "batch_checks", "snapshot_read_batch", "immutable_dataset_reads", "tenant_retention_v1", "history_cas", "durable_write_receipts", "immutable_lookup_versions", "identity_temporal_v1", "prometheus", "otlp_traces", "otlp_logs"]})
 }
 pub(crate) fn compatible(protocol: u32) -> crate::Result<()> {
