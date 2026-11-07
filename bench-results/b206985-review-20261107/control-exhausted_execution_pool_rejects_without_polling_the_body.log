@@ -1,0 +1,22 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.05s
+     Running tests/http.rs (/var/tmp/idkv-b206985-control-target-20261107/debug/deps/http-a5b72173825684b3)
+
+running 1 test
+test exhausted_execution_pool_rejects_without_polling_the_body ... FAILED
+
+failures:
+
+---- exhausted_execution_pool_rejects_without_polling_the_body stdout ----
+
+thread 'exhausted_execution_pool_rejects_without_polling_the_body' panicked at tests/http.rs:1286:13:
+rejected request body was polled
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+tenant dba07ceb-7b17-4d4e-a4b1-1275ccca9baf clean-close watermark: IO_ERROR: No such file or directory (os error 2)
+
+
+failures:
+    exhausted_execution_pool_rejects_without_polling_the_body
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.21s
+
+error: test failed, to rerun pass `--test http`

@@ -1,0 +1,8 @@
+{
+  "cluster": "764406dc-4b1a-4595-8777-f1bd00b93e5d",
+  "role": "replica",
+  "peer_url": "http://127.0.0.1:60411",
+  "token_file": "/var/tmp/idkv-b206985-faults-20261107/enospc/peer-token",
+  "poll_ms": 50,
+  "log_retention_bytes": 268435456
+}

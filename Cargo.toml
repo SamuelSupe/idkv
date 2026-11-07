@@ -12,6 +12,8 @@ failpoints = []
 [dependencies]
 chrono = { version = "=0.4.45", default-features = false, features = ["std"] }
 axum = "=0.8.9"
+hyper = { version = "=1.12.0", features = ["server", "http1"] }
+hyper-util = { version = "=0.1.21", features = ["tokio", "service"] }
 tokio = { version = "=1.53.3", features = ["rt-multi-thread", "macros", "net", "signal", "time"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = { version = "=1.0.154", features = ["arbitrary_precision"] }

@@ -53,7 +53,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             eprintln!("tenant-kv listening on {}", listener.local_addr()?);
             let (draining, drained) = tokio::sync::oneshot::channel();
             let listener = http::Listener::new(listener, &transport_options);
-            let server = axum::serve(listener, router).with_graceful_shutdown(async move {
+            let server = listener.serve(router, async move {
                 shutdown_signal().await;
                 runtime.drain();
                 let _ = draining.send(());
@@ -61,7 +61,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 // Give health checks a visible not-ready interval before the
                 // listener closes. Existing accepted work then has a deadline.
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-            }).into_future();
+            });
             tokio::pin!(server);
             tokio::select! {
                 result = &mut server => result?,

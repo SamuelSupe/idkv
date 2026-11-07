@@ -48,7 +48,12 @@ impl Store {
             Some(source) => inner.node.replica_write(source)?,
             None => inner.node.write()?,
         };
+        drop(permission);
         let _drain = self.drain_for_management(id, false)?;
+        let permission = match source {
+            Some(source) => inner.node.replica_write(source)?,
+            None => inner.node.write()?,
+        };
         let slot = self.slot(id);
         let mut guard = slot.lock();
         let current = inner.registry.read().tenants[&id].clone();

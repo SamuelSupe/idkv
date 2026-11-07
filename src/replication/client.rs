@@ -60,6 +60,7 @@ struct Progress {
     initialization_failures: u64,
     reinitializations: u64,
     initialization_backoff: HashMap<Uuid, Duration>,
+    log_backoff: HashMap<Uuid, (Instant, Duration)>,
     waiting_for_readers: HashSet<Uuid>,
     initialization_errors: HashMap<Uuid, String>,
     status_cache: Option<(Instant, Arc<Received<Status>>)>,
@@ -181,6 +182,7 @@ impl Service {
                     initialization_failures: 0,
                     reinitializations: 0,
                     initialization_backoff: HashMap::new(),
+                    log_backoff: HashMap::new(),
                     waiting_for_readers: HashSet::new(),
                     initialization_errors: HashMap::new(),
                     status_cache: None,
@@ -450,6 +452,7 @@ impl Service {
             progress.cursors.retain(|id, _| active.contains(id));
             progress.confirmed.retain(|id, _| active.contains(id));
             progress.retry_at.retain(|id, _| active.contains(id));
+            progress.log_backoff.retain(|id, _| active.contains(id));
             progress
                 .initialization_errors
                 .retain(|id, _| active.contains(id));
@@ -517,6 +520,10 @@ impl Service {
                             .retry_at
                             .get(&position.info.id)
                             .is_some_and(|at| *at > Instant::now())
+                        || progress
+                            .log_backoff
+                            .get(&position.info.id)
+                            .is_some_and(|(at, _)| *at > Instant::now())
                     {
                         continue;
                     }
@@ -527,16 +534,13 @@ impl Service {
                 {
                     Ok(TenantSync::Idle) => {
                         let mut progress = self.inner.progress.lock();
-                        if !progress.initializing.contains_key(&position.info.id) {
-                            progress.initialization_backoff.remove(&position.info.id);
-                            progress.retry_at.remove(&position.info.id);
-                        }
+                        progress.log_backoff.remove(&position.info.id);
                     }
                     Ok(TenantSync::Pending(head)) => {
                         self.inner
                             .progress
                             .lock()
-                            .initialization_backoff
+                            .log_backoff
                             .remove(&position.info.id);
                         // The source may advance beyond the catalog snapshot.
                         // Compare the next page with the latest authenticated head.
@@ -545,16 +549,23 @@ impl Service {
                     }
                     Err(error) => {
                         let mut progress = self.inner.progress.lock();
-                        let delay = *progress
-                            .initialization_backoff
-                            .entry(position.info.id)
-                            .or_insert(Duration::from_millis(100));
-                        progress
-                            .initialization_backoff
-                            .insert(position.info.id, (delay * 2).min(Duration::from_secs(30)));
-                        progress
-                            .retry_at
-                            .insert(position.info.id, Instant::now() + delay);
+                        let cap = if matches!(
+                            error.code.as_str(),
+                            "BUSY" | "RESOURCE_EXHAUSTED" | "DEADLINE_EXCEEDED"
+                        ) {
+                            Duration::from_secs(1)
+                        } else {
+                            Duration::from_secs(30)
+                        };
+                        let delay = progress
+                            .log_backoff
+                            .get(&position.info.id)
+                            .map_or(Duration::from_millis(100), |(_, next)| *next)
+                            .min(cap);
+                        progress.log_backoff.insert(
+                            position.info.id,
+                            (Instant::now() + delay, (delay * 2).min(cap)),
+                        );
                         failure.get_or_insert(error);
                     }
                 }
@@ -859,6 +870,7 @@ impl Service {
             progress.cursors.clear();
             progress.confirmed.clear();
             progress.initialization_backoff.clear();
+            progress.log_backoff.clear();
             progress.initialization_errors.clear();
             progress.retry_at.clear();
         }
@@ -927,6 +939,7 @@ impl Service {
             progress.cursors.clear();
             progress.confirmed.clear();
             progress.initialization_backoff.clear();
+            progress.log_backoff.clear();
             progress.initialization_errors.clear();
             progress.retry_at.clear();
         }

@@ -23,6 +23,7 @@ pub(crate) struct ReplicaInstall {
     id: Uuid,
     started: Instant,
     revoked: bool,
+    revoke_readers: bool,
     timeout: Duration,
 }
 impl ReplicaInstall {
@@ -33,7 +34,10 @@ impl ReplicaInstall {
                 "tenant reader drain deadline",
             ));
         }
-        if !self.revoked && self.started.elapsed() >= Duration::from_secs(1).min(self.timeout / 2) {
+        if self.revoke_readers
+            && !self.revoked
+            && self.started.elapsed() >= Duration::from_secs(1).min(self.timeout / 2)
+        {
             if let Some(slot) = &self.slot {
                 let slot = slot.lock();
                 if let Some(core) = &slot.core {
@@ -96,6 +100,7 @@ impl Store {
             started: Instant::now(),
             revoked: false,
             timeout: Duration::from_secs(10),
+            revoke_readers: true,
         })
     }
     pub(super) fn drain_for_management(&self, id: Uuid, restoring: bool) -> Result<ReplicaInstall> {
@@ -119,6 +124,7 @@ impl Store {
             started: Instant::now(),
             revoked: false,
             timeout: Duration::from_secs(1),
+            revoke_readers: false,
         };
         loop {
             drain.expire_readers().map_err(|_| {
@@ -136,6 +142,49 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn failed_management_drain_preserves_snapshots_and_does_not_pin_node_authority() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        let info = store.create_tenant("quota-drain").unwrap();
+        let tenant = store.tenant(info.id).unwrap();
+        tenant.create_collection("docs").unwrap();
+        let ack = tenant
+            .put(
+                "docs",
+                serde_json::json!({"_key":"confirmed","value":1}),
+                None,
+            )
+            .unwrap();
+        let snapshot = tenant.engine().snapshot().unwrap();
+        store.owner.stop.store(true, Ordering::Release);
+        for worker in store.owner.workers.lock().drain(..) {
+            worker.join().unwrap();
+        }
+        let changing = store.clone();
+        let quota =
+            thread::spawn(move || changing.set_quota(info.id, info.memory_bytes, info.disk_bytes));
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while store.slot(info.id).lock().installing.is_none() {
+            assert!(Instant::now() < deadline);
+            thread::sleep(Duration::from_millis(1));
+        }
+        let authority = store
+            .owner
+            .inner
+            .node
+            .barrier
+            .try_write_for(Duration::from_millis(50));
+        assert!(authority.is_some(), "management drain held node authority");
+        drop(authority);
+        assert_eq!(quota.join().unwrap().unwrap_err().code, "BUSY");
+        snapshot.check().unwrap();
+        assert_eq!(
+            tenant.get("docs", "confirmed").unwrap().unwrap()["_rev"],
+            ack.rev
+        );
+    }
 
     #[test]
     fn draining_interrupts_consistency_waits_and_timeout_reopens_old_readers() {

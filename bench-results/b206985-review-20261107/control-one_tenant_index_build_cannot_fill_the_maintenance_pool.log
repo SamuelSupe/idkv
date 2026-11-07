@@ -1,0 +1,23 @@
+   Compiling tenant-kv v0.10.1 (/var/tmp/idkv-b206985-control-source-20261107)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.73s
+     Running tests/http.rs (/var/tmp/idkv-b206985-control-target-20261107/debug/deps/http-a5b72173825684b3)
+
+running 1 test
+test one_tenant_index_build_cannot_fill_the_maintenance_pool ... FAILED
+
+failures:
+
+---- one_tenant_index_build_cannot_fill_the_maintenance_pool stdout ----
+
+thread 'one_tenant_index_build_cannot_fill_the_maintenance_pool' panicked at tests/http.rs:1258:10:
+called `Result::unwrap()` on an `Err` value: Elapsed(())
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+tenant 99497894-eb74-4bab-83b5-da1b33285f3e clean-close watermark: IO_ERROR: No such file or directory (os error 2)
+
+
+failures:
+    one_tenant_index_build_cannot_fill_the_maintenance_pool
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 11 filtered out; finished in 1.12s
+
+error: test failed, to rerun pass `--test http`

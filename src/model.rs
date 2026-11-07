@@ -18,6 +18,7 @@ pub struct Options {
     pub max_http_maintenance_requests: usize,
     pub max_http_connections: usize,
     pub http_write_timeout_ms: u64,
+    pub http_header_timeout_ms: u64,
     pub maintenance_reserve_free_bytes: u64,
     pub max_local_backup_bytes: u64,
     pub idle_seconds: u64,
@@ -54,6 +55,7 @@ impl Default for Options {
             max_http_maintenance_requests: 4,
             max_http_connections: 1024,
             http_write_timeout_ms: 30_000,
+            http_header_timeout_ms: 5_000,
             maintenance_reserve_free_bytes: 64 << 20,
             max_local_backup_bytes: 1 << 30,
             idle_seconds: 300,
@@ -101,6 +103,7 @@ impl Options {
             || !(1..=128).contains(&self.max_http_maintenance_requests)
             || !(1..=100_000).contains(&self.max_http_connections)
             || !(1..=3_600_000).contains(&self.http_write_timeout_ms)
+            || !(1..=3_600_000).contains(&self.http_header_timeout_ms)
             || self.max_local_backup_bytes < 1 << 20
             || self.max_snapshots > 100_000
             || self.io_workers == 0

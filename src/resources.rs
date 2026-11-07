@@ -127,19 +127,34 @@ impl Drop for Reservation {
 }
 
 type Job = Box<dyn FnOnce() + Send + 'static>;
+#[derive(Clone, Copy)]
+enum IoClass {
+    Durable,
+    Read,
+    Background,
+}
 #[derive(Default)]
 struct TenantQueue {
     durable: VecDeque<Job>,
     reads: VecDeque<Job>,
+    background: VecDeque<Job>,
     durable_burst: usize,
+    foreground_burst: usize,
 }
 impl TenantQueue {
     fn len(&self) -> usize {
-        self.durable.len() + self.reads.len()
+        self.durable.len() + self.reads.len() + self.background.len()
     }
     fn pop(&mut self) -> Job {
+        if !self.background.is_empty()
+            && ((self.durable.is_empty() && self.reads.is_empty()) || self.foreground_burst >= 8)
+        {
+            self.foreground_burst = 0;
+            return self.background.pop_front().unwrap();
+        }
+        self.foreground_burst = (self.foreground_burst + 1).min(8);
         if !self.durable.is_empty() && (self.reads.is_empty() || self.durable_burst < 8) {
-            self.durable_burst += 1;
+            self.durable_burst = (self.durable_burst + 1).min(8);
             self.durable.pop_front().unwrap()
         } else {
             self.durable_burst = 0;
@@ -256,7 +271,7 @@ impl IoScheduler {
         tenant: Uuid,
         f: impl FnOnce() -> Result<T> + Send + 'static,
     ) -> Result<IoTask<T>> {
-        self.submit_inner(tenant, None, None, f)
+        self.submit_inner(tenant, IoClass::Durable, None, None, f)
     }
     // Only read jobs may be abandoned. WAL/SST writes must finish even when the
     // submitting caller stops waiting, otherwise an acknowledged batch can be lost.
@@ -264,6 +279,7 @@ impl IoScheduler {
         &self,
         tenant: Uuid,
         budget: Option<&crate::read::ReadBudget>,
+        background: bool,
         f: impl FnOnce() -> Result<T> + Send + 'static,
     ) -> Result<IoTask<T>> {
         if let Some(budget) = budget {
@@ -271,6 +287,11 @@ impl IoScheduler {
         }
         self.submit_inner(
             tenant,
+            if background {
+                IoClass::Background
+            } else {
+                IoClass::Read
+            },
             Some(Arc::new(AtomicBool::new(false))),
             budget.cloned(),
             f,
@@ -279,6 +300,7 @@ impl IoScheduler {
     fn submit_inner<T: Send + 'static>(
         &self,
         tenant: Uuid,
+        class: IoClass,
         abandoned: Option<Arc<AtomicBool>>,
         budget: Option<crate::read::ReadBudget>,
         f: impl FnOnce() -> Result<T> + Send + 'static,
@@ -318,10 +340,10 @@ impl IoScheduler {
         });
         let fresh = !q.jobs.contains_key(&tenant);
         let jobs = q.jobs.entry(tenant).or_default();
-        if abandoned.is_some() {
-            jobs.reads.push_back(job);
-        } else {
-            jobs.durable.push_back(job);
+        match class {
+            IoClass::Durable => jobs.durable.push_back(job),
+            IoClass::Read => jobs.reads.push_back(job),
+            IoClass::Background => jobs.background.push_back(job),
         }
         if fresh {
             q.ready.push_back(tenant);
@@ -333,6 +355,14 @@ impl IoScheduler {
             abandoned,
             budget,
         })
+    }
+    pub(crate) fn run_background<T: Send + 'static>(
+        &self,
+        tenant: Uuid,
+        f: impl FnOnce() -> Result<T> + Send + 'static,
+    ) -> Result<T> {
+        self.submit_inner(tenant, IoClass::Background, None, None, f)?
+            .wait()
     }
     pub fn stats(&self, tenant: Uuid) -> serde_json::Value {
         let q = self.inner.queue.lock();
@@ -413,6 +443,52 @@ struct TenantIo {
 mod tests {
     use super::*;
     #[test]
+    fn reads_overtake_bulk_output_while_background_io_still_progresses() {
+        let io = IoScheduler::new(1);
+        let tenant = Uuid::new_v4();
+        let (entered, ready) = mpsc::channel();
+        let (release, wait) = mpsc::channel();
+        let blocker = io
+            .submit(tenant, move || {
+                entered.send(()).unwrap();
+                wait.recv().unwrap();
+                Ok(())
+            })
+            .unwrap();
+        ready.recv().unwrap();
+        let order = Arc::new(Mutex::new(Vec::new()));
+        let mut tasks = Vec::new();
+        for _ in 0..32 {
+            let order = order.clone();
+            tasks.push(
+                io.submit_inner(tenant, IoClass::Background, None, None, move || {
+                    order.lock().push('B');
+                    Ok(())
+                })
+                .unwrap(),
+            );
+        }
+        for _ in 0..32 {
+            let order = order.clone();
+            tasks.push(
+                io.submit_read(tenant, None, false, move || {
+                    order.lock().push('R');
+                    Ok(())
+                })
+                .unwrap(),
+            );
+        }
+        release.send(()).unwrap();
+        blocker.wait().unwrap();
+        for task in tasks {
+            task.wait().unwrap();
+        }
+        let order = order.lock();
+        assert_eq!(&order[..7], &['R'; 7]);
+        assert!(order.iter().position(|c| *c == 'B').unwrap() <= 8);
+        assert_eq!(order.len(), 64);
+    }
+    #[test]
     fn durable_io_bypasses_read_backlog_without_starving_reads() {
         let io = IoScheduler::new(1);
         let tenant = Uuid::new_v4();
@@ -430,7 +506,7 @@ mod tests {
         let reads: Vec<_> = (0..32)
             .map(|_| {
                 let order = order.clone();
-                io.submit_read(tenant, None, move || {
+                io.submit_read(tenant, None, false, move || {
                     order.lock().push('R');
                     Ok(())
                 })
@@ -475,7 +551,7 @@ mod tests {
         let read_runs = Arc::new(AtomicUsize::new(0));
         let counted = read_runs.clone();
         let abandoned = io
-            .submit_read(tenant, None, move || {
+            .submit_read(tenant, None, false, move || {
                 counted.fetch_add(1, Ordering::Relaxed);
                 Ok(())
             })
@@ -500,13 +576,15 @@ mod tests {
         .unwrap();
         let counted = read_runs.clone();
         let expired = io
-            .submit_read(tenant, Some(&budget), move || {
+            .submit_read(tenant, Some(&budget), false, move || {
                 counted.fetch_add(1, Ordering::Relaxed);
                 Ok(())
             })
             .unwrap();
         let result = expired.wait();
-        let live = io.submit_read(Uuid::new_v4(), None, || Ok(42)).unwrap();
+        let live = io
+            .submit_read(Uuid::new_v4(), None, false, || Ok(42))
+            .unwrap();
         release_tx.send(()).unwrap();
         blocker.wait().unwrap();
         assert_eq!(live.wait().unwrap(), 42);

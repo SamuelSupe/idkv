@@ -505,7 +505,9 @@ impl Engine {
             let mut cursors = Vec::new();
             let mut heap = BinaryHeap::new();
             for table in &selected {
-                cursors.push(table.cursor(None, None, false, None, &mut stats)?);
+                let mut cursor = table.cursor(None, None, false, None, &mut stats)?;
+                cursor.background = true;
+                cursors.push(cursor);
             }
             for (i, cursor) in cursors.iter_mut().enumerate() {
                 if let Some(record) = cursor.next(&mut stats)? {
@@ -686,7 +688,8 @@ impl Engine {
                     bytes.saturating_add(mem.bytes.load(Ordering::Acquire) as u64)
                 })
         };
-        let metadata = crate::json::encoded_len(&self.writer.lock().manifest)? as u64 + 65536;
+        let manifest = self.writer.lock().manifest.clone();
+        let metadata = crate::json::encoded_len(&manifest)? as u64 + 65536;
         if fs2::available_space(parent)?
             < reserve_free
                 .saturating_add(pending)
@@ -707,6 +710,9 @@ impl Engine {
             .iter()
             .map(|t| (t.info.id, t.checkpoint_file()))
             .collect();
+        drop(view);
+        drop(writer);
+        drop(maintenance);
         let estimate = manifest.tables.iter().map(|t| t.size).sum::<u64>()
             + serde_json::to_vec(&manifest)?.len() as u64
             + 4096;
@@ -716,9 +722,6 @@ impl Engine {
         if fs2::available_space(parent)? < estimate.saturating_add(reserve_free) {
             return Err(Error::limit("checkpoint free disk reserve"));
         }
-        drop(view);
-        drop(writer);
-        drop(maintenance);
         fs::create_dir(destination)?;
         fs::create_dir(destination.join("sst"))?;
         fs::create_dir(destination.join("wal"))?;

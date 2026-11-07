@@ -1,0 +1,21 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running unittests src/lib.rs (/var/tmp/idkv-b206985-control-target-20261107/debug/deps/tenant_kv-31f7dc8ed692cb3e)
+
+running 1 test
+test tenant::manager::lifecycle::review_regressions::a_tenant_backup_lock_does_not_block_another_tenants_backup ... FAILED
+
+failures:
+
+---- tenant::manager::lifecycle::review_regressions::a_tenant_backup_lock_does_not_block_another_tenants_backup stdout ----
+
+thread 'tenant::manager::lifecycle::review_regressions::a_tenant_backup_lock_does_not_block_another_tenants_backup' panicked at src/tenant/manager/lifecycle.rs:535:14:
+another tenant waited for the backup lock: Timeout
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tenant::manager::lifecycle::review_regressions::a_tenant_backup_lock_does_not_block_another_tenants_backup
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 66 filtered out; finished in 2.03s
+
+error: test failed, to rerun pass `--lib`

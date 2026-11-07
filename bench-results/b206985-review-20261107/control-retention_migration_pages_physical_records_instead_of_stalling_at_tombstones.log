@@ -1,0 +1,21 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.05s
+     Running unittests src/lib.rs (/var/tmp/idkv-b206985-control-target-20261107/debug/deps/tenant_kv-31f7dc8ed692cb3e)
+
+running 1 test
+test tenant::retention::tests::retention_migration_pages_physical_records_instead_of_stalling_at_tombstones ... FAILED
+
+failures:
+
+---- tenant::retention::tests::retention_migration_pages_physical_records_instead_of_stalling_at_tombstones stdout ----
+
+thread 'tenant::retention::tests::retention_migration_pages_physical_records_instead_of_stalling_at_tombstones' panicked at src/tenant/retention/tests.rs:700:28:
+called `Result::unwrap()` on an `Err` value: Error { code: "RESOURCE_EXHAUSTED", message: "scan budget exceeded", location: None }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tenant::retention::tests::retention_migration_pages_physical_records_instead_of_stalling_at_tombstones
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 66 filtered out; finished in 0.10s
+
+error: test failed, to rerun pass `--lib`

@@ -20,6 +20,7 @@ pub struct Listener {
     tcp: TcpListener,
     connections: Arc<Semaphore>,
     timeout: Duration,
+    header_timeout: Duration,
 }
 impl Listener {
     pub fn new(tcp: TcpListener, options: &crate::Options) -> Self {
@@ -27,24 +28,74 @@ impl Listener {
             tcp,
             connections: Arc::new(Semaphore::new(options.max_http_connections)),
             timeout: Duration::from_millis(options.http_write_timeout_ms),
+            header_timeout: Duration::from_millis(options.http_header_timeout_ms),
         }
+    }
+    /// Serve HTTP/1 with bounded header/keep-alive waits and graceful draining.
+    /// Header timeouts run in Hyper, so computing a response cannot trigger them.
+    pub async fn serve(
+        mut self,
+        router: axum::Router,
+        shutdown: impl Future<Output = ()>,
+    ) -> io::Result<()> {
+        let (stop, _) = tokio::sync::watch::channel(false);
+        let mut tasks = tokio::task::JoinSet::new();
+        tokio::pin!(shutdown);
+        loop {
+            tokio::select! {
+                _ = &mut shutdown => break,
+                Some(_) = tasks.join_next(), if !tasks.is_empty() => {},
+                (io, _) = axum::serve::Listener::accept(&mut self) => {
+                    let router = router.clone();
+                    let mut stopped = stop.subscribe();
+                    let timeout = self.header_timeout;
+                    tasks.spawn(async move {
+                        let mut builder = hyper::server::conn::http1::Builder::new();
+                        builder.timer(hyper_util::rt::TokioTimer::new())
+                            .header_read_timeout(timeout);
+                        let connection = builder.serve_connection(
+                            hyper_util::rt::TokioIo::new(io),
+                            hyper_util::service::TowerToHyperService::new(router),
+                        );
+                        tokio::pin!(connection);
+                        tokio::select! {
+                            _ = &mut connection => {},
+                            _ = stopped.changed() => {
+                                connection.as_mut().graceful_shutdown();
+                                let _ = connection.await;
+                            }
+                        }
+                    });
+                }
+            }
+        }
+        let _ = stop.send(true);
+        while tasks.join_next().await.is_some() {}
+        Ok(())
     }
 }
 impl axum::serve::Listener for Listener {
     type Io = Connection;
     type Addr = SocketAddr;
     async fn accept(&mut self) -> (Connection, SocketAddr) {
-        let permit = self.connections.clone().acquire_owned().await.unwrap();
-        let (tcp, address) = axum::serve::Listener::accept(&mut self.tcp).await;
-        (
-            Connection {
-                tcp,
-                _permit: permit,
-                timeout: self.timeout,
-                write: None,
-            },
-            address,
-        )
+        loop {
+            let (tcp, address) = axum::serve::Listener::accept(&mut self.tcp).await;
+            if let Ok(permit) = self.connections.clone().try_acquire_owned() {
+                return (
+                    Connection {
+                        tcp,
+                        _permit: permit,
+                        timeout: self.timeout,
+                        write: None,
+                    },
+                    address,
+                );
+            }
+            // Accept and close overflow connections instead of leaving completed
+            // TCP handshakes stranded in the listen backlog.
+            drop(tcp);
+            tokio::task::yield_now().await;
+        }
     }
     fn local_addr(&self) -> io::Result<SocketAddr> {
         self.tcp.local_addr()
@@ -116,11 +167,59 @@ mod tests {
     use super::*;
     use axum::serve::Listener as _;
     #[tokio::test]
+    async fn header_and_keep_alive_deadlines_release_idle_connections() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let tcp = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = tcp.local_addr().unwrap();
+        let options = crate::Options {
+            http_header_timeout_ms: 40,
+            ..Default::default()
+        };
+        let router = axum::Router::new().route("/health", axum::routing::get(|| async { "ok" }));
+        let server =
+            tokio::spawn(Listener::new(tcp, &options).serve(router, std::future::pending()));
+        for partial in [false, true] {
+            let mut client = TcpStream::connect(address).await.unwrap();
+            if partial {
+                client
+                    .write_all(b"GET /health HTTP/1.1\r\nHost: localhost\r\nX-Slow: ")
+                    .await
+                    .unwrap();
+            }
+            let mut response = Vec::new();
+            tokio::time::timeout(
+                Duration::from_millis(300),
+                client.read_to_end(&mut response),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+            assert!(response.is_empty() || response.starts_with(b"HTTP/1.1 408"));
+        }
+        let mut client = TcpStream::connect(address).await.unwrap();
+        client
+            .write_all(b"GET /health HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .await
+            .unwrap();
+        let mut response = Vec::new();
+        tokio::time::timeout(
+            Duration::from_millis(300),
+            client.read_to_end(&mut response),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(response.starts_with(b"HTTP/1.1 200"));
+        assert!(response.ends_with(b"ok"));
+        server.abort();
+    }
+    #[tokio::test]
     async fn slow_handler_is_not_a_socket_write_timeout() {
         let tcp = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = tcp.local_addr().unwrap();
         let options = crate::Options {
             http_write_timeout_ms: 20,
+            http_header_timeout_ms: 20,
             ..Default::default()
         };
         let router = axum::Router::new().route(
@@ -130,7 +229,8 @@ mod tests {
                 "completed"
             }),
         );
-        let server = tokio::spawn(axum::serve(Listener::new(tcp, &options), router).into_future());
+        let server =
+            tokio::spawn(Listener::new(tcp, &options).serve(router, std::future::pending()));
         let response = reqwest::Client::builder()
             .timeout(Duration::from_secs(1))
             .build()
@@ -161,7 +261,18 @@ mod tests {
                 .await
                 .is_err()
         );
+        use tokio::io::AsyncReadExt;
+        let mut refused = _second_client;
+        let mut byte = [0];
+        assert_eq!(
+            tokio::time::timeout(Duration::from_millis(100), refused.read(&mut byte))
+                .await
+                .unwrap()
+                .unwrap(),
+            0
+        );
         drop(first);
+        let _third_client = TcpStream::connect(address).await.unwrap();
         let (mut second, _) = tokio::time::timeout(Duration::from_millis(200), listener.accept())
             .await
             .unwrap();

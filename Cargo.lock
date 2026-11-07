@@ -1908,6 +1908,8 @@ dependencies = [
  "crc32fast",
  "fs2",
  "http-body-util",
+ "hyper",
+ "hyper-util",
  "lz4_flex",
  "opendal",
  "opentelemetry",

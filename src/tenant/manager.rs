@@ -58,6 +58,7 @@ struct Slot {
     failure: Option<Error>,
     failure_until: Option<Instant>,
     queued: bool,
+    local_backups: Arc<Mutex<()>>,
 }
 struct Inner {
     root: PathBuf,
@@ -67,7 +68,6 @@ struct Inner {
     slots: Mutex<HashMap<Uuid, Arc<Mutex<Slot>>>>,
     memory: Arc<Counter>,
     io: Arc<IoScheduler>,
-    local_backups: Mutex<()>,
     node: Arc<crate::replication::Node>,
 }
 struct Owner {
@@ -182,7 +182,6 @@ impl Store {
             slots: Mutex::new(HashMap::new()),
             memory: Counter::new(options.global_memory_bytes),
             io: IoScheduler::new(options.io_workers),
-            local_backups: Mutex::new(()),
         });
         let stop = Arc::new(AtomicBool::new(false));
         let (sender, receiver) = std::sync::mpsc::sync_channel::<Arc<Mutex<Slot>>>(128);
@@ -388,6 +387,7 @@ impl Store {
                 core: None,
                 failure: None,
                 queued: false,
+                local_backups: Arc::new(Mutex::new(())),
                 restoring: false,
                 installing: None,
                 failure_until: None,
@@ -405,6 +405,7 @@ impl Store {
                     core: None,
                     failure: None,
                     queued: false,
+                    local_backups: Arc::new(Mutex::new(())),
                     restoring: false,
                     installing: None,
                     failure_until: None,
@@ -616,14 +617,23 @@ impl Store {
         Ok(())
     }
     pub fn delete_tenant(&self, id: Uuid) -> Result<()> {
-        self.delete_tenant_inner(id, self.owner.inner.node.write()?)
+        self.delete_tenant_inner(id, None)
     }
     fn delete_tenant_inner(
         &self,
         id: Uuid,
-        permission: parking_lot::RwLockReadGuard<'_, ()>,
+        source: Option<&crate::replication::Source>,
     ) -> Result<()> {
+        let permission = match source {
+            Some(source) => self.owner.inner.node.replica_write(source)?,
+            None => self.owner.inner.node.write()?,
+        };
+        drop(permission);
         let _drain = self.drain_for_management(id, false)?;
+        let permission = match source {
+            Some(source) => self.owner.inner.node.replica_write(source)?,
+            None => self.owner.inner.node.write()?,
+        };
         let slot = self.slot(id);
         let mut slot = slot.lock();
         self.close_slot(&mut slot)?;

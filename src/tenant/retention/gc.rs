@@ -2,11 +2,13 @@ use super::*;
 use crate::codec;
 use crate::identity::{COLLECTION, Knowledge};
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub(super) struct State {
     migration_phase: u8,
     migration_after: Option<Vec<u8>>,
     history_after: Option<Vec<u8>>,
+    #[serde(default)]
+    knowledge_after: Option<Vec<u8>>,
     #[serde(default)]
     pub(super) expiry_after: Option<Vec<u8>>,
     history_identifier: Option<String>,
@@ -53,8 +55,13 @@ fn migration(
             .unwrap_or_else(|| b"~absent".to_vec()),
         _ => return Ok(()),
     };
-    let rows = tx.prefix_first_after(&prefix, state.migration_after.as_deref(), batch)?;
-    for (k, bytes) in &rows {
+    let (rows, exhausted) = tx.gc_prefix(&prefix, state.migration_after.as_deref(), batch)?;
+    for record in rows {
+        let k = &record.key;
+        state.migration_after = Some(k.clone());
+        let Some(bytes) = record.value.as_deref() else {
+            continue;
+        };
         match state.migration_phase {
             2 => {
                 let version = crate::tenant::datasets::parse_published(bytes)?;
@@ -112,16 +119,15 @@ fn migration(
             }
             _ => schedule_at(tx, k, p.legacy_expires_at_ms, Expiration::Delete)?,
         }
-        state.migration_after = Some(k.clone());
     }
-    if rows.len() < batch {
+    if exhausted {
         state.migration_phase += 1;
         state.migration_after = None;
     }
     Ok(())
 }
 fn expire(tx: &mut Transaction<'_>, state: &mut State, batch: usize) -> Result<()> {
-    let rows = tx.gc_prefix(EXPIRY, state.expiry_after.as_deref(), batch)?;
+    let (rows, _) = tx.gc_prefix(EXPIRY, state.expiry_after.as_deref(), batch)?;
     for record in rows {
         let queue_key = record.key;
         let at = u64::from_be_bytes(
@@ -197,7 +203,16 @@ fn history(tx: &mut Transaction<'_>, state: &mut State, batch: usize) -> Result<
         return Ok(());
     };
     if state.history_after.is_none() {
-        let Some((key, _)) = tx.prefix_first(KNOWLEDGE, 1)?.into_iter().next() else {
+        let (rows, _) = tx.gc_prefix(KNOWLEDGE, state.knowledge_after.as_deref(), batch)?;
+        let mut first = None;
+        for record in rows {
+            if record.value.is_some() {
+                first = Some(record.key);
+                break;
+            }
+            state.knowledge_after = Some(record.key);
+        }
+        let Some(key) = first else {
             return Ok(());
         };
         let floor = u64::from_be_bytes(
@@ -213,8 +228,13 @@ fn history(tx: &mut Transaction<'_>, state: &mut State, batch: usize) -> Result<
         state.baseline_kept = false;
     }
     let prefix = doc_prefix(collection, "history:");
-    let rows = tx.prefix_first_after(&prefix, state.history_after.as_deref(), batch)?;
-    for (k, _) in &rows {
+    let (rows, exhausted) = tx.gc_prefix(&prefix, state.history_after.as_deref(), batch)?;
+    for record in rows {
+        let k = &record.key;
+        state.history_after = Some(k.clone());
+        if record.value.is_none() {
+            continue;
+        }
         let text = std::str::from_utf8(&k[prefix.len()..k.len() - 2])
             .map_err(|_| Error::corrupt("history key"))?;
         let (identifier, ordinal) = text
@@ -234,9 +254,8 @@ fn history(tx: &mut Transaction<'_>, state: &mut State, batch: usize) -> Result<
                 state.baseline_kept = true;
             }
         }
-        state.history_after = Some(k.clone());
     }
-    if rows.len() < batch {
+    if exhausted {
         state.history_after = None;
         state.swept_floor = state.sweeping_floor;
         state.history_identifier = None;
@@ -268,6 +287,7 @@ pub(super) fn step(tenant: &TenantHandle) -> Result<()> {
                 // Do not generate empty maintenance WAL traffic simply to tick time.
                 let due = tx
                     .gc_prefix(EXPIRY, state.expiry_after.as_deref(), 1)?
+                    .0
                     .first()
                     .is_some_and(|r| {
                         &r.key[EXPIRY.len()..EXPIRY.len() + 8] <= now.to_be_bytes().as_slice()

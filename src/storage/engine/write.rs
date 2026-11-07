@@ -103,17 +103,15 @@ impl Engine {
             seq,
             changes: BTreeMap::new(),
             memory: Vec::new(),
-            read_budget: crate::read::ReadBudget::new(
-                &crate::ReadOptions::default(),
-                &self.options,
-            )?,
+            bounded_reads: !maintenance && check.is_none(),
+            json_cache: Default::default(),
         };
         let read_seq = writer.staged;
         drop(writer);
         // Serialize transaction evaluation independently from durable publication.
         // A cold read must not keep a preceding fsync from confirming its prefix.
         let result = f(&mut tx)?;
-        tx.read_budget.check()?;
+        drop(tx.json_cache);
         let mut writer = self.writer.lock();
         if let Some(error) = &writer.poison {
             return Err(error.clone());
@@ -274,6 +272,20 @@ impl Engine {
         Ok(())
     }
 }
+pub(crate) struct CachedJson<T> {
+    value: T,
+    _memory: Reservation,
+}
+impl<T> std::ops::Deref for CachedJson<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        &self.value
+    }
+}
+struct DecodedMetadata {
+    value: Option<Arc<dyn std::any::Any + Send + Sync>>,
+    _memory: Reservation,
+}
 pub struct Transaction<'a> {
     pub(super) engine: &'a Engine,
     pub(super) view: &'a View,
@@ -281,16 +293,70 @@ pub struct Transaction<'a> {
     pub seq: u64,
     pub(super) changes: BTreeMap<Vec<u8>, Record>,
     pub(super) memory: Vec<Reservation>,
-    read_budget: crate::read::ReadBudget,
+    bounded_reads: bool,
+    json_cache: Mutex<BTreeMap<Vec<u8>, DecodedMetadata>>,
 }
 impl Transaction<'_> {
+    pub(crate) fn cached_json<T: serde::de::DeserializeOwned + Send + Sync + 'static>(
+        &self,
+        key: &[u8],
+    ) -> Result<Option<Arc<CachedJson<T>>>> {
+        if let Some(entry) = self.json_cache.lock().get(key) {
+            match &entry.value {
+                None => return Ok(None),
+                Some(value) => {
+                    if let Ok(value) = value.clone().downcast::<CachedJson<T>>() {
+                        return Ok(Some(value));
+                    }
+                }
+            }
+        }
+        let bytes = self.get(key)?;
+        let memory = self.engine.budget.reserve(
+            key.len().saturating_add(
+                bytes
+                    .as_ref()
+                    .map_or(64, |b| crate::json::allocation_bound(b)),
+            ),
+        )?;
+        let value = bytes
+            .as_ref()
+            .map(|b| -> Result<_> {
+                let value =
+                    serde_json::from_slice::<T>(b).map_err(|e| Error::corrupt(e.to_string()))?;
+                Ok(Arc::new(CachedJson {
+                    value,
+                    _memory: memory,
+                }))
+            })
+            .transpose()?;
+        let memory = self.engine.budget.reserve(key.len().saturating_add(64))?;
+        self.json_cache.lock().insert(
+            key.to_vec(),
+            DecodedMetadata {
+                value: value
+                    .as_ref()
+                    .map(|value| value.clone() as Arc<dyn std::any::Any + Send + Sync>),
+                _memory: memory,
+            },
+        );
+        Ok(value)
+    }
+    fn read_budget(&self) -> Result<Option<crate::read::ReadBudget>> {
+        self.bounded_reads
+            .then(|| {
+                crate::read::ReadBudget::new(&crate::ReadOptions::default(), &self.engine.options)
+            })
+            .transpose()
+    }
+
     fn scan_prefix<'a>(
         &'a self,
         prefix: &[u8],
         start: Vec<u8>,
         stats: &mut ReadStats,
     ) -> Result<Scan<'a>> {
-        self.read_budget.check()?;
+        let budget = self.read_budget()?;
         let end = codec::prefix_end(prefix);
         let mut scan = Scan::unstarted(
             self.view,
@@ -300,7 +366,9 @@ impl Transaction<'_> {
             None,
             stats,
         )?;
-        scan.set_read_budget(&self.read_budget);
+        if let Some(budget) = &budget {
+            scan.set_read_budget(budget);
+        }
         scan.seek(
             &ScanRange {
                 start,
@@ -338,7 +406,7 @@ impl Transaction<'_> {
         prefix: &[u8],
         after: Option<&[u8]>,
         limit: usize,
-    ) -> Result<Vec<Record>> {
+    ) -> Result<(Vec<Record>, bool)> {
         let mut start = after.map_or_else(
             || prefix.to_vec(),
             |key| {
@@ -352,12 +420,12 @@ impl Transaction<'_> {
         }
         let mut stats = ReadStats::default();
         let mut scan = self.scan_prefix(prefix, start, &mut stats)?;
-        let limit = limit.min(self.read_budget.max_scan);
+        let limit = limit.min(self.engine.options.max_scan);
         let mut rows = Vec::new();
         while let Some(record) = scan.next_for_gc(&mut stats, limit)? {
             rows.push(record);
         }
-        Ok(rows)
+        Ok((rows, scan.exhausted()))
     }
     pub fn prefix_first_after(
         &self,
@@ -398,16 +466,16 @@ impl Transaction<'_> {
         Ok(records.into_iter().take(limit).collect())
     }
     pub fn get(&self, key: &[u8]) -> Result<Option<Arc<Bytes>>> {
-        self.read_budget.check()?;
         if let Some(record) = self.changes.get(key) {
             return Ok(record.value.clone());
         }
+        let budget = self.read_budget()?;
         Ok(read::get_one_controlled(
             self.view,
             key,
             self.read_seq,
             &mut ReadStats::default(),
-            Some(&self.read_budget),
+            budget.as_ref(),
         )?
         .and_then(|r| r.value))
     }
@@ -420,7 +488,6 @@ impl Transaction<'_> {
         value: Vec<u8>,
         prefix_len: usize,
     ) -> Result<()> {
-        self.read_budget.check()?;
         if key.len() > codec::MAX_KEY || prefix_len > key.len() {
             return Err(Error::limit("encoded key exceeds limit"));
         }
@@ -429,6 +496,7 @@ impl Transaction<'_> {
                 .budget
                 .reserve(key.len() * 2 + value.len() * 2 + 256)?,
         );
+        self.json_cache.get_mut().remove(&key);
         self.changes.insert(
             key.clone(),
             Record {
@@ -444,12 +512,12 @@ impl Transaction<'_> {
         self.delete_with_prefix(key, 0)
     }
     pub fn delete_with_prefix(&mut self, key: Vec<u8>, prefix_len: usize) -> Result<()> {
-        self.read_budget.check()?;
         if key.len() > codec::MAX_KEY || prefix_len > key.len() {
             return Err(Error::limit("encoded key exceeds limit"));
         }
         self.memory
             .push(self.engine.budget.reserve(key.len() * 2 + 256)?);
+        self.json_cache.get_mut().remove(&key);
         self.changes.insert(
             key.clone(),
             Record {
@@ -492,6 +560,46 @@ impl Transaction<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn query_deadline_does_not_become_a_total_write_or_maintenance_deadline() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::Store::open(
+            dir.path(),
+            Options {
+                query_ms: 10,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let tenant = store
+            .tenant(store.create_tenant("write-deadline").unwrap().id)
+            .unwrap();
+        let engine = tenant.engine().clone();
+        drop(tenant);
+        drop(store);
+        for maintenance in [false, true] {
+            let work = |tx: &mut Transaction<'_>| {
+                tx.put(b"before".to_vec(), b"confirmed".to_vec())?;
+                std::thread::sleep(Duration::from_millis(30));
+                assert_eq!(tx.get(b"before")?.unwrap().as_slice(), b"confirmed");
+                tx.put(b"after".to_vec(), b"confirmed".to_vec())
+            };
+            if maintenance {
+                engine.transact_maintenance(work).unwrap();
+            } else {
+                engine.transact(work).unwrap();
+            }
+        }
+        let snapshot = engine.snapshot().unwrap();
+        assert_eq!(
+            snapshot
+                .get(b"after", &mut ReadStats::default())
+                .unwrap()
+                .unwrap()
+                .as_slice(),
+            b"confirmed"
+        );
+    }
     #[test]
     fn transaction_snapshot_contains_its_write_when_flush_rotates_during_evaluation() {
         let dir = tempfile::tempdir().unwrap();
@@ -918,9 +1026,19 @@ mod tests {
             .unwrap();
         entered_rx.recv().unwrap();
         let reads: Vec<_> = (0..4096)
-            .map(|_| engine.io.submit_read(reader, None, || Ok(())).unwrap())
+            .map(|_| {
+                engine
+                    .io
+                    .submit_read(reader, None, false, || Ok(()))
+                    .unwrap()
+            })
             .collect();
-        assert!(engine.io.submit_read(reader, None, || Ok(())).is_err());
+        assert!(
+            engine
+                .io
+                .submit_read(reader, None, false, || Ok(()))
+                .is_err()
+        );
         let writer = engine.clone();
         let task = std::thread::spawn(move || {
             writer.transact(|tx| tx.put(b"confirmed".to_vec(), b"value".to_vec()))

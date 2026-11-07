@@ -133,7 +133,7 @@ impl<'a> TableWriter<'a> {
         let bytes = std::mem::take(&mut self.output);
         let position = self.offset - bytes.len() as u64;
         let file = self.file.clone();
-        self.io.run(self.tenant, move || {
+        self.io.run_background(self.tenant, move || {
             file.write_all_at(&bytes, position)?;
             Ok(())
         })?;
@@ -204,7 +204,7 @@ impl<'a> TableWriter<'a> {
         self.reserve_output(footer.len())?;
         let file = self.file.clone();
         let position = self.offset;
-        self.io.run(self.tenant, move || {
+        self.io.run_background(self.tenant, move || {
             file.write_all_at(&footer, position)?;
             file.sync_all()?;
             Ok(())

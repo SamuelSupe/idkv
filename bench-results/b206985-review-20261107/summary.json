@@ -1,0 +1,16 @@
+{
+  "result": "functional_and_fault_checks_passed",
+  "new_tests": 12,
+  "full_test_count": 197,
+  "baseline_behavioral_failures_reproduced": 8,
+  "connection_cases_passed": 6,
+  "connection_document_state_checks": 600,
+  "qualification_runs_passed": 4,
+  "qualification_document_state_checks": 144800,
+  "fault_cases_passed": 3,
+  "fault_confirmed_documents_preserved": 6000,
+  "fault_confirmed_documents_missing": 0,
+  "acknowledged_mismatches": 0,
+  "performance_limitation": "No universal P99 improvement: standard mixed 23.428 to 23.422 ms; repeated mixed 16.905 to 26.858 ms; extended 60-second recovery 22.624 to 29.722 ms. Tail latency remains a performance risk.",
+  "performance_status": "tail_latency_risk_remains"
+}

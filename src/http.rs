@@ -16,6 +16,7 @@ mod replication;
 use crate::{Error, Result, Store, model::*};
 use axum::{
     Json, Router,
+    body::HttpBody as _,
     extract::{MatchedPath, Path, Request, State},
     http::{HeaderMap, Method, StatusCode},
     response::{IntoResponse, Response},
@@ -40,6 +41,7 @@ struct AppState {
     workers: Arc<Semaphore>,
     body_workers: Arc<Semaphore>,
     maintenance_workers: Arc<Semaphore>,
+    maintenance_tenants: Arc<Mutex<HashMap<Uuid, std::sync::Weak<Semaphore>>>>,
     tenants: Arc<Mutex<HashMap<Uuid, std::sync::Weak<Semaphore>>>>,
     runtime: HttpRuntime,
 }
@@ -188,6 +190,7 @@ pub fn app_with_runtime(
         workers,
         body_workers,
         maintenance_workers,
+        maintenance_tenants: Arc::new(Mutex::new(HashMap::new())),
         tenants: Arc::new(Mutex::new(HashMap::new())),
         runtime,
     };
@@ -235,6 +238,30 @@ impl IntoResponse for Error {
         };
         (status, Json(json!({"error":self}))).into_response()
     }
+}
+fn tenant_admission(
+    tenants: &Mutex<HashMap<Uuid, std::sync::Weak<Semaphore>>>,
+    id: Uuid,
+    limit: usize,
+    label: &str,
+) -> Result<Arc<tokio::sync::OwnedSemaphorePermit>> {
+    let mut tenants = tenants.lock();
+    if tenants.len() >= 16_384 {
+        tenants.retain(|_, gate| gate.strong_count() > 0);
+    }
+    let semaphore = tenants
+        .get(&id)
+        .and_then(std::sync::Weak::upgrade)
+        .unwrap_or_else(|| {
+            let gate = Arc::new(Semaphore::new(limit));
+            tenants.insert(id, Arc::downgrade(&gate));
+            gate
+        });
+    Ok(Arc::new(
+        semaphore
+            .try_acquire_owned()
+            .map_err(|_| Error::limit(label))?,
+    ))
 }
 async fn dispatch(
     State(state): State<AppState>,
@@ -402,33 +429,67 @@ async fn dispatch_async(
             "global tenant administration required",
         ));
     }
-    let receiving = Arc::new(
-        state
-            .body_workers
-            .clone()
-            .try_acquire_owned()
-            .map_err(|_| Error::limit("HTTP body concurrency"))?,
-    );
-    let tenant_permit = if let Some(id) = tenant {
-        let mut tenants = state.tenants.lock();
-        if tenants.len() >= 16_384 {
-            tenants.retain(|_, gate| gate.strong_count() > 0);
-        }
-        let semaphore = tenants
-            .get(&id)
-            .and_then(std::sync::Weak::upgrade)
-            .unwrap_or_else(|| {
-                let gate = Arc::new(Semaphore::new(state.store.options().max_tenant_requests));
-                tenants.insert(id, Arc::downgrade(&gate));
-                gate
-            });
+    let maintenance = matches!(
+        route.as_str(),
+        "/v1/tenants/{tenant}/compact"
+            | "/v1/tenants/{tenant}/check"
+            | "/v1/tenants/{tenant}/checkpoint"
+            | "/v1/tenants/{tenant}/backup"
+            | "/v1/tenants/{tenant}/backup/{backup}"
+            | "/v1/tenants/{tenant}/restore"
+            | "/v1/tenants/{tenant}/close"
+    ) || (route == "/v1/tenants/{tenant}" && method != Method::GET)
+        || (route.ends_with("/indexes") && method == Method::POST);
+    let workers = if maintenance {
+        &state.maintenance_workers
+    } else {
+        &state.workers
+    };
+    if workers.available_permits() == 0 {
+        return Err(Error::limit("HTTP worker concurrency"));
+    }
+    let tenant_permit = tenant
+        .map(|id| {
+            tenant_admission(
+                &state.tenants,
+                id,
+                state.store.options().max_tenant_requests,
+                "tenant HTTP concurrency",
+            )
+        })
+        .transpose()?;
+    let maintenance_permit = tenant
+        .filter(|_| maintenance)
+        .map(|id| {
+            tenant_admission(
+                &state.maintenance_tenants,
+                id,
+                1,
+                "tenant maintenance concurrency",
+            )
+        })
+        .transpose()?;
+    let empty_body = request.body().is_end_stream();
+    let worker = if empty_body {
         Some(Arc::new(
-            semaphore
+            workers
+                .clone()
                 .try_acquire_owned()
-                .map_err(|_| Error::limit("tenant HTTP concurrency"))?,
+                .map_err(|_| Error::limit("HTTP worker concurrency"))?,
         ))
     } else {
         None
+    };
+    let receiving = if empty_body {
+        None
+    } else {
+        Some(Arc::new(
+            state
+                .body_workers
+                .clone()
+                .try_acquire_owned()
+                .map_err(|_| Error::limit("HTTP body concurrency"))?,
+        ))
     };
     let body_timeout = read_budget
         .as_ref()
@@ -447,9 +508,13 @@ async fn dispatch_async(
         let input_store = state.store.clone();
         let input_receiving = receiving.clone();
         let input_tenant = tenant_permit.clone();
+        let input_maintenance = maintenance_permit.clone();
+        let input_worker = worker.clone();
         let admission = tokio::task::spawn_blocking(move || {
             let _receiving = input_receiving;
             let _tenant = input_tenant;
+            let _maintenance = input_maintenance;
+            let _worker = input_worker;
             input_store.http_input_budget(tenant)
         });
         tokio::time::timeout_at(body_deadline, admission)
@@ -472,25 +537,15 @@ async fn dispatch_async(
     .await
     .map_err(|_| Error::new("DEADLINE_EXCEEDED", "request body deadline"))??;
     drop(receiving);
-    let maintenance = matches!(
-        route.as_str(),
-        "/v1/tenants/{tenant}/compact"
-            | "/v1/tenants/{tenant}/check"
-            | "/v1/tenants/{tenant}/checkpoint"
-            | "/v1/tenants/{tenant}/backup"
-            | "/v1/tenants/{tenant}/backup/{backup}"
-            | "/v1/tenants/{tenant}/restore"
-            | "/v1/tenants/{tenant}/close"
-    ) || (route == "/v1/tenants/{tenant}" && method != Method::GET)
-        || (route.ends_with("/indexes") && method == Method::POST);
-    let worker = if maintenance {
-        &state.maintenance_workers
-    } else {
-        &state.workers
-    }
-    .clone()
-    .try_acquire_owned()
-    .map_err(|_| Error::limit("HTTP worker concurrency"))?;
+    let worker = match worker {
+        Some(worker) => worker,
+        None => Arc::new(
+            workers
+                .clone()
+                .try_acquire_owned()
+                .map_err(|_| Error::limit("HTTP worker concurrency"))?,
+        ),
+    };
     let minimum = match (
         headers.get("x-tkv-min-history"),
         headers.get("x-tkv-min-seq"),
@@ -528,6 +583,7 @@ async fn dispatch_async(
         drop(bytes);
         drop(body_memory);
         let _worker = worker;
+        let _maintenance = maintenance_permit;
         let _tenant = tenant_permit;
         let read_only = required_role(&route, &method)? == Role::Read
             && (!route.ends_with("/dsl")

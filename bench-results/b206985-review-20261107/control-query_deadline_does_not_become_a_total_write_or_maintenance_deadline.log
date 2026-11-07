@@ -1,0 +1,21 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running unittests src/lib.rs (/var/tmp/idkv-b206985-control-target-20261107/debug/deps/tenant_kv-31f7dc8ed692cb3e)
+
+running 1 test
+test storage::engine::write::tests::query_deadline_does_not_become_a_total_write_or_maintenance_deadline ... FAILED
+
+failures:
+
+---- storage::engine::write::tests::query_deadline_does_not_become_a_total_write_or_maintenance_deadline stdout ----
+
+thread 'storage::engine::write::tests::query_deadline_does_not_become_a_total_write_or_maintenance_deadline' panicked at src/storage/engine/write.rs:1147:39:
+called `Result::unwrap()` on an `Err` value: Error { code: "DEADLINE_EXCEEDED", message: "read deadline", location: None }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    storage::engine::write::tests::query_deadline_does_not_become_a_total_write_or_maintenance_deadline
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 66 filtered out; finished in 0.14s
+
+error: test failed, to rerun pass `--lib`

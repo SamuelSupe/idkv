@@ -1,0 +1,23 @@
+[
+  {
+    "node": 0,
+    "tenant": "1135e086-3f1c-4a12-b84d-997a87643ab8",
+    "documents": 100,
+    "sha256": "b350ebc82b11c5a9c88b6b18e2549a33d7bc86e7cc052335a7371647fd8e8f88",
+    "acknowledged_mismatches": 0
+  },
+  {
+    "node": 0,
+    "tenant": "1135e086-3f1c-4a12-b84d-997a87643ab8",
+    "documents": 100,
+    "sha256": "b350ebc82b11c5a9c88b6b18e2549a33d7bc86e7cc052335a7371647fd8e8f88",
+    "acknowledged_mismatches": 0
+  },
+  {
+    "node": 0,
+    "tenant": "1135e086-3f1c-4a12-b84d-997a87643ab8",
+    "documents": 100,
+    "sha256": "b350ebc82b11c5a9c88b6b18e2549a33d7bc86e7cc052335a7371647fd8e8f88",
+    "acknowledged_mismatches": 0
+  }
+]

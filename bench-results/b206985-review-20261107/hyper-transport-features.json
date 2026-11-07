@@ -1,0 +1,22 @@
+{
+  "control": [
+    "client",
+    "client-legacy",
+    "client-proxy",
+    "default",
+    "http1",
+    "server",
+    "service",
+    "tokio"
+  ],
+  "fixed": [
+    "client",
+    "client-legacy",
+    "client-proxy",
+    "default",
+    "http1",
+    "server",
+    "service",
+    "tokio"
+  ]
+}

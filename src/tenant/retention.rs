@@ -74,13 +74,13 @@ pub(crate) fn key(prefix: &[u8], suffix: &[u8]) -> Vec<u8> {
     [prefix, suffix].concat()
 }
 pub(crate) fn policy(tx: &Transaction<'_>) -> Result<Option<RetentionPolicy>> {
-    tx.get(POLICY)?.map(|bytes| parse(&bytes)).transpose()
+    Ok(tx
+        .cached_json::<RetentionPolicy>(POLICY)?
+        .map(|p| (**p).clone()))
 }
 fn transaction_time(tx: &Transaction<'_>) -> Result<u64> {
     let watermark = tx
-        .get(STATE)?
-        .map(|b| parse::<gc::State>(&b))
-        .transpose()?
+        .cached_json::<gc::State>(STATE)?
         .map_or(0, |s| s.watermark_ms);
     Ok(now_ms()?.max(watermark))
 }
@@ -104,18 +104,17 @@ pub(crate) fn schedule_at(
         return Ok(());
     }
     let queue_key = expiry_key(at, target);
-    if let Some(bytes) = tx.get(STATE)? {
-        let mut state: gc::State = parse(&bytes)?;
-        if state
+    if let Some(state) = tx.cached_json::<gc::State>(STATE)?
+        && state
             .expiry_after
             .as_ref()
             .is_some_and(|after| queue_key <= *after)
-        {
-            // Backdated insertions must be visited without restarting at all
-            // historical tombstones. A strict prefix sorts before this key.
-            state.expiry_after = Some(queue_key[..queue_key.len() - 1].to_vec());
-            put(tx, STATE.to_vec(), &state)?;
-        }
+    {
+        let mut state = (**state).clone();
+        // Backdated insertions must be visited without restarting at all
+        // historical tombstones. A strict prefix sorts before this key.
+        state.expiry_after = Some(queue_key[..queue_key.len() - 1].to_vec());
+        put(tx, STATE.to_vec(), &state)?;
     }
     put(tx, dk, &at)?;
     put(

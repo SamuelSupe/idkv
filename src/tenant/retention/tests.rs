@@ -29,6 +29,175 @@ fn pause() {
 }
 
 #[test]
+fn cached_retention_metadata_observes_changes_within_the_same_atomic_batch() {
+    let (_dir, _store, tenant) = setup();
+    tenant
+        .engine()
+        .transact(|tx| {
+            assert!(policy(tx)?.is_none());
+            let p = RetentionPolicy {
+                retention_seconds: 60,
+                activated_seq: tx.seq,
+                legacy_expires_at_ms: 0,
+            };
+            put(tx, POLICY.to_vec(), &p)?;
+            assert_eq!(policy(tx)?.unwrap().retention_seconds, 60);
+            let mut p = policy(tx)?.unwrap();
+            p.retention_seconds = 1;
+            put(tx, POLICY.to_vec(), &p)?;
+            assert_eq!(policy(tx)?.unwrap().retention_seconds, 1);
+            let _ = transaction_time(tx)?;
+            let future = now_ms()? + 86_400_000;
+            let mut state = serde_json::to_value(gc::State::default())?;
+            state["watermark_ms"] = json!(future);
+            put(tx, STATE.to_vec(), &state)?;
+            assert_eq!(transaction_time(tx)?, future);
+            tx.delete(STATE.to_vec())?;
+            assert!(transaction_time(tx)? < future);
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
+fn knowledge_and_history_gc_advance_through_tombstones_without_rolling_back_expiry() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(
+        dir.path(),
+        Options {
+            max_scan: 8,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let t = store
+        .tenant(store.create_tenant("gc-tombstone-heads").unwrap().id)
+        .unwrap();
+    t.identity_initialize(&actor(), IdentityConfig::default())
+        .unwrap();
+    t.set_retention(60).unwrap();
+    drop(store);
+    let collection = t
+        .engine()
+        .transact(|tx| {
+            let c: Collection = parse(&tx.get(&named(b"C", COLLECTION))?.unwrap())?;
+            Ok(c.id)
+        })
+        .unwrap();
+    let mut state = serde_json::to_value(gc::State::default()).unwrap();
+    state["migration_phase"] = json!(5);
+    t.engine()
+        .transact(|tx| {
+            put(tx, STATE.to_vec(), &state)?;
+            for n in 1u64..=128 {
+                tx.delete(key(KNOWLEDGE, &n.to_be_bytes()))?;
+                tx.delete(document_key(collection, &format!("history:a:{:016x}", !n)))?;
+            }
+            put(tx, key(KNOWLEDGE, &200u64.to_be_bytes()), &Uuid::new_v4())?;
+            for ordinal in [100u64, 50] {
+                tx.put(
+                    document_key(collection, &format!("history:z:{:016x}", !ordinal)),
+                    b"baseline".to_vec(),
+                )?;
+            }
+            tx.put(b"Z-expired".to_vec(), b"expired".to_vec())?;
+            schedule_at(tx, b"Z-expired", 0, Expiration::Delete)
+        })
+        .unwrap();
+    t.retention_step().unwrap();
+    assert!(
+        t.engine()
+            .snapshot()
+            .unwrap()
+            .get(b"Z-expired", &mut ReadStats::default())
+            .unwrap()
+            .is_none()
+    );
+    for _ in 0..80 {
+        t.retention_step().unwrap();
+    }
+    let snapshot = t.engine().snapshot().unwrap();
+    assert!(
+        snapshot
+            .get(
+                &document_key(collection, &format!("history:z:{:016x}", !100u64)),
+                &mut ReadStats::default()
+            )
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        snapshot
+            .get(
+                &document_key(collection, &format!("history:z:{:016x}", !50u64)),
+                &mut ReadStats::default()
+            )
+            .unwrap()
+            .is_none()
+    );
+    let state: Value = parse(
+        &snapshot
+            .get(STATE, &mut ReadStats::default())
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(state["swept_floor"], 200);
+}
+
+#[test]
+fn retention_migration_pages_physical_records_instead_of_stalling_at_tombstones() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(
+        dir.path(),
+        Options {
+            max_scan: 8,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let t = store
+        .tenant(store.create_tenant("migration-tombstones").unwrap().id)
+        .unwrap();
+    t.set_retention(60).unwrap();
+    drop(store);
+    t.engine()
+        .transact(|tx| {
+            for n in 0..128 {
+                tx.delete(format!("R{n:04}").into_bytes())?;
+            }
+            tx.put(b"Rz-live".to_vec(), b"receipt".to_vec())
+        })
+        .unwrap();
+    for _ in 0..12 {
+        t.engine()
+            .transact(|tx| tx.put(b"R0000".to_vec(), b"old version".to_vec()))
+            .unwrap();
+        t.engine()
+            .transact(|tx| tx.delete(b"R0000".to_vec()))
+            .unwrap();
+    }
+    for _ in 0..40 {
+        t.retention_step().unwrap();
+    }
+    let snapshot = t.engine().snapshot().unwrap();
+    let state: Value = parse(
+        &snapshot
+            .get(STATE, &mut ReadStats::default())
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(state["migration_phase"], 5);
+    assert!(
+        snapshot
+            .get(&key(DEADLINE, b"Rz-live"), &mut ReadStats::default())
+            .unwrap()
+            .is_some()
+    );
+}
+
+#[test]
 fn expiry_batches_resume_after_tombstones_and_revisit_backdated_insertions() {
     let dir = tempfile::tempdir().unwrap();
     let store = Store::open(

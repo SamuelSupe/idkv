@@ -129,8 +129,13 @@ impl Store {
         recover_lifecycle(&inner.root, &mut registry)?;
         atomic_json(&inner.root.join("control/tenants.json"), &*registry)
     }
+    fn local_backup_lock(&self, id: Uuid) -> Result<Arc<Mutex<()>>> {
+        self.backup_context(id)?;
+        Ok(self.slot(id).lock().local_backups.clone())
+    }
     pub fn backup(&self, id: Uuid) -> Result<Uuid> {
-        let _backup = self.owner.inner.local_backups.lock();
+        let backup_lock = self.local_backup_lock(id)?;
+        let _backup = backup_lock.lock();
         let tenant = self.tenant(id)?;
         let backup = Uuid::new_v4();
         let parent = self.root().join("backups").join(id.to_string());
@@ -176,7 +181,8 @@ impl Store {
     }
     /// Delete a local backup. The online database and remote backups are unaffected.
     pub fn delete_backup(&self, id: Uuid, backup: Uuid) -> Result<()> {
-        let _backup = self.owner.inner.local_backups.lock();
+        let backup_lock = self.local_backup_lock(id)?;
+        let _backup = backup_lock.lock();
         self.backup_context(id)?;
         let parent = self.root().join("backups").join(id.to_string());
         let path = parent.join(backup.to_string());
@@ -188,7 +194,8 @@ impl Store {
         sync_dir(&parent)
     }
     pub fn restore(&self, id: Uuid, backup: Uuid) -> Result<()> {
-        let _backup = self.owner.inner.local_backups.lock();
+        let backup_lock = self.local_backup_lock(id)?;
+        let _backup = backup_lock.lock();
         let source = self
             .root()
             .join("backups")
@@ -281,6 +288,11 @@ impl Store {
         drop(check);
         // Copy and verification run without the tenant lifecycle lock. Only publication
         // needs a stopped tenant; a failed attempt leaves the serving database intact.
+        let _drain = if upstream.is_none() {
+            Some(self.drain_for_management(id, true)?)
+        } else {
+            None
+        };
         let _permission = match upstream {
             Some(source) => inner.node.replica_write(source)?,
             None => {
@@ -288,11 +300,6 @@ impl Store {
                 self.require_local_restore()?;
                 permission
             }
-        };
-        let _drain = if upstream.is_none() {
-            Some(self.drain_for_management(id, true)?)
-        } else {
-            None
         };
         let mut slot = slot.lock();
         self.close_slot(&mut slot)?;
@@ -509,4 +516,32 @@ pub(super) fn remove_lifecycle_debris(root: &Path, paths: Vec<PathBuf>) -> Resul
     sync_dir(&root.join("trash"))?;
     sync_dir(&root.join("staging"))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn a_tenant_backup_lock_does_not_block_another_tenants_backup() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        let a = store.create_tenant("backup-lock-a").unwrap().id;
+        let b = store.create_tenant("backup-lock-b").unwrap().id;
+        let backup = store.backup(a).unwrap();
+        let lock = store.local_backup_lock(a).unwrap();
+        let held = lock.lock();
+        let deleting = store.clone();
+        let delete = thread::spawn(move || deleting.delete_backup(a, backup));
+        let backing_up = store.clone();
+        let (send, receive) = std::sync::mpsc::channel();
+        let other = thread::spawn(move || send.send(backing_up.backup(b)).unwrap());
+        let completed = receive.recv_timeout(Duration::from_secs(2));
+        assert!(store.root().join(format!("backups/{a}/{backup}")).exists());
+        drop(held);
+        delete.join().unwrap().unwrap();
+        other.join().unwrap();
+        completed
+            .expect("another tenant waited for the backup lock")
+            .unwrap();
+    }
 }

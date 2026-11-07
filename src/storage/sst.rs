@@ -141,7 +141,7 @@ fn point_get_preserves_versions_and_tombstones_across_index_partitions() {
     let mut decode_bytes = 0;
     for part in &table.top {
         let frame = table
-            .frame_controlled(part, true, true, &mut ReadStats::default(), None)
+            .frame_controlled(part, true, true, &mut ReadStats::default(), None, false)
             .unwrap();
         let Contents::Index(blocks) = &frame.contents else {
             unreachable!()
@@ -407,6 +407,7 @@ impl Table {
         index: bool,
         admit: bool,
         read_budget: Option<&crate::read::ReadBudget>,
+        background: bool,
     ) -> Result<PendingFrame> {
         let key = CacheKey(self.info.id, meta.offset);
         if let Some(frame) = self.cache.get(&key) {
@@ -416,9 +417,11 @@ impl Table {
         let read = self.frame_read(meta, index, admit);
         let budget = self.budget.clone();
         let cache = self.cache.clone();
-        let task = self.io.submit_read(self.tenant, read_budget, move || {
-            load_frame(&file, read, &budget, &cache)
-        })?;
+        let task = self
+            .io
+            .submit_read(self.tenant, read_budget, background, move || {
+                load_frame(&file, read, &budget, &cache)
+            })?;
         Ok(PendingFrame::Loading(task))
     }
     fn scan_frames(
@@ -427,6 +430,7 @@ impl Table {
         admit: bool,
         stats: &mut ReadStats,
         read_budget: Option<&crate::read::ReadBudget>,
+        background: bool,
     ) -> Result<VecDeque<Arc<Frame>>> {
         if let Some(frames) = metas
             .iter()
@@ -446,7 +450,7 @@ impl Table {
         let task_budget = read_budget.cloned();
         let (frames, delta) = self
             .io
-            .submit_read(self.tenant, read_budget, move || {
+            .submit_read(self.tenant, read_budget, background, move || {
                 let mut frames = VecDeque::new();
                 let mut stats = ReadStats::default();
                 for mut read in reads {
@@ -480,8 +484,10 @@ impl Table {
         admit: bool,
         stats: &mut ReadStats,
         budget: Option<&crate::read::ReadBudget>,
+        background: bool,
     ) -> Result<Arc<Frame>> {
-        self.pending_frame(meta, index, admit, budget)?.wait(stats)
+        self.pending_frame(meta, index, admit, budget, background)?
+            .wait(stats)
     }
     pub fn get(&self, key: &[u8], seq: u64, stats: &mut ReadStats) -> Result<Option<Record>> {
         self.get_controlled(key, seq, stats, None)
@@ -501,7 +507,7 @@ impl Table {
         // A retained MVCC chain may span blocks and index partitions. Search all
         // overlapping partitions, including tombstones and older snapshot versions.
         while part < self.top.len() && self.top[part].first.as_slice() <= key {
-            let frame = self.frame_controlled(&self.top[part], true, true, stats, budget)?;
+            let frame = self.frame_controlled(&self.top[part], true, true, stats, budget, false)?;
             let Contents::Index(blocks) = &frame.contents else {
                 return Err(Error::corrupt("index frame type"));
             };
@@ -509,7 +515,7 @@ impl Table {
             while block < blocks.len() && blocks[block].first.as_slice() <= key {
                 if bloom_contains(&blocks[block].bloom, key) {
                     let frame =
-                        self.frame_controlled(&blocks[block], false, true, stats, budget)?;
+                        self.frame_controlled(&blocks[block], false, true, stats, budget, false)?;
                     let Contents::Data(records) = &frame.contents else {
                         return Err(Error::corrupt("data frame type"));
                     };
@@ -553,7 +559,8 @@ impl Table {
             if let Some(budget) = budget {
                 budget.check()?;
             }
-            let partition = self.frame_controlled(&self.top[part], true, true, stats, budget)?;
+            let partition =
+                self.frame_controlled(&self.top[part], true, true, stats, budget, false)?;
             let Contents::Index(blocks) = &partition.contents else {
                 return Err(Error::corrupt("index frame type"));
             };
@@ -575,7 +582,7 @@ impl Table {
                 let pending = chunk
                     .iter()
                     .map(|(block, indexes)| {
-                        self.pending_frame(&blocks[*block], false, true, budget)
+                        self.pending_frame(&blocks[*block], false, true, budget, false)
                             .map(|frame| (indexes, frame))
                     })
                     .collect::<Result<Vec<_>>>()?;
@@ -654,6 +661,7 @@ impl Table {
             buffered: Default::default(),
             sequential: false,
             read_budget: None,
+            background: false,
             start,
             end,
             admit,
@@ -663,6 +671,7 @@ impl Table {
     pub fn verify(&self) -> Result<()> {
         let mut stats = ReadStats::default();
         let mut iter = self.cursor(None, None, false, None, &mut stats)?;
+        iter.background = true;
         let mut previous: Option<Vec<u8>> = None;
         let mut count = 0;
         while let Some(record) = iter.next(&mut stats)? {
@@ -801,6 +810,7 @@ pub struct TableCursor<'a> {
     buffered: VecDeque<Arc<Frame>>,
     sequential: bool,
     read_budget: Option<crate::read::ReadBudget>,
+    pub(super) background: bool,
     start: Option<Vec<u8>>,
     end: Option<Vec<u8>>,
     admit: bool,
@@ -880,6 +890,7 @@ impl TableCursor<'_> {
                     self.admit,
                     stats,
                     self.read_budget.as_ref(),
+                    self.background,
                 )?);
                 self.block = 0;
             }
@@ -928,6 +939,7 @@ impl TableCursor<'_> {
                     self.admit,
                     stats,
                     self.read_budget.as_ref(),
+                    self.background,
                 )?);
                 self.block += 1;
             } else {
@@ -936,6 +948,7 @@ impl TableCursor<'_> {
                     self.admit,
                     stats,
                     self.read_budget.as_ref(),
+                    self.background,
                 )?;
                 self.block += frames.len();
                 self.data = frames.pop_front();

@@ -40,7 +40,7 @@ impl Context<'_> {
     }
     fn chunk(&self, file: Arc<File>, offset: u64, count: usize) -> Result<Vec<u8>> {
         self.throttle(count)?;
-        self.io.run(self.job.tenant, move || {
+        self.io.run_background(self.job.tenant, move || {
             let mut bytes = vec![0; count];
             file.read_exact_at(&mut bytes, offset)?;
             Ok(bytes)
@@ -177,7 +177,7 @@ impl Context<'_> {
             digest.update(&bytes);
             remaining -= count as u64;
             if let Some(mut output) = target.take() {
-                target = Some(self.io.run(self.job.tenant, move || {
+                target = Some(self.io.run_background(self.job.tenant, move || {
                     output.write_all(&bytes)?;
                     Ok(output)
                 })?);
@@ -187,7 +187,7 @@ impl Context<'_> {
             return Err(Error::corrupt("backup object SHA-256 mismatch"));
         }
         if let Some(output) = target {
-            self.io.run(self.job.tenant, move || {
+            self.io.run_background(self.job.tenant, move || {
                 output.sync_all()?;
                 Ok(())
             })?;

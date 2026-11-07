@@ -83,6 +83,7 @@ impl Store {
             .collect()
     }
     fn cached_replication_positions(&self) -> Result<Vec<TenantPosition>> {
+        let deadline = Instant::now() + Duration::from_millis(100);
         if !self.pending_lifecycle_tenants().is_empty() {
             return Err(Error::new(
                 "UNAVAILABLE",
@@ -93,15 +94,25 @@ impl Store {
             .into_iter()
             .map(|info| {
                 let slot = self.slot(info.id);
-                let mut guard = slot
-                    .try_lock()
-                    .ok_or_else(|| Error::new("BUSY", "tenant opening; retry role change"))?;
-                guard.check_failure()?;
-                let seq = match &guard.core {
-                    Some(core) => core.engine.try_replication_position()?,
-                    None => guard.last_seq.ok_or_else(|| {
-                        Error::new("BUSY", "tenant catalog changed; retry role change")
-                    })?,
+                let seq = loop {
+                    let position = (|| {
+                        let mut guard = slot.try_lock().ok_or_else(|| {
+                            Error::new("BUSY", "tenant opening; retry role change")
+                        })?;
+                        guard.check_failure()?;
+                        match &guard.core {
+                            Some(core) => core.engine.try_replication_position(),
+                            None => guard.last_seq.ok_or_else(|| {
+                                Error::new("BUSY", "tenant catalog changed; retry role change")
+                            }),
+                        }
+                    })();
+                    match position {
+                        Err(error) if error.code == "BUSY" && Instant::now() < deadline => {
+                            thread::sleep(Duration::from_millis(2));
+                        }
+                        other => break other?,
+                    }
                 };
                 Ok(TenantPosition { info, seq })
             })
@@ -444,12 +455,7 @@ impl Store {
         let mut blocked = HashMap::new();
         for info in self.tenants() {
             if !unique.contains(&info.id)
-                && let Err(error) = self
-                    .owner
-                    .inner
-                    .node
-                    .replica_write(source)
-                    .and_then(|permission| self.delete_tenant_inner(info.id, permission))
+                && let Err(error) = self.delete_tenant_inner(info.id, Some(source))
             {
                 blocked.insert(info.id, error);
             }
@@ -505,6 +511,32 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cached_role_positions_retry_brief_contention_and_bound_a_persistent_lock() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        let info = store.create_tenant("role-retry").unwrap();
+        let tenant = store.tenant(info.id).unwrap();
+        let seq = tenant.engine().seq();
+        let slot = store.slot(info.id);
+        let (send, ready) = std::sync::mpsc::channel();
+        let held_slot = slot.clone();
+        let holding = thread::spawn(move || {
+            let _held = held_slot.lock();
+            send.send(()).unwrap();
+            thread::sleep(Duration::from_millis(30));
+        });
+        ready.recv().unwrap();
+        assert_eq!(store.cached_replication_positions().unwrap()[0].seq, seq);
+        holding.join().unwrap();
+        let _held = slot.lock();
+        let started = Instant::now();
+        assert_eq!(
+            store.cached_replication_positions().unwrap_err().code,
+            "BUSY"
+        );
+        assert!(started.elapsed() < Duration::from_secs(1));
+    }
     #[test]
     fn replica_quota_updates_wait_until_restore_preparation_finishes() {
         let a = tempfile::tempdir().unwrap();

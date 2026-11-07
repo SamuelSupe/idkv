@@ -1,6 +1,12 @@
 use super::*;
 use crate::Options;
-use std::{os::unix::fs::PermissionsExt, sync::mpsc};
+use std::{
+    os::unix::fs::PermissionsExt,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    },
+};
 
 fn primary(options: Options) -> (tempfile::TempDir, Store, Service) {
     let dir = tempfile::tempdir().unwrap();
@@ -20,6 +26,123 @@ fn primary(options: Options) -> (tempfile::TempDir, Store, Service) {
     )
     .unwrap();
     (dir, store, service)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn transient_log_busy_uses_short_backoff_without_resetting_initialization_state() {
+    let (_dir, a, sa) = primary(Options::default());
+    let info = a.create_tenant("transient-log-busy").unwrap();
+    let tenant = a.tenant(info.id).unwrap();
+    tenant.create_collection("docs").unwrap();
+    tenant
+        .put("docs", json!({"_key":"confirmed","value":1}), None)
+        .unwrap();
+    let blocked = Arc::new(AtomicBool::new(false));
+    let filter = blocked.clone();
+    let app = crate::http::app_with_replication(
+        a.clone(),
+        crate::http::AuthConfig {
+            tokens: vec![crate::http::Token {
+                subject: "replica".into(),
+                sha256: crate::http::token_hash("replication-unit-test-secret"),
+                tenant: None,
+                role: crate::http::Role::Replication,
+            }],
+        },
+        None,
+        Some(sa),
+    )
+    .unwrap()
+    .layer(axum::middleware::from_fn(
+        move |request: axum::extract::Request, next: axum::middleware::Next| {
+            let blocked = filter.clone();
+            async move {
+                if request.uri().path() == "/v1/replication/log" && blocked.load(Ordering::Acquire)
+                {
+                    return axum::response::IntoResponse::into_response(Error::new(
+                        "BUSY",
+                        "temporary drain",
+                    ));
+                }
+                next.run(request).await
+            }
+        },
+    ));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let server = tokio::spawn(axum::serve(listener, app).into_future());
+    let dir = tempfile::tempdir().unwrap();
+    let b = Store::open(dir.path(), Options::default()).unwrap();
+    let token = dir.path().join("peer-token");
+    fs::write(&token, "replication-unit-test-secret").unwrap();
+    let sb = Service::open(
+        b.clone(),
+        Config {
+            cluster: a.replication_state().cluster,
+            role: Role::Replica,
+            peer_url: url,
+            token_file: token,
+            poll_ms: 10,
+            log_retention_bytes: 1 << 20,
+        },
+    )
+    .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        sb.sync_once().await.unwrap();
+        if b.tenant(info.id)
+            .is_ok_and(|t| t.engine().seq() == tenant.engine().seq())
+        {
+            break;
+        }
+        assert!(Instant::now() < deadline);
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    blocked.store(true, Ordering::Release);
+    let receipt = tenant
+        .put("docs", json!({"_key":"confirmed","value":2}), None)
+        .unwrap();
+    let attempts = sb.inner.progress.lock().initialization_attempts;
+    sb.inner
+        .progress
+        .lock()
+        .initialization_backoff
+        .insert(info.id, Duration::from_secs(30));
+    for _ in 0..12 {
+        if let Some((at, _)) = sb.inner.progress.lock().log_backoff.get_mut(&info.id) {
+            *at = Instant::now();
+        }
+        assert_eq!(sb.sync_once().await.unwrap_err().code, "BUSY");
+        let progress = sb.inner.progress.lock();
+        let (at, next) = progress.log_backoff[&info.id];
+        assert!(at.saturating_duration_since(Instant::now()) <= Duration::from_secs(1));
+        assert!(next <= Duration::from_secs(1));
+        assert_eq!(
+            progress.initialization_backoff[&info.id],
+            Duration::from_secs(30)
+        );
+    }
+    blocked.store(false, Ordering::Release);
+    sb.inner
+        .progress
+        .lock()
+        .log_backoff
+        .get_mut(&info.id)
+        .unwrap()
+        .0 = Instant::now();
+    sb.sync_once().await.unwrap();
+    let replica = b.tenant(info.id).unwrap();
+    assert_eq!(
+        replica.get("docs", "confirmed").unwrap().unwrap()["_rev"],
+        receipt.rev
+    );
+    assert_eq!(sb.inner.progress.lock().initialization_attempts, attempts);
+    assert!(!sb.inner.progress.lock().log_backoff.contains_key(&info.id));
+    assert_eq!(
+        sb.inner.progress.lock().initialization_backoff[&info.id],
+        Duration::from_secs(30)
+    );
+    server.abort();
 }
 
 #[test]

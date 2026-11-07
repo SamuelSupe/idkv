@@ -11,10 +11,181 @@ use tenant_kv::{
 use tower::ServiceExt;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn one_tenant_index_build_cannot_fill_the_maintenance_pool() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(dir.path(), Options::default()).unwrap();
+    let a = store.create_tenant("index-busy").unwrap().id;
+    let b = store.create_tenant("maintenance-healthy").unwrap().id;
+    let tenant = store.tenant(a).unwrap();
+    tenant.create_collection("docs").unwrap();
+    let secret = "maintenance-isolation-secret";
+    let app = http::app(
+        store.clone(),
+        AuthConfig {
+            tokens: vec![Token {
+                subject: "admin".into(),
+                sha256: http::token_hash(secret),
+                tenant: None,
+                role: Role::Admin,
+            }],
+        },
+    )
+    .unwrap();
+    let (entered, ready) = std::sync::mpsc::channel();
+    let (release, wait) = std::sync::mpsc::channel();
+    let engine = tenant.engine().clone();
+    let blocker = std::thread::spawn(move || {
+        engine.transact(|_| {
+            entered.send(()).unwrap();
+            let _ = wait.recv_timeout(std::time::Duration::from_secs(5));
+            Ok(())
+        })
+    });
+    ready
+        .recv_timeout(std::time::Duration::from_secs(1))
+        .unwrap();
+    let pending = app.clone();
+    let first = tokio::spawn(async move {
+        call(
+            &pending,
+            "POST",
+            &format!("/v1/tenants/{a}/collections/docs/indexes"),
+            Some(secret),
+            json!({"name":"first","fields":[{"field":"/value"}]}),
+        )
+        .await
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    assert!(!first.is_finished());
+    for n in 0..3 {
+        let response = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            call(
+                &app,
+                "POST",
+                &format!("/v1/tenants/{a}/collections/docs/indexes"),
+                Some(secret),
+                json!({"name":format!("other-{n}"),"fields":[{"field":"/value"}]}),
+            ),
+        )
+        .await
+        .unwrap();
+        assert_eq!(response.0, StatusCode::TOO_MANY_REQUESTS, "{}", response.1);
+    }
+    let response = call(
+        &app,
+        "POST",
+        &format!("/v1/tenants/{b}/backup"),
+        Some(secret),
+        json!({}),
+    )
+    .await;
+    release.send(()).unwrap();
+    blocker.join().unwrap().unwrap();
+    assert_eq!(response.0, StatusCode::OK, "{}", response.1);
+    assert_eq!(first.await.unwrap().0, StatusCode::OK);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn exhausted_execution_pool_rejects_without_polling_the_body() {
+    struct UnreadBody;
+    impl axum::body::HttpBody for UnreadBody {
+        type Data = axum::body::Bytes;
+        type Error = std::convert::Infallible;
+        fn poll_frame(
+            self: std::pin::Pin<&mut Self>,
+            _: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Option<std::result::Result<hyper::body::Frame<Self::Data>, Self::Error>>>
+        {
+            panic!("rejected request body was polled");
+        }
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(
+        dir.path(),
+        Options {
+            max_http_requests: 1,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let tenant = store
+        .tenant(store.create_tenant("execution-busy").unwrap().id)
+        .unwrap();
+    tenant.create_collection("docs").unwrap();
+    let id = tenant.id();
+    let secret = "execution-preflight-secret";
+    let app = http::app(
+        store,
+        AuthConfig {
+            tokens: vec![Token {
+                subject: "admin".into(),
+                sha256: http::token_hash(secret),
+                tenant: None,
+                role: Role::Admin,
+            }],
+        },
+    )
+    .unwrap();
+    let (entered, ready) = std::sync::mpsc::channel();
+    let (release, wait) = std::sync::mpsc::channel();
+    let engine = tenant.engine().clone();
+    let blocker = std::thread::spawn(move || {
+        engine.transact(|_| {
+            entered.send(()).unwrap();
+            let _ = wait.recv_timeout(std::time::Duration::from_secs(5));
+            Ok(())
+        })
+    });
+    ready
+        .recv_timeout(std::time::Duration::from_secs(1))
+        .unwrap();
+    let pending = app.clone();
+    let first = tokio::spawn(async move {
+        call(
+            &pending,
+            "PUT",
+            &format!("/v1/tenants/{id}/collections/docs/documents"),
+            Some(secret),
+            json!({"document":{"_key":"confirmed","value":1}}),
+        )
+        .await
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    assert!(!first.is_finished());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/v1/tenants/{id}/collections/docs/documents"))
+                .header("authorization", format!("Bearer {secret}"))
+                .body(Body::new(UnreadBody))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    release.send(()).unwrap();
+    blocker.join().unwrap().unwrap();
+    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(first.await.unwrap().0, StatusCode::OK);
+    assert_eq!(
+        tenant.get("docs", "confirmed").unwrap().unwrap()["value"],
+        1
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn slow_bodies_do_not_consume_other_tenants_execution_capacity() {
     use std::io::Write;
     let dir = tempfile::tempdir().unwrap();
-    let store = Store::open(dir.path(), Options::default()).unwrap();
+    let store = Store::open(
+        dir.path(),
+        Options {
+            max_http_body_requests: 64,
+            ..Default::default()
+        },
+    )
+    .unwrap();
     let a = store.create_tenant("slow-a").unwrap().id;
     let b = store.create_tenant("slow-b").unwrap().id;
     let c = store.create_tenant("healthy-c").unwrap().id;

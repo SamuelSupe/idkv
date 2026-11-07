@@ -1,0 +1,50 @@
+[
+  {
+    "case": "knowledge_and_history_gc_advance_through_tombstones_without_rolling_back_expiry",
+    "exit_code": 101,
+    "result": "expected behavioral failure on b206985",
+    "log": "control-knowledge_and_history_gc_advance_through_tombstones_without_rolling_back_expiry.log"
+  },
+  {
+    "case": "retention_migration_pages_physical_records_instead_of_stalling_at_tombstones",
+    "exit_code": 101,
+    "result": "expected behavioral failure on b206985",
+    "log": "control-retention_migration_pages_physical_records_instead_of_stalling_at_tombstones.log"
+  },
+  {
+    "case": "query_deadline_does_not_become_a_total_write_or_maintenance_deadline",
+    "exit_code": 101,
+    "result": "expected behavioral failure on b206985",
+    "log": "control-query_deadline_does_not_become_a_total_write_or_maintenance_deadline.log"
+  },
+  {
+    "case": "a_tenant_backup_lock_does_not_block_another_tenants_backup",
+    "exit_code": 101,
+    "result": "expected behavioral failure on b206985",
+    "log": "control-a_tenant_backup_lock_does_not_block_another_tenants_backup.log"
+  },
+  {
+    "case": "failed_management_drain_preserves_snapshots_and_does_not_pin_node_authority",
+    "exit_code": 101,
+    "result": "expected behavioral failure on b206985",
+    "log": "control-failed_management_drain_preserves_snapshots_and_does_not_pin_node_authority.log"
+  },
+  {
+    "case": "cached_role_positions_retry_brief_contention_and_bound_a_persistent_lock",
+    "exit_code": 101,
+    "result": "expected behavioral failure on b206985",
+    "log": "control-cached_role_positions_retry_brief_contention_and_bound_a_persistent_lock.log"
+  },
+  {
+    "case": "one_tenant_index_build_cannot_fill_the_maintenance_pool",
+    "exit_code": 101,
+    "result": "expected behavioral failure on b206985",
+    "log": "control-one_tenant_index_build_cannot_fill_the_maintenance_pool.log"
+  },
+  {
+    "case": "exhausted_execution_pool_rejects_without_polling_the_body",
+    "exit_code": 101,
+    "result": "expected behavioral failure on b206985",
+    "log": "control-exhausted_execution_pool_rejects_without_polling_the_body.log"
+  }
+]

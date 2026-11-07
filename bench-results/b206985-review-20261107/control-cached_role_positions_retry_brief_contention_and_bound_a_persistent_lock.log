@@ -1,0 +1,21 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running unittests src/lib.rs (/var/tmp/idkv-b206985-control-target-20261107/debug/deps/tenant_kv-31f7dc8ed692cb3e)
+
+running 1 test
+test tenant::manager::replication::tests::cached_role_positions_retry_brief_contention_and_bound_a_persistent_lock ... FAILED
+
+failures:
+
+---- tenant::manager::replication::tests::cached_role_positions_retry_brief_contention_and_bound_a_persistent_lock stdout ----
+
+thread 'tenant::manager::replication::tests::cached_role_positions_retry_brief_contention_and_bound_a_persistent_lock' panicked at src/tenant/manager/replication.rs:586:57:
+called `Result::unwrap()` on an `Err` value: Error { code: "BUSY", message: "tenant opening; retry role change", location: None }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tenant::manager::replication::tests::cached_role_positions_retry_brief_contention_and_bound_a_persistent_lock
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 66 filtered out; finished in 0.13s
+
+error: test failed, to rerun pass `--lib`

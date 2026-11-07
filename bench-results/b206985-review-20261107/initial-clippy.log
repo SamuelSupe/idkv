@@ -1,0 +1,94 @@
+    Checking http v1.5.0
+    Checking http-body v1.1.0
+    Checking http-body-util v0.1.5
+    Checking hyper v1.12.0
+    Checking tower-http v0.6.11
+    Checking tonic v0.14.9
+    Checking axum-core v0.5.6
+    Checking tonic-prost v0.14.9
+    Checking hyper-util v0.1.21
+    Checking opentelemetry-proto v0.31.0
+    Checking hyper-rustls v0.27.10
+    Checking axum v0.8.9
+    Checking reqwest v0.12.28
+    Checking opentelemetry-http v0.31.0
+    Checking reqsign v0.16.5
+    Checking opentelemetry-otlp v0.31.1
+    Checking opendal v0.55.0
+    Checking tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+error: this `if` statement can be collapsed
+   --> src/tenant/retention.rs:107:5
+    |
+107 | /     if let Some(state) = tx.cached_json::<gc::State>(STATE)? {
+108 | |         if state
+109 | |             .expiry_after
+110 | |             .as_ref()
+...   |
+119 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#collapsible_if
+    = note: `-D clippy::collapsible-if` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::collapsible_if)]`
+help: collapse nested if block
+    |
+107 ~     if let Some(state) = tx.cached_json::<gc::State>(STATE)?
+108 ~         && state
+109 |             .expiry_after
+...
+117 |             put(tx, STATE.to_vec(), &state)?;
+118 ~         }
+    |
+
+error: could not compile `tenant-kv` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: items after a test module
+   --> src/tenant/manager/lifecycle.rs:4:1
+    |
+  4 |   mod tests {
+    |   ^^^^^^^^^
+...
+ 31 |   struct TenantPreparation {
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^
+...
+ 36 |   impl Drop for TenantPreparation {
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+ 47 |   impl Store {
+    |   ^^^^^^^^^^
+...
+385 |   pub(super) fn recover_lifecycle(root: &Path, registry: &mut Registry) -> Result<()> {
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+440 | / fn copy_tree(
+441 | |     source: &Path,
+442 | |     destination: &Path,
+443 | |     id: Uuid,
+444 | |     budget: &Budget,
+445 | |     io: &IoScheduler,
+446 | | ) -> Result<()> {
+    | |_______________^
+...
+462 | / pub(super) fn clean_lifecycle_debris(
+463 | |     root: &Path,
+464 | |     registry: &Registry,
+465 | |     startup: bool,
+466 | | ) -> Result<()> {
+    | |_______________^
+...
+469 | / pub(super) fn collect_lifecycle_debris(
+470 | |     root: &Path,
+471 | |     registry: &Registry,
+472 | |     startup: bool,
+473 | | ) -> Result<Vec<PathBuf>> {
+    | |_________________________^
+...
+505 |   pub(super) fn remove_lifecycle_debris(root: &Path, paths: Vec<PathBuf>) -> Result<()> {
+    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#items_after_test_module
+    = note: `-D clippy::items-after-test-module` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::items_after_test_module)]`
+    = help: move the items to before the test module was defined
+
+error: could not compile `tenant-kv` (lib test) due to 2 previous errors

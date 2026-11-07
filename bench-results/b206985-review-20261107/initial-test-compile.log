@@ -1,0 +1,76 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+error[E0433]: failed to resolve: use of undeclared type `AtomicBool`
+  --> src/replication/client_tests.rs:34:28
+   |
+34 |     let blocked = Arc::new(AtomicBool::new(false));
+   |                            ^^^^^^^^^^ use of undeclared type `AtomicBool`
+   |
+   = note: struct `crate::tenant::manager::tests::AtomicBool` exists but is inaccessible
+help: consider importing this struct
+   |
+ 1 + use std::sync::atomic::AtomicBool;
+   |
+
+error[E0433]: failed to resolve: use of undeclared type `Ordering`
+  --> src/replication/client_tests.rs:54:82
+   |
+54 |                 if request.uri().path() == "/v1/replication/log" && blocked.load(Ordering::Acquire)
+   |                                                                                  ^^^^^^^^ use of undeclared type `Ordering`
+   |
+   = note: these enums exist but are inaccessible:
+           crate::codec::typed::Ordering
+           crate::tenant::manager::tests::Ordering
+help: consider importing one of these enums
+   |
+ 1 + use std::cmp::Ordering;
+   |
+ 1 + use std::sync::atomic::Ordering;
+   |
+
+error[E0433]: failed to resolve: use of undeclared type `Ordering`
+  --> src/replication/client_tests.rs:95:25
+   |
+95 |     blocked.store(true, Ordering::Release);
+   |                         ^^^^^^^^ use of undeclared type `Ordering`
+   |
+   = note: these enums exist but are inaccessible:
+           crate::codec::typed::Ordering
+           crate::tenant::manager::tests::Ordering
+help: consider importing one of these enums
+   |
+ 1 + use std::cmp::Ordering;
+   |
+ 1 + use std::sync::atomic::Ordering;
+   |
+
+error[E0433]: failed to resolve: use of undeclared type `Ordering`
+   --> src/replication/client_tests.rs:119:26
+    |
+119 |     blocked.store(false, Ordering::Release);
+    |                          ^^^^^^^^ use of undeclared type `Ordering`
+    |
+    = note: these enums exist but are inaccessible:
+            crate::codec::typed::Ordering
+            crate::tenant::manager::tests::Ordering
+help: consider importing one of these enums
+    |
+  1 + use std::cmp::Ordering;
+    |
+  1 + use std::sync::atomic::Ordering;
+    |
+
+error[E0433]: failed to resolve: use of unresolved module or unlinked crate `thread`
+   --> src/storage/engine/write.rs:519:17
+    |
+519 |                 thread::sleep(Duration::from_millis(30));
+    |                 ^^^^^^ use of unresolved module or unlinked crate `thread`
+    |
+    = help: if you wanted to use a crate named `thread`, use `cargo add thread` to add it to your `Cargo.toml`
+    = note: module `crate::tenant::manager::tests::thread` exists but is inaccessible
+help: consider importing this module
+    |
+498 +     use std::thread;
+    |
+
+For more information about this error, try `rustc --explain E0433`.
+error: could not compile `tenant-kv` (lib test) due to 5 previous errors

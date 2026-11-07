@@ -573,6 +573,9 @@ impl<'a> Scan<'a> {
     pub fn next(&mut self, stats: &mut ReadStats) -> Result<Option<Record>> {
         self.next_inner(stats, false, None)
     }
+    pub(super) fn exhausted(&self) -> bool {
+        self.heap.is_empty()
+    }
     pub(super) fn next_for_gc(
         &mut self,
         stats: &mut ReadStats,

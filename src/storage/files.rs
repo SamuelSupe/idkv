@@ -116,7 +116,7 @@ pub(crate) fn copy_open_file_limited(
             return Err(Error::limit("checkpoint copy free disk reserve"));
         }
         let input = source.clone();
-        target = io.run(tenant, move || {
+        target = io.run_background(tenant, move || {
             let mut buffer = vec![0; count];
             input.read_exact_at(&mut buffer, offset)?;
             target.write_all(&buffer)?;
@@ -124,7 +124,7 @@ pub(crate) fn copy_open_file_limited(
         })?;
         offset += count as u64;
     }
-    io.run(tenant, move || {
+    io.run_background(tenant, move || {
         target.sync_all()?;
         Ok(())
     })

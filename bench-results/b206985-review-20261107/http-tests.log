@@ -1,0 +1,20 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.41s
+     Running tests/http.rs (/var/tmp/idkv-review-b206985-target-20261107/debug/deps/http-afbc29b457858dda)
+
+running 12 tests
+test authenticated_http_workflow_and_cross_tenant_cursor_denial ... ok
+test cursor_quotas_leave_point_reads_and_other_principals_available ... ok
+test document_history_never_controls_server_history_headers ... ok
+test dsl_http_authorizes_parsed_commands_and_reuses_read_only_cached_syntax ... ok
+test exhausted_execution_pool_rejects_without_polling_the_body ... ok
+test identity_http_authentication_managed_writes_and_unforgeable_provenance ... ok
+test local_backup_deletion_requires_admin_and_preserves_tenant_scope ... ok
+test management_history_headers_do_not_reopen_closed_tenants ... ok
+test one_tenant_index_build_cannot_fill_the_maintenance_pool ... ok
+test remote_backup_jobs_require_admin_and_preserve_tenant_scope ... ok
+test server_exposes_not_ready_before_closing_its_listener_on_sigterm ... ok
+test slow_bodies_do_not_consume_other_tenants_execution_capacity ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.75s
+

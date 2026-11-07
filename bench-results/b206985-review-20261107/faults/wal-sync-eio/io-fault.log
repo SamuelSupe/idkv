@@ -1,0 +1,2 @@
+sync EIO /var/tmp/idkv-b206985-faults-20261107/wal-sync-eio/node-0/tenants/74a64f78-14ba-4454-a53c-18aa5bba789f/wal/f0fb1896-45ed-49f8-9bf6-51dcfe92a097.wal
+sync EIO /var/tmp/idkv-b206985-faults-20261107/wal-sync-eio/node-0/tenants/74a64f78-14ba-4454-a53c-18aa5bba789f/wal/f0fb1896-45ed-49f8-9bf6-51dcfe92a097.recover

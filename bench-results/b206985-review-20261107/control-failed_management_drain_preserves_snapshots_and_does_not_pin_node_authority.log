@@ -1,0 +1,21 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running unittests src/lib.rs (/var/tmp/idkv-b206985-control-target-20261107/debug/deps/tenant_kv-31f7dc8ed692cb3e)
+
+running 1 test
+test tenant::manager::admission::tests::failed_management_drain_preserves_snapshots_and_does_not_pin_node_authority ... FAILED
+
+failures:
+
+---- tenant::manager::admission::tests::failed_management_drain_preserves_snapshots_and_does_not_pin_node_authority stdout ----
+
+thread 'tenant::manager::admission::tests::failed_management_drain_preserves_snapshots_and_does_not_pin_node_authority' panicked at src/tenant/manager/admission.rs:232:9:
+management drain held node authority
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tenant::manager::admission::tests::failed_management_drain_preserves_snapshots_and_does_not_pin_node_authority
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 66 filtered out; finished in 0.16s
+
+error: test failed, to rerun pass `--lib`
