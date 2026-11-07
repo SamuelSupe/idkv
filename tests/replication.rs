@@ -167,7 +167,10 @@ impl Pair {
                     tokio::time::sleep(Duration::from_millis(10)).await;
                     continue;
                 }
-                Err(e) => panic!("{e}"),
+                Err(e) => panic!(
+                    "{e}; replica status: {}",
+                    serde_json::to_string(&service.status().unwrap()).unwrap()
+                ),
             }
             let a = source.replication_positions().unwrap();
             let b = replica.replication_positions().unwrap();
@@ -2377,6 +2380,42 @@ async fn stop_test_pair(mut pair: Pair) {
         server.abort();
         let _ = server.await;
     }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn checkpoint_validation_uses_the_tenant_quota_instead_of_the_node_default() {
+    let pair = Pair::with_options(Options {
+        global_memory_bytes: 64 << 20,
+        tenant_memory_bytes: 1 << 20,
+        memtable_bytes: 128 << 10,
+        cache_bytes: 0,
+        ..options()
+    })
+    .await;
+    let info = pair.a.create_tenant("larger-than-default").unwrap();
+    pair.a
+        .set_quota(info.id, 16 << 20, info.disk_bytes)
+        .unwrap();
+    let source = pair.a.tenant(info.id).unwrap();
+    source.create_collection("docs").unwrap();
+    let ack = source
+        .put(
+            "docs",
+            json!({"_key":"large","payload":"x".repeat(700<<10)}),
+            None,
+        )
+        .unwrap();
+    source.engine().flush().unwrap();
+    let expected = source.get("docs", "large").unwrap().unwrap();
+    assert_eq!(expected["_rev"], ack.rev);
+    pair.catch_up(false).await;
+    let replica = pair.b.tenant(info.id).unwrap();
+    assert_eq!(replica.info().memory_bytes, 16 << 20);
+    assert_eq!(replica.get("docs", "large").unwrap(), Some(expected));
+    assert_eq!(pair.sb.status().unwrap().initialization_failures, 0);
+    drop(replica);
+    drop(source);
+    stop_test_pair(pair).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

@@ -1,0 +1,162 @@
+{
+  "binary_sha256": "ffc7d58f914df8d76ef2913c3e055a389be13d21ae59e533168478cbd96619cb",
+  "flush": {
+    "tenant": {
+      "disk_bytes": 4294967296,
+      "generation": "ed890887-ff91-475d-96ca-d749528266c2",
+      "history": "278be365-8eb9-44a1-a8e6-92f8359044e8",
+      "id": "f1404c33-48fc-43f6-b526-069beca73494",
+      "memory_bytes": 8388608,
+      "name": "flush-working-set"
+    },
+    "ack": {
+      "deleted": false,
+      "history": "f1404c33-48fc-43f6-b526-069beca73494:278be365-8eb9-44a1-a8e6-92f8359044e8:00000000-0000-0000-0000-000000000000",
+      "key": "large",
+      "rev": 2
+    },
+    "before": {
+      "rev": 2,
+      "payload_bytes": 716800,
+      "sha256": "86259c34e2d44278bb15c6e429a9701f93a52e19d21bc77907fc066a44ed9dec"
+    },
+    "checkpoint": {
+      "ok": true
+    },
+    "after": {
+      "ok": false,
+      "status": 429,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "tenant memory budget exhausted"
+        }
+      }
+    },
+    "check": {
+      "ok": false,
+      "status": 429,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "tenant memory budget exhausted"
+        }
+      }
+    },
+    "after_restart": {
+      "ok": false,
+      "status": 429,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "tenant memory budget exhausted"
+        }
+      }
+    },
+    "after_quota_expansion": {
+      "rev": 2,
+      "payload_bytes": 716800,
+      "sha256": "86259c34e2d44278bb15c6e429a9701f93a52e19d21bc77907fc066a44ed9dec"
+    },
+    "acknowledged_mismatches_after_expansion": 0
+  },
+  "replica_default": {
+    "node_initial_default_bytes": 8388608,
+    "tenant_quota_bytes": 16777216,
+    "ack": {
+      "deleted": false,
+      "history": "4b5d4f4d-4626-47d6-8e0a-d23ddd63ca45:95901dbe-3579-46ec-ab17-b46d6be7270e:7e7f48ee-736f-478c-bffc-f51c5bb124cc",
+      "key": "large",
+      "rev": 2
+    },
+    "source": {
+      "rev": 2,
+      "payload_bytes": 716800,
+      "sha256": "86259c34e2d44278bb15c6e429a9701f93a52e19d21bc77907fc066a44ed9dec"
+    },
+    "failed_status": {
+      "node": {
+        "version": 1,
+        "protocol": 3,
+        "node": "b48ca6db-9c18-402b-94c4-eb420bbd6c8e",
+        "cluster": "eecfa8bd-1d63-433a-86c0-e523e5652b39",
+        "epoch": "7e7f48ee-736f-478c-bffc-f51c5bb124cc",
+        "enabled": true,
+        "role": "replica",
+        "source": {
+          "node": "fa76c9d7-1d8d-4a18-9181-2c42c0c293dc",
+          "epoch": "7e7f48ee-736f-478c-bffc-f51c5bb124cc"
+        },
+        "fence": null,
+        "parent": null,
+        "forced": false,
+        "log_retention_bytes": 268435456
+      },
+      "tenants": [],
+      "unavailable": [],
+      "last_error": "RESOURCE_EXHAUSTED: tenant memory budget exhausted",
+      "completed_cycles": 20,
+      "initialization_attempts": 4,
+      "initialization_failures": 4,
+      "reinitializations": 0,
+      "initializing": [],
+      "waiting_for_readers": [],
+      "initialization_errors": {
+        "4b5d4f4d-4626-47d6-8e0a-d23ddd63ca45": "RESOURCE_EXHAUSTED: tenant memory budget exhausted"
+      }
+    },
+    "observation_seconds": 1.0836080799927004,
+    "only_follower_default_raised_to_bytes": 16777216,
+    "catchup_seconds_after_restart": 0.033343054994475096,
+    "restored_status": {
+      "node": {
+        "version": 1,
+        "protocol": 3,
+        "node": "b48ca6db-9c18-402b-94c4-eb420bbd6c8e",
+        "cluster": "eecfa8bd-1d63-433a-86c0-e523e5652b39",
+        "epoch": "7e7f48ee-736f-478c-bffc-f51c5bb124cc",
+        "enabled": true,
+        "role": "replica",
+        "source": {
+          "node": "fa76c9d7-1d8d-4a18-9181-2c42c0c293dc",
+          "epoch": "7e7f48ee-736f-478c-bffc-f51c5bb124cc"
+        },
+        "fence": null,
+        "parent": null,
+        "forced": false,
+        "log_retention_bytes": 268435456
+      },
+      "tenants": [
+        {
+          "info": {
+            "id": "4b5d4f4d-4626-47d6-8e0a-d23ddd63ca45",
+            "name": "replica-working-set",
+            "generation": "11f7f2b6-0a7b-4257-9aa2-9deb884c7897",
+            "history": "95901dbe-3579-46ec-ab17-b46d6be7270e",
+            "memory_bytes": 16777216,
+            "disk_bytes": 4294967296
+          },
+          "seq": 2
+        }
+      ],
+      "unavailable": [],
+      "last_error": null,
+      "completed_cycles": 2,
+      "initialization_attempts": 1,
+      "initialization_failures": 0,
+      "reinitializations": 0,
+      "initializing": [],
+      "waiting_for_readers": [],
+      "initialization_errors": {}
+    },
+    "replica": {
+      "rev": 2,
+      "payload_bytes": 716800,
+      "sha256": "86259c34e2d44278bb15c6e429a9701f93a52e19d21bc77907fc066a44ed9dec"
+    },
+    "acknowledged_mismatches": 0
+  }
+}

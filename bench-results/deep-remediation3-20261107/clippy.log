@@ -1,0 +1,19 @@
+    Checking http v1.5.0
+    Checking http-body v1.1.0
+    Checking http-body-util v0.1.5
+    Checking hyper v1.12.0
+    Checking tower-http v0.6.11
+    Checking tonic v0.14.9
+    Checking axum-core v0.5.6
+    Checking hyper-util v0.1.21
+    Checking tonic-prost v0.14.9
+    Checking opentelemetry-proto v0.31.0
+    Checking hyper-rustls v0.27.10
+    Checking axum v0.8.9
+    Checking reqwest v0.12.28
+    Checking reqsign v0.16.5
+    Checking opentelemetry-http v0.31.0
+    Checking opentelemetry-otlp v0.31.1
+    Checking opendal v0.55.0
+    Checking tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 5.46s

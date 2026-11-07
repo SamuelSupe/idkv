@@ -51,6 +51,218 @@ fn query(value: Value) -> Query {
     serde_json::from_value(value).unwrap()
 }
 
+fn compaction_engine(path: &std::path::Path, disk_bytes: u64) -> Arc<storage::Engine> {
+    let options = Options {
+        global_memory_bytes: 128 << 20,
+        tenant_memory_bytes: 64 << 20,
+        tenant_disk_bytes: disk_bytes,
+        memtable_bytes: 256 << 10,
+        cache_bytes: 0,
+        target_sst_bytes: 1 << 20,
+        level_base_bytes: 64 << 20,
+        l0_trigger: 4,
+        l0_stop: 12,
+        ..Options::default()
+    };
+    options.validate().unwrap();
+    let info = TenantInfo {
+        id: uuid::Uuid::new_v4(),
+        name: "compaction-budget".into(),
+        generation: uuid::Uuid::new_v4(),
+        history: uuid::Uuid::new_v4(),
+        memory_bytes: options.tenant_memory_bytes,
+        disk_bytes,
+    };
+    storage::Engine::create(path, &info).unwrap();
+    storage::Engine::open(
+        path.to_path_buf(),
+        info,
+        options.clone(),
+        resources::Budget {
+            global: resources::Counter::new(options.global_memory_bytes),
+            tenant: resources::Counter::new(options.tenant_memory_bytes),
+        },
+        resources::IoScheduler::new(4),
+    )
+    .unwrap()
+}
+
+fn compaction_record(
+    engine: &Arc<storage::Engine>,
+    i: usize,
+    generation: u64,
+    size: usize,
+) -> Vec<u8> {
+    let mut state = (i as u64 + 1) ^ (generation << 32);
+    let mut value: Vec<u8> = (0..size)
+        .map(|_| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state as u8
+        })
+        .collect();
+    engine
+        .transact(|tx| {
+            value[..8].copy_from_slice(&tx.seq.to_le_bytes());
+            tx.put(format!("Z{i:04}").into_bytes(), value.clone())?;
+            Ok(value)
+        })
+        .unwrap()
+}
+
+#[test]
+fn small_disk_compaction_keeps_confirmed_updates_readable_without_raising_quota() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("engine");
+    let engine = compaction_engine(&path, 16 << 20);
+    let mut expected = Vec::new();
+    for i in 0..1000 {
+        expected.push(compaction_record(&engine, i, 0, 4096));
+        if i % 32 == 31 {
+            engine.flush().unwrap();
+            while engine.table_counts().get(&0).copied().unwrap_or(0) >= 4 {
+                engine.compact(false).unwrap();
+            }
+        }
+    }
+    engine.flush().unwrap();
+    for generation in 1..=2 {
+        for step in 0..1000 {
+            let i = step * 317 % 1000;
+            expected[i] = compaction_record(&engine, i, generation, 4096);
+            if step % 32 == 31 {
+                engine.flush().unwrap();
+                while engine.table_counts().get(&0).copied().unwrap_or(0) >= 4 {
+                    engine.compact(false).unwrap();
+                }
+            }
+        }
+        engine.flush().unwrap();
+    }
+    engine.verify().unwrap();
+    let info = engine.info.clone();
+    let options = engine.options.clone();
+    let budget = engine.budget.clone();
+    let io = engine.io.clone();
+    drop(engine);
+    let reopened = storage::Engine::open(path, info, options, budget, io).unwrap();
+    let snapshot = reopened.snapshot().unwrap();
+    for (i, value) in expected.iter().enumerate() {
+        assert_eq!(
+            snapshot
+                .get(format!("Z{i:04}").as_bytes(), &mut ReadStats::default())
+                .unwrap()
+                .unwrap()
+                .as_slice(),
+            value.as_slice()
+        );
+    }
+    assert!(reopened.disk_bytes() <= 16 << 20);
+}
+
+#[test]
+fn compaction_output_over_quota_preserves_published_files_and_pinned_reads() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("engine");
+    let engine = compaction_engine(&path, 8 << 20);
+    let mut original = Vec::new();
+    for i in 0..384 {
+        original.push(compaction_record(&engine, i, 0, 4096));
+        if i % 32 == 31 {
+            engine.flush().unwrap();
+        }
+    }
+    engine.compact(true).unwrap();
+    let old = engine.snapshot().unwrap();
+    let mut current = Vec::new();
+    for i in 0..384 {
+        current.push(compaction_record(&engine, i, 1, 8192));
+        if i % 32 == 31 {
+            engine.flush().unwrap();
+        }
+    }
+    let manifest = std::fs::read(path.join("CURRENT")).unwrap();
+    let sst_names = || {
+        std::fs::read_dir(path.join("sst"))
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect::<std::collections::BTreeSet<_>>()
+    };
+    let files = sst_names();
+    assert_eq!(engine.compact(true).unwrap_err().code, "RESOURCE_EXHAUSTED");
+    assert_eq!(std::fs::read(path.join("CURRENT")).unwrap(), manifest);
+    assert_eq!(sst_names(), files);
+    let latest = engine.snapshot().unwrap();
+    for i in 0..384 {
+        let key = format!("Z{i:04}");
+        assert_eq!(
+            old.get(key.as_bytes(), &mut ReadStats::default())
+                .unwrap()
+                .unwrap()
+                .as_slice(),
+            original[i]
+        );
+        assert_eq!(
+            latest
+                .get(key.as_bytes(), &mut ReadStats::default())
+                .unwrap()
+                .unwrap()
+                .as_slice(),
+            current[i]
+        );
+    }
+    engine.verify().unwrap();
+    assert!(engine.disk_bytes() <= 8 << 20);
+}
+
+#[test]
+fn confirmed_large_document_remains_readable_after_flush_compaction_and_reopen() {
+    let dir = tempfile::tempdir().unwrap();
+    let options = Options {
+        global_memory_bytes: 64 << 20,
+        tenant_memory_bytes: 8 << 20,
+        memtable_bytes: 1 << 20,
+        cache_bytes: 0,
+        ..Options::default()
+    };
+    let store = Store::open(dir.path(), options.clone()).unwrap();
+    let id = store.create_tenant("small-budget").unwrap().id;
+    let tenant = store.tenant(id).unwrap();
+    tenant.create_collection("docs").unwrap();
+    let ack = tenant
+        .put(
+            "docs",
+            json!({"_key":"large","payload":"x".repeat(700<<10)}),
+            None,
+        )
+        .unwrap();
+    let expected = tenant.get("docs", "large").unwrap().unwrap();
+    assert_eq!(expected["_rev"], ack.rev);
+    tenant.engine().flush().unwrap();
+    assert_eq!(tenant.get("docs", "large").unwrap(), Some(expected.clone()));
+    tenant.engine().compact(true).unwrap();
+    tenant.engine().verify().unwrap();
+    assert_eq!(tenant.get("docs", "large").unwrap(), Some(expected.clone()));
+    drop(tenant);
+    drop(store);
+
+    let store = Store::open(dir.path(), options).unwrap();
+    let tenant = store.tenant(id).unwrap();
+    assert_eq!(tenant.get("docs", "large").unwrap(), Some(expected));
+    tenant.engine().verify().unwrap();
+    tenant
+        .put("docs", json!({"_key":"large","payload":"updated"}), None)
+        .unwrap();
+    assert_eq!(
+        tenant.get("docs", "large").unwrap().unwrap()["payload"],
+        "updated"
+    );
+    tenant.delete("docs", "large", None).unwrap();
+    tenant.engine().flush().unwrap();
+    assert_eq!(tenant.get("docs", "large").unwrap(), None);
+}
+
 #[test]
 fn binary_document_precision_projection_and_types() {
     let doc: Value = serde_json::from_str(r#"{"max":18446744073709551615,"min":-9223372036854775808,"float":1.0,"a/b":{"~x":true},"array":[null,2]}"#).unwrap();

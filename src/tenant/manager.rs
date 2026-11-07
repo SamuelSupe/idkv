@@ -332,11 +332,18 @@ impl Store {
             inner.io.clone(),
         ))
     }
-    pub(crate) fn import_context(&self) -> (Budget, Arc<IoScheduler>) {
+    pub(crate) fn import_context(&self, tenant: Option<&TenantInfo>) -> (Budget, Arc<IoScheduler>) {
+        // Replica validation shares serving reservations. Disaster-recovery
+        // imports have no registered tenant and use this node's default quota.
+        let memory = match tenant {
+            Some(info) if self.contains_tenant(info.id) => self.slot(info.id).lock().memory.clone(),
+            Some(info) => Counter::new(info.memory_bytes),
+            None => Counter::new(self.options().tenant_memory_bytes),
+        };
         (
             Budget {
                 global: self.owner.inner.memory.clone(),
-                tenant: Counter::new(self.options().tenant_memory_bytes),
+                tenant: memory,
             },
             self.owner.inner.io.clone(),
         )
@@ -746,6 +753,39 @@ fn maintain_tenant(inner: &Arc<Inner>, slot: &Arc<Mutex<Slot>>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn replica_checkpoint_validation_shares_the_serving_tenant_budget() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(
+            dir.path(),
+            Options {
+                global_memory_bytes: 64 << 20,
+                tenant_memory_bytes: 8 << 20,
+                memtable_bytes: 1 << 20,
+                cache_bytes: 0,
+                ..Options::default()
+            },
+        )
+        .unwrap();
+        let info = store.create_tenant("shared-checkpoint-budget").unwrap();
+        let info = store.set_quota(info.id, 16 << 20, info.disk_bytes).unwrap();
+        let (_, serving, _) = store.backup_context(info.id).unwrap();
+        let held = serving.reserve(7 << 20).unwrap();
+        let (validation, _) = store.import_context(Some(&info));
+        assert_eq!(
+            validation.reserve(10 << 20).unwrap_err().code,
+            "RESOURCE_EXHAUSTED"
+        );
+        drop(held);
+        drop(validation.reserve(10 << 20).unwrap());
+        assert_eq!(store.memory_bytes(), 0);
+        let (disaster_import, _) = store.import_context(None);
+        assert_eq!(
+            disaster_import.reserve(10 << 20).unwrap_err().code,
+            "RESOURCE_EXHAUSTED"
+        );
+    }
+
     #[test]
     fn a_full_maintenance_queue_keeps_scheduling_later_tenants() {
         let dir = tempfile::tempdir().unwrap();

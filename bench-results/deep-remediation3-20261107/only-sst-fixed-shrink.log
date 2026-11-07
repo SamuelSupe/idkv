@@ -1,0 +1,19 @@
+   Compiling tenant-kv v0.10.1 (/var/tmp/idkv-remediation3-before-src-20261107)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.30s
+     Running unittests src/lib.rs (/var/tmp/idkv-remediation3-before-target-20261107/debug/deps/tenant_kv-7def2c613512144d)
+
+running 1 test
+
+thread 'tenant::manager::quota::tests::a_failed_shrink_keeps_existing_data_readable_across_restart' panicked at src/tenant/manager/quota.rs:213:57:
+called `Result::unwrap_err()` on an `Ok` value: TenantInfo { id: d1defaca-800a-4f31-b69e-53fd83db8911, name: "quota-reopen", generation: 1e20d2de-3b6d-4549-8d55-d74c8467e28d, history: 5f4ac30d-41c6-4196-9e66-50f315e52c15, memory_bytes: 2097152, disk_bytes: 107374182400 }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test tenant::manager::quota::tests::a_failed_shrink_keeps_existing_data_readable_across_restart ... FAILED
+
+failures:
+
+failures:
+    tenant::manager::quota::tests::a_failed_shrink_keeps_existing_data_readable_across_restart
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 47 filtered out; finished in 0.30s
+
+error: test failed, to rerun pass `--lib`

@@ -1,0 +1,10 @@
+   Compiling tenant-kv v0.10.1 (/var/tmp/idkv-remediation3-debug-src-20261107)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.76s
+     Running tests/replication.rs (/var/tmp/tkv-20261104-target/debug/deps/replication-9a982e8f8cdf365a)
+
+running 1 test
+AUDIT REPLICA CHECK info=16777216 counter=16777216 used=0
+test checkpoint_validation_uses_the_tenant_quota_instead_of_the_node_default ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 29 filtered out; finished in 0.75s
+

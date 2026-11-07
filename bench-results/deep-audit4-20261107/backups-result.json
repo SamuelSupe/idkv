@@ -1,0 +1,159 @@
+{
+  "case": "backups",
+  "binary_sha256": "f193543e4595867be1305a8967d9e879574e120b2ffdc453aaed32789a6fc18b",
+  "real_create_jobs": [
+    {
+      "backup": "68e79505-1964-4d2c-8b8d-1cae139357d5",
+      "checkpoint_seq": 0,
+      "created_ms": 1794014320923,
+      "error": null,
+      "id": "89611b61-ca1d-4970-8832-2fb7f10f3962",
+      "operation": {
+        "operation": "create"
+      },
+      "processed_files": 4,
+      "result": {
+        "backup": "68e79505-1964-4d2c-8b8d-1cae139357d5",
+        "checkpoint_ms": 1794014320937,
+        "checkpoint_seq": 0,
+        "files": 4,
+        "generation": "cc001e52-e007-4188-9cff-18dab880c51c",
+        "tenant": "cca05969-8c7f-4ba3-a9bd-f33a877b9f6b",
+        "total_bytes": 559
+      },
+      "reused_bytes": 0,
+      "state": "completed",
+      "tenant": "cca05969-8c7f-4ba3-a9bd-f33a877b9f6b",
+      "updated_ms": 1794014320964,
+      "uploaded_bytes": 559
+    },
+    {
+      "backup": "86424d9f-2313-42b2-9954-6e6cd8162208",
+      "checkpoint_seq": 0,
+      "created_ms": 1794014320965,
+      "error": null,
+      "id": "dce16cff-1ac2-46af-9e2c-73e815ee7b83",
+      "operation": {
+        "operation": "create"
+      },
+      "processed_files": 4,
+      "result": {
+        "backup": "86424d9f-2313-42b2-9954-6e6cd8162208",
+        "checkpoint_ms": 1794014320976,
+        "checkpoint_seq": 0,
+        "files": 4,
+        "generation": "cc001e52-e007-4188-9cff-18dab880c51c",
+        "tenant": "cca05969-8c7f-4ba3-a9bd-f33a877b9f6b",
+        "total_bytes": 559
+      },
+      "reused_bytes": 233,
+      "state": "completed",
+      "tenant": "cca05969-8c7f-4ba3-a9bd-f33a877b9f6b",
+      "updated_ms": 1794014321003,
+      "uploaded_bytes": 326
+    }
+  ],
+  "real_prune_job": {
+    "backup": "f0b4afb5-d879-41da-a25d-de16b75cfb71",
+    "checkpoint_seq": null,
+    "created_ms": 1794014321010,
+    "error": null,
+    "id": "dcd0c8f0-19c7-46b1-8b90-bcb3b741ec01",
+    "operation": {
+      "keep_last": 1,
+      "operation": "prune"
+    },
+    "processed_files": 0,
+    "result": {
+      "deleted_backups": 1,
+      "deleted_objects": 0,
+      "retained_backups": 1
+    },
+    "reused_bytes": 0,
+    "state": "completed",
+    "tenant": "cca05969-8c7f-4ba3-a9bd-f33a877b9f6b",
+    "updated_ms": 1794014321012,
+    "uploaded_bytes": 0
+  },
+  "empty_directories_after_real_prune": [
+    "68e79505-1964-4d2c-8b8d-1cae139357d5"
+  ],
+  "list_before_amplification": [
+    {
+      "backup": "86424d9f-2313-42b2-9954-6e6cd8162208",
+      "checkpoint_ms": 1794014320976,
+      "checkpoint_seq": 0,
+      "files": 4,
+      "generation": "cc001e52-e007-4188-9cff-18dab880c51c",
+      "tenant": "cca05969-8c7f-4ba3-a9bd-f33a877b9f6b",
+      "total_bytes": 559
+    }
+  ],
+  "directory_count_in_fixture": 4097,
+  "listing_failure": {
+    "ok": false,
+    "status": 429,
+    "code": "RESOURCE_EXHAUSTED",
+    "value": {
+      "error": {
+        "code": "RESOURCE_EXHAUSTED",
+        "message": "remote backup listing limit"
+      }
+    }
+  },
+  "prune_failure": {
+    "backup": "19737420-3977-4b23-9ab7-d3f01dcb638f",
+    "checkpoint_seq": null,
+    "created_ms": 1794014321228,
+    "error": "RESOURCE_EXHAUSTED: remote backup listing limit",
+    "id": "5599f848-1c5f-4a0f-9b42-770c375b49a8",
+    "operation": {
+      "keep_last": 1,
+      "operation": "prune"
+    },
+    "processed_files": 0,
+    "result": null,
+    "reused_bytes": 0,
+    "state": "failed",
+    "tenant": "cca05969-8c7f-4ba3-a9bd-f33a877b9f6b",
+    "updated_ms": 1794014321378,
+    "uploaded_bytes": 0
+  },
+  "list_after_empty_directory_cleanup": [
+    {
+      "backup": "86424d9f-2313-42b2-9954-6e6cd8162208",
+      "checkpoint_ms": 1794014320976,
+      "checkpoint_seq": 0,
+      "files": 4,
+      "generation": "cc001e52-e007-4188-9cff-18dab880c51c",
+      "tenant": "cca05969-8c7f-4ba3-a9bd-f33a877b9f6b",
+      "total_bytes": 559
+    }
+  ],
+  "retained_backup_verification": {
+    "backup": "86424d9f-2313-42b2-9954-6e6cd8162208",
+    "checkpoint_seq": null,
+    "created_ms": 1794014321417,
+    "error": null,
+    "id": "34c3a073-3c7b-4fcd-949a-23055138489d",
+    "operation": {
+      "backup": "86424d9f-2313-42b2-9954-6e6cd8162208",
+      "operation": "verify"
+    },
+    "processed_files": 4,
+    "result": {
+      "backup": "86424d9f-2313-42b2-9954-6e6cd8162208",
+      "checkpoint_ms": 1794014320976,
+      "checkpoint_seq": 0,
+      "files": 4,
+      "generation": "cc001e52-e007-4188-9cff-18dab880c51c",
+      "tenant": "cca05969-8c7f-4ba3-a9bd-f33a877b9f6b",
+      "total_bytes": 559
+    },
+    "reused_bytes": 0,
+    "state": "completed",
+    "tenant": "cca05969-8c7f-4ba3-a9bd-f33a877b9f6b",
+    "updated_ms": 1794014321426,
+    "uploaded_bytes": 0
+  }
+}

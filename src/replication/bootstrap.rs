@@ -144,7 +144,7 @@ impl Service {
             let tenant_info = info.tenant.clone();
             {
                 let store = self.store();
-                let (budget, io) = store.import_context();
+                let (budget, io) = store.import_context(Some(&tenant_info));
                 let check = Engine::open(
                     path.clone(),
                     tenant_info.clone(),

@@ -108,6 +108,20 @@ impl Store {
         )?;
         let position = check.replication_position()?;
         check.verify()?;
+        // Storage decoding alone is cheaper than returning a JSON document.
+        // A successful shrink must also leave Get's working set available.
+        {
+            let snapshot = check.snapshot()?;
+            let mut stats = crate::ReadStats::default();
+            let mut documents = snapshot.scan(vec![b'D'], Some(vec![b'E']), None, &mut stats)?;
+            while let Some(record) = documents.next(&mut stats)? {
+                if let Some(value) = record.value {
+                    let _read = check
+                        .budget
+                        .reserve(crate::tenant::documents::point_read_memory(value.len()))?;
+                }
+            }
+        }
         drop(check);
         // Reacquire in node-before-slot order. A fence must not wait behind this
         // full storage scan while blocking all other writers.
@@ -173,53 +187,57 @@ mod tests {
     use super::*;
     #[test]
     fn a_failed_shrink_keeps_existing_data_readable_across_restart() {
-        let dir = tempfile::Builder::new()
-            .prefix("idkv-quota-audit-")
-            .tempdir_in("/var/tmp")
-            .unwrap();
-        let options = Options {
-            global_memory_bytes: 64 << 20,
-            tenant_memory_bytes: 8 << 20,
-            memtable_bytes: 1 << 20,
-            cache_bytes: 0,
-            ..Options::default()
-        };
-        let store = Store::open(dir.path(), options.clone()).unwrap();
-        // Exclude maintenance races: the WAL itself, not incomplete compaction,
-        // must be sufficient to retain already-confirmed writes across a quota change.
-        store.owner.stop.store(true, Ordering::Release);
-        for worker in store.owner.workers.lock().drain(..) {
-            worker.join().unwrap();
+        for (payload_kib, flushed) in [(700, false), (700, true), (400, false)] {
+            let dir = tempfile::Builder::new()
+                .prefix("idkv-quota-audit-")
+                .tempdir_in("/var/tmp")
+                .unwrap();
+            let options = Options {
+                global_memory_bytes: 64 << 20,
+                tenant_memory_bytes: 8 << 20,
+                memtable_bytes: 1 << 20,
+                cache_bytes: 0,
+                ..Options::default()
+            };
+            let store = Store::open(dir.path(), options.clone()).unwrap();
+            // Keep the WAL/checkpoint selection independent of maintenance timing.
+            store.owner.stop.store(true, Ordering::Release);
+            for worker in store.owner.workers.lock().drain(..) {
+                worker.join().unwrap();
+            }
+            let id = store.create_tenant("quota-reopen").unwrap().id;
+            let source = store.tenant(id).unwrap();
+            source.create_collection("docs").unwrap();
+            let ack = source
+                .put(
+                    "docs",
+                    serde_json::json!({"_key":"large","payload":"x".repeat(payload_kib<<10)}),
+                    None,
+                )
+                .unwrap();
+            let doc = source.get("docs", "large").unwrap().unwrap();
+            assert_eq!(doc["_rev"], ack.rev);
+            if flushed {
+                source.engine().flush().unwrap();
+            }
+            let before = source.engine().memory_bytes();
+            drop(source);
+            assert!(before < 2 << 20);
+            assert_eq!(
+                store.set_quota(id, 2 << 20, 100 << 30).unwrap_err().code,
+                "RESOURCE_EXHAUSTED"
+            );
+            assert_eq!(store.tenants()[0].memory_bytes, 8 << 20);
+            assert_eq!(
+                Some(doc.clone()),
+                store.tenant(id).unwrap().get("docs", "large").unwrap()
+            );
+            drop(store);
+            let store = Store::open(dir.path(), options).unwrap();
+            assert_eq!(store.tenants()[0].memory_bytes, 8 << 20);
+            let reopened = store.tenant(id).unwrap();
+            assert_eq!(Some(doc), reopened.get("docs", "large").unwrap());
         }
-        let id = store.create_tenant("quota-reopen").unwrap().id;
-        let source = store.tenant(id).unwrap();
-        source.create_collection("docs").unwrap();
-        let ack = source
-            .put(
-                "docs",
-                serde_json::json!({"_key":"large","payload":"x".repeat(700<<10)}),
-                None,
-            )
-            .unwrap();
-        let doc = source.get("docs", "large").unwrap().unwrap();
-        assert_eq!(doc["_rev"], ack.rev);
-        let before = source.engine().memory_bytes();
-        drop(source);
-        assert!(before < 2 << 20);
-        assert_eq!(
-            store.set_quota(id, 2 << 20, 100 << 30).unwrap_err().code,
-            "RESOURCE_EXHAUSTED"
-        );
-        assert_eq!(store.tenants()[0].memory_bytes, 8 << 20);
-        assert_eq!(
-            Some(doc.clone()),
-            store.tenant(id).unwrap().get("docs", "large").unwrap()
-        );
-        drop(store);
-        let store = Store::open(dir.path(), options).unwrap();
-        assert_eq!(store.tenants()[0].memory_bytes, 8 << 20);
-        let reopened = store.tenant(id).unwrap();
-        assert_eq!(Some(doc), reopened.get("docs", "large").unwrap());
     }
 
     #[test]

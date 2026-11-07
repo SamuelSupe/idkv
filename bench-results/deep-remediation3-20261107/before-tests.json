@@ -1,0 +1,69 @@
+[
+  {
+    "case": "before-engine",
+    "expected_failure": true,
+    "exit_code": 101,
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--features",
+      "failpoints",
+      "--test",
+      "engine",
+      "confirmed_large_document_remains_readable_after_flush_compaction_and_reopen",
+      "--",
+      "--nocapture"
+    ]
+  },
+  {
+    "case": "before-replication",
+    "expected_failure": true,
+    "exit_code": 101,
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--features",
+      "failpoints",
+      "--test",
+      "replication",
+      "checkpoint_validation_uses_the_tenant_quota_instead_of_the_node_default",
+      "--",
+      "--nocapture"
+    ]
+  },
+  {
+    "case": "only-sst-fixed-replication",
+    "expected_failure": true,
+    "exit_code": 101,
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--features",
+      "failpoints",
+      "--test",
+      "replication",
+      "checkpoint_validation_uses_the_tenant_quota_instead_of_the_node_default",
+      "--",
+      "--nocapture"
+    ]
+  },
+  {
+    "case": "only-sst-fixed-shrink",
+    "expected_failure": true,
+    "exit_code": 101,
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--features",
+      "failpoints",
+      "--lib",
+      "a_failed_shrink_keeps_existing_data_readable_across_restart",
+      "--",
+      "--nocapture"
+    ]
+  }
+]

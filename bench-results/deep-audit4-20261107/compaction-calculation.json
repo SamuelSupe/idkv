@@ -1,0 +1,17 @@
+{
+  "confirmed_updates_before_stall": 508,
+  "tenant_quota_bytes": 16777216,
+  "actual_directory_bytes": 6362035,
+  "quota_percent": 37.92068362236023,
+  "selected_sst_files": 30,
+  "selected_sst_bytes": 6352280,
+  "compaction_reservation_bytes": 19122376,
+  "combined_required_by_admission_bytes": 25484411,
+  "measured_new_sst_output_bytes": 4210427,
+  "old_directory_plus_new_output_bytes": 10572462,
+  "retry_failures": 30,
+  "delete_failed": true,
+  "restart_write_failed": true,
+  "acknowledged_documents_verified": 1000,
+  "acknowledged_mismatches": 0
+}

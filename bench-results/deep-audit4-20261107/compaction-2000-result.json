@@ -1,0 +1,535 @@
+{
+  "case": "compaction",
+  "binary_sha256": "f193543e4595867be1305a8967d9e879574e120b2ffdc453aaed32789a6fc18b",
+  "options": {
+    "global_memory_bytes": 134217728,
+    "tenant_memory_bytes": 67108864,
+    "memtable_bytes": 262144,
+    "cache_bytes": 0,
+    "target_sst_bytes": 4194304,
+    "level_base_bytes": 67108864,
+    "l0_stop": 12,
+    "tenant_disk_bytes": 16777216,
+    "l0_trigger": 4
+  },
+  "seeded": {
+    "failure": null,
+    "installing": false,
+    "lifecycle": {
+      "state": "active"
+    },
+    "open": true,
+    "stats": {
+      "commit_seq": 2001,
+      "disk_bytes": 8434592,
+      "dsl_cache": {
+        "entries": 0,
+        "hits": 0,
+        "misses": 0,
+        "reserved_bytes": 0
+      },
+      "io": {
+        "commits": 2001,
+        "compaction_read_bytes": 0,
+        "compaction_write_bytes": 0,
+        "document_bytes": 8534890,
+        "flush_bytes": 8422915,
+        "fsyncs": 2039,
+        "scheduler": {
+          "cancelled_jobs": 0,
+          "completed_jobs": 8050,
+          "queue_wait_ns": 72516353,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 8668996,
+        "write_lock_wait_ns": 310068224
+      },
+      "levels": {
+        "0": 4,
+        "1": 35
+      },
+      "maintenance_error": null,
+      "memory_bytes": 19534,
+      "recovery_read_only": false,
+      "snapshots": 0
+    },
+    "tenant": {
+      "disk_bytes": 16777216,
+      "generation": "ba44e35c-ebfa-415f-83a0-d9dc8ef448a7",
+      "history": "6518cbcb-da37-42cf-91ee-f246f0f48b9a",
+      "id": "2d1c1bd5-d4e2-4242-979c-927110a6f66b",
+      "memory_bytes": 67108864,
+      "name": "compaction-headroom"
+    }
+  },
+  "confirmed_updates_before_stall": 417,
+  "first_failure": {
+    "status": 429,
+    "code": "RESOURCE_EXHAUSTED",
+    "value": {
+      "error": {
+        "code": "RESOURCE_EXHAUSTED",
+        "message": "L0 backlog: retry after compaction"
+      }
+    }
+  },
+  "stalled": {
+    "failure": null,
+    "installing": false,
+    "lifecycle": {
+      "state": "active"
+    },
+    "open": true,
+    "stats": {
+      "commit_seq": 2418,
+      "disk_bytes": 11705687,
+      "dsl_cache": {
+        "entries": 0,
+        "hits": 0,
+        "misses": 0,
+        "reserved_bytes": 0
+      },
+      "io": {
+        "commits": 2418,
+        "compaction_read_bytes": 0,
+        "compaction_write_bytes": 0,
+        "document_bytes": 10314406,
+        "flush_bytes": 10167893,
+        "fsyncs": 2465,
+        "scheduler": {
+          "cancelled_jobs": 0,
+          "completed_jobs": 12092,
+          "queue_wait_ns": 105755778,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 10476451,
+        "write_lock_wait_ns": 398410157
+      },
+      "levels": {
+        "0": 12,
+        "1": 36
+      },
+      "maintenance_error": "RESOURCE_EXHAUSTED: tenant disk quota/headroom exhausted",
+      "memory_bytes": 466188,
+      "recovery_read_only": false,
+      "snapshots": 0
+    },
+    "tenant": {
+      "disk_bytes": 16777216,
+      "generation": "ba44e35c-ebfa-415f-83a0-d9dc8ef448a7",
+      "history": "6518cbcb-da37-42cf-91ee-f246f0f48b9a",
+      "id": "2d1c1bd5-d4e2-4242-979c-927110a6f66b",
+      "memory_bytes": 67108864,
+      "name": "compaction-headroom"
+    }
+  },
+  "retry_probes": [
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    },
+    {
+      "ok": false,
+      "code": "RESOURCE_EXHAUSTED",
+      "value": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "L0 backlog: retry after compaction"
+        }
+      }
+    }
+  ],
+  "after_wait": {
+    "failure": null,
+    "installing": false,
+    "lifecycle": {
+      "state": "active"
+    },
+    "open": true,
+    "stats": {
+      "commit_seq": 2418,
+      "disk_bytes": 10195174,
+      "dsl_cache": {
+        "entries": 0,
+        "hits": 0,
+        "misses": 0,
+        "reserved_bytes": 0
+      },
+      "io": {
+        "commits": 2418,
+        "compaction_read_bytes": 0,
+        "compaction_write_bytes": 0,
+        "document_bytes": 10314406,
+        "flush_bytes": 10167893,
+        "fsyncs": 2465,
+        "scheduler": {
+          "cancelled_jobs": 0,
+          "completed_jobs": 12092,
+          "queue_wait_ns": 105755778,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 10476451,
+        "write_lock_wait_ns": 398411198
+      },
+      "levels": {
+        "0": 12,
+        "1": 36
+      },
+      "maintenance_error": "RESOURCE_EXHAUSTED: tenant disk quota/headroom exhausted",
+      "memory_bytes": 50478,
+      "recovery_read_only": false,
+      "snapshots": 0
+    },
+    "tenant": {
+      "disk_bytes": 16777216,
+      "generation": "ba44e35c-ebfa-415f-83a0-d9dc8ef448a7",
+      "history": "6518cbcb-da37-42cf-91ee-f246f0f48b9a",
+      "id": "2d1c1bd5-d4e2-4242-979c-927110a6f66b",
+      "memory_bytes": 67108864,
+      "name": "compaction-headroom"
+    }
+  },
+  "recovery_ack_after_disk_quota_increase": {
+    "deleted": false,
+    "history": "2d1c1bd5-d4e2-4242-979c-927110a6f66b:6518cbcb-da37-42cf-91ee-f246f0f48b9a:00000000-0000-0000-0000-000000000000",
+    "key": "00000071",
+    "rev": 2419
+  },
+  "recovered": {
+    "failure": null,
+    "installing": false,
+    "lifecycle": {
+      "state": "active"
+    },
+    "open": true,
+    "stats": {
+      "commit_seq": 2419,
+      "disk_bytes": 8438203,
+      "dsl_cache": {
+        "entries": 0,
+        "hits": 0,
+        "misses": 0,
+        "reserved_bytes": 0
+      },
+      "io": {
+        "commits": 1,
+        "compaction_read_bytes": 10167618,
+        "compaction_write_bytes": 8418843,
+        "document_bytes": 4266,
+        "flush_bytes": 0,
+        "fsyncs": 1,
+        "scheduler": {
+          "cancelled_jobs": 0,
+          "completed_jobs": 16381,
+          "queue_wait_ns": 125651588,
+          "queued_jobs": 0
+        },
+        "wal_bytes": 4333,
+        "write_lock_wait_ns": 460
+      },
+      "levels": {
+        "1": 4
+      },
+      "maintenance_error": null,
+      "memory_bytes": 38888,
+      "recovery_read_only": false,
+      "snapshots": 0
+    },
+    "tenant": {
+      "disk_bytes": 67108864,
+      "generation": "ba44e35c-ebfa-415f-83a0-d9dc8ef448a7",
+      "history": "6518cbcb-da37-42cf-91ee-f246f0f48b9a",
+      "id": "2d1c1bd5-d4e2-4242-979c-927110a6f66b",
+      "memory_bytes": 67108864,
+      "name": "compaction-headroom"
+    }
+  },
+  "acknowledged_documents_verified": 2000,
+  "acknowledged_mismatches": 0
+}

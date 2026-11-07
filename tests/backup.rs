@@ -101,6 +101,77 @@ fn snapshot(dir: &Path, tenant: Uuid, backup: Uuid) -> std::path::PathBuf {
 }
 
 #[test]
+fn pruning_reclaims_snapshot_directories_and_legacy_empty_history() {
+    let (dir, store, tenant, cfg) = setup();
+    let service = BackupService::open(store.clone(), cfg).unwrap();
+    let first = complete(&service, tenant, BackupOperation::Create);
+    let last = complete(&service, tenant, BackupOperation::Create);
+    complete(&service, tenant, BackupOperation::Prune { keep_last: 1 });
+    assert!(!snapshot(dir.path(), tenant, first.backup).exists());
+    let snapshots = snapshot(dir.path(), tenant, last.backup)
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    for _ in 0..4097 {
+        fs::create_dir(snapshots.join(Uuid::new_v4().to_string())).unwrap();
+    }
+    // An unfinished, nonempty snapshot must not be mistaken for empty residue.
+    let unfinished = snapshots.join(Uuid::new_v4().to_string());
+    fs::create_dir(&unfinished).unwrap();
+    fs::write(unfinished.join("manifest.json"), b"pending upload").unwrap();
+    assert_eq!(list(&service, tenant).len(), 1);
+    complete(&service, tenant, BackupOperation::Prune { keep_last: 1 });
+    assert_eq!(fs::read_dir(&snapshots).unwrap().count(), 3);
+    complete(&service, tenant, BackupOperation::Prune { keep_last: 1 });
+    assert_eq!(fs::read_dir(&snapshots).unwrap().count(), 2);
+    assert!(unfinished.join("manifest.json").exists());
+    complete(
+        &service,
+        tenant,
+        BackupOperation::Verify {
+            backup: last.backup,
+        },
+    );
+    assert_eq!(list(&service, tenant)[0].backup, last.backup);
+    assert_eq!(
+        store
+            .tenant(tenant)
+            .unwrap()
+            .get("assets", "a")
+            .unwrap()
+            .unwrap()["owner"],
+        "before"
+    );
+}
+
+#[test]
+fn completed_snapshot_limit_still_applies_after_empty_history_is_ignored() {
+    let (dir, store, tenant, cfg) = setup();
+    let service = BackupService::open(store, cfg).unwrap();
+    let backup = complete(&service, tenant, BackupOperation::Create);
+    let source = snapshot(dir.path(), tenant, backup.backup);
+    let mut manifest: Value =
+        serde_json::from_slice(&fs::read(source.join("manifest.json")).unwrap()).unwrap();
+    for _ in 0..4096 {
+        let id = Uuid::new_v4();
+        let path = snapshot(dir.path(), tenant, id);
+        fs::create_dir(&path).unwrap();
+        manifest["backup"] = json!(id);
+        let bytes = serde_json::to_vec(&manifest).unwrap();
+        fs::write(path.join("manifest.json"), &bytes).unwrap();
+        fs::write(
+            path.join("COMPLETED"),
+            serde_json::to_vec(&json!({"version":1,
+            "manifest_sha256":format!("{:x}", Sha256::digest(&bytes))}))
+            .unwrap(),
+        )
+        .unwrap();
+    }
+    assert_eq!(service.list(tenant).unwrap_err().code, "RESOURCE_EXHAUSTED");
+    assert!(source.join("COMPLETED").exists());
+}
+
+#[test]
 fn opendal_incremental_backup_restore_and_reference_retention() {
     let (dir, store, id, cfg) = setup();
     let b = store.create_tenant("b").unwrap().id;

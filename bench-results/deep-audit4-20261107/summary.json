@@ -1,0 +1,9 @@
+{
+  "latest_acknowledged_documents_verified": 1000,
+  "ack_receipts": 1375,
+  "state_mismatches": 0,
+  "compaction_reproductions": 3,
+  "backup_reproductions": 2,
+  "confirmed_findings": 2,
+  "product_sources_changed_this_audit": false
+}

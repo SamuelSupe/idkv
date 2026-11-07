@@ -182,6 +182,67 @@ pub struct Record {
     pub value: Option<Arc<Bytes>>,
     pub prefix_len: usize,
 }
+
+#[cfg(test)]
+#[test]
+fn prefix_compressed_keys_cannot_bypass_the_decoded_frame_budget() {
+    use crate::resources::Counter;
+    let dir = tempfile::tempdir().unwrap();
+    let tenant = Uuid::new_v4();
+    let generation = Uuid::new_v4();
+    let budget = Budget {
+        global: Counter::new(64 << 20),
+        tenant: Counter::new(64 << 20),
+    };
+    let io = IoScheduler::new(2);
+    let mut writer = TableWriter::new(
+        dir.path(),
+        tenant,
+        generation,
+        0,
+        2 << 20,
+        io.clone(),
+        budget,
+    )
+    .unwrap();
+    let key = vec![7; 6000];
+    for seq in (1..=128).rev() {
+        writer
+            .add(Record {
+                key: key.clone(),
+                seq,
+                value: Some(Arc::new(Bytes::new(vec![42]))),
+                prefix_len: 0,
+            })
+            .unwrap();
+    }
+    let info = writer.finish().unwrap();
+    for (limit, succeeds) in [(512 << 10, false), (2 << 20, true)] {
+        let budget = Budget {
+            global: Counter::new(64 << 20),
+            tenant: Counter::new(limit),
+        };
+        let table = Table::open(
+            dir.path(),
+            info.clone(),
+            tenant,
+            generation,
+            io.clone(),
+            budget.clone(),
+            Arc::new(Cache::new(0)),
+        )
+        .unwrap();
+        let read = table.get(&key, 128, &mut ReadStats::default());
+        if succeeds {
+            assert_eq!(read.unwrap().unwrap().seq, 128);
+        } else {
+            assert_eq!(read.unwrap_err().code, "RESOURCE_EXHAUSTED");
+        }
+        drop(table);
+        assert_eq!(budget.tenant.used(), 0);
+        assert_eq!(budget.global.used(), 0);
+    }
+}
 impl Record {
     pub fn size(&self) -> usize {
         self.key.len() + self.value.as_ref().map_or(0, |v| v.len()) + 128
@@ -305,10 +366,12 @@ impl Table {
         if raw_len > MAX_FRAME {
             return Err(Error::corrupt("SST top directory length"));
         }
-        let mut memory = budget.reserve(raw_len * 4 + len as usize + 512)?;
+        let input_memory = budget.reserve(raw_len + len as usize + 1024)?;
         let raw = read_frame(&file, offset, len)?;
-        memory.shrink(raw.len() * 4 + 512);
+        let memory = budget.reserve(decoded_frame_memory(&raw, true)?)?;
         let top = decode_meta(&raw, info.size)?;
+        drop(raw);
+        drop(input_memory);
         if top.is_empty() || top[0].first != info.first || top.last().unwrap().last != info.last {
             return Err(Error::corrupt("SST key boundaries"));
         }
@@ -646,13 +709,16 @@ fn load_frame(
     if raw_len > MAX_FRAME {
         return Err(Error::corrupt("SST decompressed length"));
     }
-    let size = raw_len * 12 + len as usize + 1024;
-    let mut memory = if evict {
-        cache.reserve(budget, size)
-    } else {
-        budget.reserve(size)
-    }?;
+    let reserve = |size| {
+        if evict {
+            cache.reserve(budget, size)
+        } else {
+            budget.reserve(size)
+        }
+    };
+    let input_memory = reserve(raw_len + len as usize + 1024)?;
     let raw = read_frame(file, offset, len)?;
+    let mut memory = reserve(decoded_frame_memory(&raw, index)?)?;
     let contents = if index {
         Contents::Index(decode_meta(&raw, file_size)?)
     } else {
@@ -677,6 +743,7 @@ fn load_frame(
         }
     };
     drop(raw);
+    drop(input_memory);
     memory.shrink(weight);
     let memory = Arc::new(memory);
     let mut contents = contents;
@@ -878,6 +945,46 @@ impl TableCursor<'_> {
             self.record = 0;
         }
     }
+}
+
+// Inspect lengths before allocating decoded records. Prefix compression can
+// expand tiny input into many long keys; payload bytes need only one copy.
+fn decoded_frame_memory(raw: &[u8], index: bool) -> Result<usize> {
+    let mut reader = Reader::new(raw);
+    let count = reader.u32()? as usize;
+    if index {
+        if count > raw.len() / 24 {
+            return Err(Error::corrupt("SST metadata count"));
+        }
+        return Ok(raw.len() + count * std::mem::size_of::<BlockMeta>() + 256);
+    }
+    if count > raw.len() / 16 {
+        return Err(Error::corrupt("SST record count"));
+    }
+    let mut size = count * (std::mem::size_of::<Record>() + 80) + 256;
+    let mut previous_len = 0;
+    let mut max_internal = 0;
+    for _ in 0..count {
+        let shared = reader.u32()? as usize;
+        let internal_len = shared + reader.bytes()?.len();
+        if shared > previous_len || internal_len > codec::MAX_KEY * 2 + 16 {
+            return Err(Error::corrupt("SST prefix length or internal key"));
+        }
+        // Include spare Vec capacity for unescaped keys and both the current
+        // and previous reconstructed internal key used by the decoder.
+        size += internal_len * 2 + 8;
+        max_internal = max_internal.max(internal_len);
+        previous_len = internal_len;
+        reader.u32()?;
+        let len = reader.u32()?;
+        if len != u32::MAX {
+            size += reader.take(len as usize)?.len();
+        }
+    }
+    if !reader.remaining().is_empty() {
+        return Err(Error::corrupt("SST block trailing bytes"));
+    }
+    Ok(size + max_internal * 4 + 16)
 }
 
 fn read_frame(file: &File, offset: u64, len: u32) -> Result<Vec<u8>> {

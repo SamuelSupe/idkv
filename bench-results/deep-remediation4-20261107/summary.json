@@ -1,0 +1,41 @@
+{
+  "defects_fixed": 2,
+  "new_regression_tests": 4,
+  "full_tests_passed": 168,
+  "full_tests_failed": 0,
+  "post_full_test_assertion": "Added first-prune 4096 batch-boundary assertion; both backup regressions and Clippy passed again",
+  "baseline_positive_regressions_failed_as_expected": 2,
+  "checks": {
+    "cargo_fmt": true,
+    "cargo_clippy_all_targets_failpoints_deny_warnings": true,
+    "release_bins_failpoints": true,
+    "git_diff_check": true
+  },
+  "native": {
+    "native_cases_passed": 3,
+    "acknowledged_receipts_verified": 6209,
+    "verification_stages": 17,
+    "document_reads_verified": 11400,
+    "latest_documents_verified": 2200,
+    "state_mismatches": 0,
+    "offline_restored_documents_verified": 400
+  },
+  "acknowledged_deletions_rechecked_after_reopen": 2,
+  "native_run_root": "/var/tmp/idkv-remediation4-native-v2-20261107",
+  "compaction_quota_bytes": 16777216,
+  "sampled_directory_peaks_bytes": {
+    "upgrade": 10763098,
+    "fresh": 9632207
+  },
+  "backup_legacy_directories_before": 4097,
+  "backup_directories_after": 1,
+  "subsequent_backup_prune_rotations": 5,
+  "not_exercised": [
+    "macOS",
+    "S3 live service",
+    "real device power loss",
+    "kernel writeback errors",
+    "long five-way parallel qualification workload"
+  ],
+  "report": "docs/deep-remediation4-20261107.md"
+}

@@ -1,5 +1,5 @@
 use super::*;
-pub struct TableWriter {
+pub struct TableWriter<'a> {
     file: Arc<File>,
     io: Arc<IoScheduler>,
     tenant: Uuid,
@@ -21,8 +21,9 @@ pub struct TableWriter {
     _output_memory: Reservation,
     max_seq: u64,
     count: u64,
+    reserve_disk: Option<&'a dyn Fn(u64) -> Result<()>>,
 }
-impl TableWriter {
+impl<'a> TableWriter<'a> {
     pub fn new(
         dir: &Path,
         tenant: Uuid,
@@ -66,7 +67,17 @@ impl TableWriter {
             _output_memory: output_memory,
             max_seq: 0,
             count: 0,
+            reserve_disk: None,
         })
+    }
+    pub fn with_disk_reservation(mut self, reserve: &'a dyn Fn(u64) -> Result<()>) -> Result<Self> {
+        self.reserve_disk = Some(reserve);
+        self.reserve_output(HEADER)?;
+        Ok(self)
+    }
+    fn reserve_output(&self, bytes: usize) -> Result<()> {
+        self.reserve_disk
+            .map_or(Ok(()), |reserve| reserve(bytes as u64))
     }
     pub fn add(&mut self, record: Record) -> Result<()> {
         if self.previous.as_ref().is_some_and(|(key, seq)| {
@@ -118,6 +129,7 @@ impl TableWriter {
         if self.output.is_empty() {
             return Ok(());
         }
+        self.reserve_output(self.output.len())?;
         let bytes = std::mem::take(&mut self.output);
         let position = self.offset - bytes.len() as u64;
         let file = self.file.clone();
@@ -189,6 +201,7 @@ impl TableWriter {
         footer.extend(offset.to_le_bytes());
         footer.extend(len.to_le_bytes());
         footer.extend(b"TKEND001");
+        self.reserve_output(footer.len())?;
         let file = self.file.clone();
         let position = self.offset;
         self.io.run(self.tenant, move || {
@@ -209,7 +222,7 @@ impl TableWriter {
         })
     }
 }
-impl Drop for TableWriter {
+impl Drop for TableWriter<'_> {
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.temp);
     }

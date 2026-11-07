@@ -1,0 +1,11 @@
+{
+  "full_tests_passed": 164,
+  "full_tests_failed": 0,
+  "native_cases_passed": 5,
+  "acknowledged_state_mismatches": 0,
+  "negative_controls_expected_failures": 4,
+  "clippy": "passed",
+  "fmt": "passed",
+  "release_build": "passed",
+  "native_initializations_settled": true
+}

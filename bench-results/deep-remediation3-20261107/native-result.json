@@ -1,0 +1,381 @@
+{
+  "before_binary_sha256": "ffc7d58f914df8d76ef2913c3e055a389be13d21ae59e533168478cbd96619cb",
+  "fixed_binary_sha256": "f193543e4595867be1305a8967d9e879574e120b2ffdc453aaed32789a6fc18b",
+  "cases": [
+    {
+      "case": "old_sst_upgrade_without_quota_change",
+      "ack": {
+        "deleted": false,
+        "history": "ac8f4dc3-7876-4fe9-8b39-64d97c987213:c8c9a4d0-b336-4881-bb52-b33d2ddd519e:00000000-0000-0000-0000-000000000000",
+        "key": "large",
+        "rev": 2
+      },
+      "old_failure": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "tenant memory budget exhausted"
+        }
+      },
+      "before": {
+        "rev": 2,
+        "payload_bytes": 716800,
+        "sha256": "86259c34e2d44278bb15c6e429a9701f93a52e19d21bc77907fc066a44ed9dec"
+      },
+      "after": {
+        "rev": 2,
+        "payload_bytes": 716800,
+        "sha256": "86259c34e2d44278bb15c6e429a9701f93a52e19d21bc77907fc066a44ed9dec"
+      },
+      "quota_bytes": 8388608,
+      "acknowledged_mismatches": 0
+    },
+    {
+      "case": "automatic_flush_compact_restart",
+      "random_payload": false,
+      "ack": {
+        "deleted": false,
+        "history": "f6dae325-6d34-4ea8-82d5-4f2482855b34:d5c8f14b-3bba-491a-b84a-718f1d484da5:00000000-0000-0000-0000-000000000000",
+        "key": "large",
+        "rev": 2
+      },
+      "successful_reads": 25,
+      "status_after_background_flush": {
+        "failure": null,
+        "installing": false,
+        "lifecycle": {
+          "state": "active"
+        },
+        "open": true,
+        "stats": {
+          "commit_seq": 2,
+          "disk_bytes": 4436,
+          "dsl_cache": {
+            "entries": 0,
+            "hits": 0,
+            "misses": 0,
+            "reserved_bytes": 0
+          },
+          "io": {
+            "commits": 2,
+            "compaction_read_bytes": 0,
+            "compaction_write_bytes": 0,
+            "document_bytes": 716884,
+            "flush_bytes": 3447,
+            "fsyncs": 3,
+            "scheduler": {
+              "cancelled_jobs": 0,
+              "completed_jobs": 47,
+              "queue_wait_ns": 715866,
+              "queued_jobs": 0
+            },
+            "wal_bytes": 717054,
+            "write_lock_wait_ns": 83
+          },
+          "levels": {
+            "0": 2
+          },
+          "maintenance_error": null,
+          "memory_bytes": 1522,
+          "recovery_read_only": false,
+          "snapshots": 0
+        },
+        "tenant": {
+          "disk_bytes": 4294967296,
+          "generation": "4ab7efee-137c-4ce4-9262-6548cfe9039b",
+          "history": "d5c8f14b-3bba-491a-b84a-718f1d484da5",
+          "id": "f6dae325-6d34-4ea8-82d5-4f2482855b34",
+          "memory_bytes": 8388608,
+          "name": "background-flush"
+        }
+      },
+      "unsafe_shrink_rejected": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "tenant memory budget exhausted"
+        }
+      },
+      "after_restart": {
+        "rev": 2,
+        "payload_bytes": 716800,
+        "sha256": "86259c34e2d44278bb15c6e429a9701f93a52e19d21bc77907fc066a44ed9dec"
+      },
+      "quota_bytes": 8388608,
+      "acknowledged_mismatches": 0
+    },
+    {
+      "case": "automatic_flush_compact_restart",
+      "random_payload": true,
+      "ack": {
+        "deleted": false,
+        "history": "9904e95f-5e26-4e66-a14a-846bf826cad1:bf742a7a-aa25-42c8-aa8c-03e0e8155d98:00000000-0000-0000-0000-000000000000",
+        "key": "00000000",
+        "rev": 2
+      },
+      "successful_reads": 24,
+      "status_after_background_flush": {
+        "failure": null,
+        "installing": false,
+        "lifecycle": {
+          "state": "active"
+        },
+        "open": true,
+        "stats": {
+          "commit_seq": 2,
+          "disk_bytes": 721300,
+          "dsl_cache": {
+            "entries": 0,
+            "hits": 0,
+            "misses": 0,
+            "reserved_bytes": 0
+          },
+          "io": {
+            "commits": 2,
+            "compaction_read_bytes": 0,
+            "compaction_write_bytes": 0,
+            "document_bytes": 716969,
+            "flush_bytes": 720301,
+            "fsyncs": 3,
+            "scheduler": {
+              "cancelled_jobs": 0,
+              "completed_jobs": 46,
+              "queue_wait_ns": 704451,
+              "queued_jobs": 0
+            },
+            "wal_bytes": 717142,
+            "write_lock_wait_ns": 542
+          },
+          "levels": {
+            "0": 2
+          },
+          "maintenance_error": null,
+          "memory_bytes": 1528,
+          "recovery_read_only": false,
+          "snapshots": 0
+        },
+        "tenant": {
+          "disk_bytes": 4294967296,
+          "generation": "fd8df8c8-0999-41f4-a604-d5f3408ce31b",
+          "history": "bf742a7a-aa25-42c8-aa8c-03e0e8155d98",
+          "id": "9904e95f-5e26-4e66-a14a-846bf826cad1",
+          "memory_bytes": 8388608,
+          "name": "background-flush"
+        }
+      },
+      "unsafe_shrink_rejected": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "tenant memory budget exhausted"
+        }
+      },
+      "after_restart": {
+        "rev": 2,
+        "payload_bytes": 716800,
+        "sha256": "fd613f8d93cde1ea72d034c308b7359c92536f2417943e03154075fc32d11a2a"
+      },
+      "quota_bytes": 8388608,
+      "acknowledged_mismatches": 0
+    },
+    {
+      "case": "replica_actual_quota",
+      "node_default_bytes": 8388608,
+      "tenant_quota_bytes": 16777216,
+      "ack": {
+        "deleted": false,
+        "history": "5c3fd34c-38a7-4a4c-82e1-3ab61c45f0f5:c5a2b47a-d7d6-4889-9217-add55a67d5ba:604bba9b-7deb-4362-8965-5f5951fc5c1d",
+        "key": "large",
+        "rev": 2
+      },
+      "source": {
+        "rev": 2,
+        "payload_bytes": 716800,
+        "sha256": "86259c34e2d44278bb15c6e429a9701f93a52e19d21bc77907fc066a44ed9dec"
+      },
+      "replica": {
+        "rev": 2,
+        "payload_bytes": 716800,
+        "sha256": "86259c34e2d44278bb15c6e429a9701f93a52e19d21bc77907fc066a44ed9dec"
+      },
+      "startup_and_catchup_seconds": 0.08101276401430368,
+      "first_status": {
+        "node": {
+          "version": 1,
+          "protocol": 3,
+          "node": "ff20cebf-0bc1-4d0f-9e88-20d4c42a9dc9",
+          "cluster": "76d35559-178a-4926-bb10-ff9022c9e0fb",
+          "epoch": "604bba9b-7deb-4362-8965-5f5951fc5c1d",
+          "enabled": true,
+          "role": "replica",
+          "source": {
+            "node": "ac4a23c7-7b54-4c41-8acb-d604b63bc7aa",
+            "epoch": "604bba9b-7deb-4362-8965-5f5951fc5c1d"
+          },
+          "fence": null,
+          "parent": null,
+          "forced": false,
+          "log_retention_bytes": 1048576
+        },
+        "tenants": [
+          {
+            "info": {
+              "id": "5c3fd34c-38a7-4a4c-82e1-3ab61c45f0f5",
+              "name": "larger-than-default",
+              "generation": "abd5dbd6-c233-48a8-aa97-c8185d57994c",
+              "history": "c5a2b47a-d7d6-4889-9217-add55a67d5ba",
+              "memory_bytes": 16777216,
+              "disk_bytes": 4294967296
+            },
+            "seq": 2
+          }
+        ],
+        "unavailable": [],
+        "last_error": null,
+        "completed_cycles": 2,
+        "initialization_attempts": 1,
+        "initialization_failures": 0,
+        "reinitializations": 0,
+        "initializing": [],
+        "waiting_for_readers": [],
+        "initialization_errors": {}
+      },
+      "existing_tenant_reinitialization": null,
+      "acknowledged_mismatches": 0
+    },
+    {
+      "case": "replica_actual_quota",
+      "node_default_bytes": 1048576,
+      "tenant_quota_bytes": 16777216,
+      "ack": {
+        "deleted": false,
+        "history": "d1efcf2d-04e8-4485-af12-dc01ce539d26:0a50776c-c9b4-4d89-849c-d65a41bd25de:03eb6d80-5e90-434c-839d-08b06acd5b8e",
+        "key": "large",
+        "rev": 2
+      },
+      "source": {
+        "rev": 2,
+        "payload_bytes": 716800,
+        "sha256": "86259c34e2d44278bb15c6e429a9701f93a52e19d21bc77907fc066a44ed9dec"
+      },
+      "replica": {
+        "rev": 2,
+        "payload_bytes": 716800,
+        "sha256": "86259c34e2d44278bb15c6e429a9701f93a52e19d21bc77907fc066a44ed9dec"
+      },
+      "startup_and_catchup_seconds": 0.08681558101670817,
+      "first_status": {
+        "node": {
+          "version": 1,
+          "protocol": 3,
+          "node": "5ee9f80a-c785-4465-b6db-ba0e21daaf01",
+          "cluster": "849496b9-4861-41a8-92d1-dcaadec07104",
+          "epoch": "03eb6d80-5e90-434c-839d-08b06acd5b8e",
+          "enabled": true,
+          "role": "replica",
+          "source": {
+            "node": "5b9b03ef-4195-490b-bc99-f85e34bf5437",
+            "epoch": "03eb6d80-5e90-434c-839d-08b06acd5b8e"
+          },
+          "fence": null,
+          "parent": null,
+          "forced": false,
+          "log_retention_bytes": 1048576
+        },
+        "tenants": [
+          {
+            "info": {
+              "id": "d1efcf2d-04e8-4485-af12-dc01ce539d26",
+              "name": "larger-than-default",
+              "generation": "5f7fd238-8436-4a1a-abd5-caba5d1d5095",
+              "history": "0a50776c-c9b4-4d89-849c-d65a41bd25de",
+              "memory_bytes": 16777216,
+              "disk_bytes": 4294967296
+            },
+            "seq": 2
+          }
+        ],
+        "unavailable": [],
+        "last_error": null,
+        "completed_cycles": 2,
+        "initialization_attempts": 1,
+        "initialization_failures": 0,
+        "reinitializations": 0,
+        "initializing": [],
+        "waiting_for_readers": [],
+        "initialization_errors": {}
+      },
+      "existing_tenant_reinitialization": {
+        "status": {
+          "node": {
+            "version": 1,
+            "protocol": 3,
+            "node": "5ee9f80a-c785-4465-b6db-ba0e21daaf01",
+            "cluster": "849496b9-4861-41a8-92d1-dcaadec07104",
+            "epoch": "03eb6d80-5e90-434c-839d-08b06acd5b8e",
+            "enabled": true,
+            "role": "replica",
+            "source": {
+              "node": "5b9b03ef-4195-490b-bc99-f85e34bf5437",
+              "epoch": "03eb6d80-5e90-434c-839d-08b06acd5b8e"
+            },
+            "fence": null,
+            "parent": null,
+            "forced": false,
+            "log_retention_bytes": 1048576
+          },
+          "tenants": [
+            {
+              "info": {
+                "id": "d1efcf2d-04e8-4485-af12-dc01ce539d26",
+                "name": "larger-than-default",
+                "generation": "5f7fd238-8436-4a1a-abd5-caba5d1d5095",
+                "history": "0a50776c-c9b4-4d89-849c-d65a41bd25de",
+                "memory_bytes": 16777216,
+                "disk_bytes": 4294967296
+              },
+              "seq": 5
+            }
+          ],
+          "unavailable": [],
+          "last_error": null,
+          "completed_cycles": 3,
+          "initialization_attempts": 1,
+          "initialization_failures": 0,
+          "reinitializations": 1,
+          "initializing": [],
+          "waiting_for_readers": [],
+          "initialization_errors": {}
+        },
+        "source": {
+          "rev": 5,
+          "payload_bytes": 716800,
+          "sha256": "7889fc11e9e8cbab96234ab9d4c1f3227e54b30e084466993a5f869d4c1a3000"
+        },
+        "replica": {
+          "rev": 5,
+          "payload_bytes": 716800,
+          "sha256": "7889fc11e9e8cbab96234ab9d4c1f3227e54b30e084466993a5f869d4c1a3000"
+        },
+        "acknowledgements": [
+          {
+            "deleted": false,
+            "history": "d1efcf2d-04e8-4485-af12-dc01ce539d26:0a50776c-c9b4-4d89-849c-d65a41bd25de:03eb6d80-5e90-434c-839d-08b06acd5b8e",
+            "key": "large",
+            "rev": 3
+          },
+          {
+            "deleted": false,
+            "history": "d1efcf2d-04e8-4485-af12-dc01ce539d26:0a50776c-c9b4-4d89-849c-d65a41bd25de:03eb6d80-5e90-434c-839d-08b06acd5b8e",
+            "key": "large",
+            "rev": 4
+          },
+          {
+            "deleted": false,
+            "history": "d1efcf2d-04e8-4485-af12-dc01ce539d26:0a50776c-c9b4-4d89-849c-d65a41bd25de:03eb6d80-5e90-434c-839d-08b06acd5b8e",
+            "key": "large",
+            "rev": 5
+          }
+        ]
+      },
+      "acknowledged_mismatches": 0
+    }
+  ]
+}

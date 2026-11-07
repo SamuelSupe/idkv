@@ -1,0 +1,36 @@
+   Compiling http v1.5.0
+   Compiling http-body v1.1.0
+   Compiling http-body-util v0.1.5
+   Compiling hyper v1.12.0
+   Compiling tower-http v0.6.11
+   Compiling tonic v0.14.9
+   Compiling axum-core v0.5.6
+   Compiling hyper-util v0.1.21
+   Compiling tonic-prost v0.14.9
+   Compiling opentelemetry-proto v0.31.0
+   Compiling hyper-rustls v0.27.10
+   Compiling axum v0.8.9
+   Compiling reqwest v0.12.28
+   Compiling reqsign v0.16.5
+   Compiling opentelemetry-http v0.31.0
+   Compiling opentelemetry-otlp v0.31.1
+   Compiling opendal v0.55.0
+   Compiling tenant-kv v0.10.1 (/var/tmp/idkv-remediation4-before-src-20261107)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 10.01s
+     Running tests/engine.rs (/var/tmp/idkv-remediation4-before-target-20261107/debug/deps/engine-19e0c9ad211678a3)
+
+running 1 test
+
+thread 'small_disk_compaction_keeps_confirmed_updates_readable_without_raising_quota' panicked at tests/engine.rs:137:43:
+called `Result::unwrap()` on an `Err` value: Error { code: "RESOURCE_EXHAUSTED", message: "tenant disk quota/headroom exhausted", location: None }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test small_disk_compaction_keeps_confirmed_updates_readable_without_raising_quota ... FAILED
+
+failures:
+
+failures:
+    small_disk_compaction_keeps_confirmed_updates_readable_without_raising_quota
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 25 filtered out; finished in 6.07s
+
+error: test failed, to rerun pass `--test engine`

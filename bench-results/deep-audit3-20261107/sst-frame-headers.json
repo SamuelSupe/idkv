@@ -1,0 +1,46 @@
+{
+  "frames": [
+    {
+      "file": "ff1e4b30-abec-4586-b9e6-d2917386043e.sst",
+      "offset": 56,
+      "compressed_bytes": 94,
+      "raw_bytes": 98,
+      "read_reservation_bytes": 2306
+    },
+    {
+      "file": "ff1e4b30-abec-4586-b9e6-d2917386043e.sst",
+      "offset": 162,
+      "compressed_bytes": 39,
+      "raw_bytes": 50,
+      "read_reservation_bytes": 1675
+    },
+    {
+      "file": "ff1e4b30-abec-4586-b9e6-d2917386043e.sst",
+      "offset": 213,
+      "compressed_bytes": 30,
+      "raw_bytes": 42,
+      "read_reservation_bytes": 1570
+    },
+    {
+      "file": "e1cbde5a-bfad-41ad-8805-a517978c62e6.sst",
+      "offset": 56,
+      "compressed_bytes": 2952,
+      "raw_bytes": 716940,
+      "read_reservation_bytes": 8607268
+    },
+    {
+      "file": "e1cbde5a-bfad-41ad-8805-a517978c62e6.sst",
+      "offset": 3020,
+      "compressed_bytes": 58,
+      "raw_bytes": 84,
+      "read_reservation_bytes": 2102
+    },
+    {
+      "file": "e1cbde5a-bfad-41ad-8805-a517978c62e6.sst",
+      "offset": 3090,
+      "compressed_bytes": 50,
+      "raw_bytes": 76,
+      "read_reservation_bytes": 1998
+    }
+  ]
+}

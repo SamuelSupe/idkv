@@ -426,6 +426,7 @@ impl Engine {
                 .find(|t| t.id == promoted.info.id)
                 .unwrap()
                 .level = destination;
+            self.reserve_disk(crate::json::encoded_len(&manifest)? as u64 + 8 + 4096, true)?;
             if let Err(error) = publish(&self.path, &manifest) {
                 let mut writer = self.writer.lock();
                 self.poison_writer(&mut writer, Error::new("COMMIT_UNKNOWN", error.to_string()));
@@ -437,13 +438,11 @@ impl Engine {
             self.reconcile_disk_locked()?;
             return Ok(());
         }
-        let estimated = selected
-            .iter()
-            .map(|t| t.info.size)
-            .sum::<u64>()
-            .saturating_mul(3)
-            .saturating_add(65536);
-        self.reserve_disk(estimated, true)?;
+        // Keep publication headroom, then charge SST output before each write.
+        // A wide L0 range must not require several copies of the target layer.
+        const METADATA_RESERVE: u64 = 65536;
+        self.reserve_disk(METADATA_RESERVE, true)?;
+        let reserve_output = |bytes| self.reserve_disk(bytes, true);
         let result: Result<()> = (|| {
             let mut stats = ReadStats::default();
             let mut cursors = Vec::new();
@@ -508,15 +507,18 @@ impl Engine {
                     }
                 }
                 if builder.is_none() {
-                    builder = Some(TableWriter::new(
-                        &self.path.join("sst"),
-                        self.info.id,
-                        self.info.generation,
-                        destination,
-                        self.options.block_bytes,
-                        self.io.clone(),
-                        self.budget.clone(),
-                    )?);
+                    builder = Some(
+                        TableWriter::new(
+                            &self.path.join("sst"),
+                            self.info.id,
+                            self.info.generation,
+                            destination,
+                            self.options.block_bytes,
+                            self.io.clone(),
+                            self.budget.clone(),
+                        )?
+                        .with_disk_reservation(&reserve_output)?,
+                    );
                 }
                 builder.as_mut().unwrap().add(record)?;
             }
@@ -552,6 +554,10 @@ impl Engine {
                 .compaction_write_bytes
                 .fetch_add(outputs.iter().map(|t| t.size).sum(), Ordering::Relaxed);
             manifest.tables.extend(outputs);
+            let metadata = crate::json::encoded_len(&manifest)? as u64 + 8 + 4096;
+            if metadata > METADATA_RESERVE {
+                self.reserve_disk(metadata - METADATA_RESERVE, true)?;
+            }
             if let Err(error) = publish(&self.path, &manifest) {
                 let mut writer = self.writer.lock();
                 self.poison_writer(&mut writer, Error::new("COMMIT_UNKNOWN", error.to_string()));

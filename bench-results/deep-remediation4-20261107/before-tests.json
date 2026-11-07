@@ -1,0 +1,14 @@
+[
+  {
+    "suite": "engine",
+    "test": "small_disk_compaction_keeps_confirmed_updates_readable_without_raising_quota",
+    "exit_code": 101,
+    "expected_failure": true
+  },
+  {
+    "suite": "backup",
+    "test": "pruning_reclaims_snapshot_directories_and_legacy_empty_history",
+    "exit_code": 101,
+    "expected_failure": true
+  }
+]

@@ -1,0 +1,19 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.13s
+     Running tests/replication.rs (/var/tmp/tkv-20261104-target/debug/deps/replication-9a982e8f8cdf365a)
+
+running 1 test
+
+thread 'checkpoint_validation_uses_the_tenant_quota_instead_of_the_node_default' panicked at tests/replication.rs:170:27:
+RESOURCE_EXHAUSTED: tenant memory budget exhausted; replica status: {"node":{"version":1,"protocol":3,"node":"4a0aac12-5dc1-46ab-9f7c-b279b20a5e4e","cluster":"d7a5c5bc-f86f-45ab-afae-814a6619b7c2","epoch":"f8df641b-8e2e-407f-a1a3-aba7aee679a5","enabled":true,"role":"replica","source":{"node":"6c30025a-d234-48dd-b56b-6d460230886f","epoch":"f8df641b-8e2e-407f-a1a3-aba7aee679a5"},"fence":null,"parent":null,"forced":false,"log_retention_bytes":1048576},"tenants":[],"unavailable":[],"last_error":"RESOURCE_EXHAUSTED: tenant memory budget exhausted","completed_cycles":107,"initialization_attempts":1,"initialization_failures":1,"reinitializations":0,"initializing":[],"waiting_for_readers":[],"initialization_errors":{"6c7d60ce-6715-474d-8cc8-3f2749463c17":"RESOURCE_EXHAUSTED: tenant memory budget exhausted"}}
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test checkpoint_validation_uses_the_tenant_quota_instead_of_the_node_default ... FAILED
+
+failures:
+
+failures:
+    checkpoint_validation_uses_the_tenant_quota_instead_of_the_node_default
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 29 filtered out; finished in 0.33s
+
+error: test failed, to rerun pass `--test replication`

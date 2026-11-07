@@ -1,0 +1,20 @@
+   Compiling tenant-kv v0.10.1 (/var/tmp/idkv-remediation3-before-src-20261107)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.40s
+     Running tests/replication.rs (/var/tmp/idkv-remediation3-before-target-20261107/debug/deps/replication-9a982e8f8cdf365a)
+
+running 1 test
+
+thread 'checkpoint_validation_uses_the_tenant_quota_instead_of_the_node_default' panicked at tests/replication.rs:170:27:
+RESOURCE_EXHAUSTED: tenant memory budget exhausted; replica status: {"node":{"version":1,"protocol":3,"node":"15c533d3-f24b-4268-9c10-c02d49b72b90","cluster":"82a49257-df97-40a3-970a-48af93c51ee7","epoch":"b80496d1-a536-4647-b66d-7903179c2c9c","enabled":true,"role":"replica","source":{"node":"26e5692e-39bf-4219-ae2b-39bb1efdfdde","epoch":"b80496d1-a536-4647-b66d-7903179c2c9c"},"fence":null,"parent":null,"forced":false,"log_retention_bytes":1048576},"tenants":[],"unavailable":[],"last_error":"RESOURCE_EXHAUSTED: tenant memory budget exhausted","completed_cycles":124,"initialization_attempts":1,"initialization_failures":1,"reinitializations":0,"initializing":[],"waiting_for_readers":[],"initialization_errors":{"df30ab69-c31e-48f7-bd82-6cf6e30461dd":"RESOURCE_EXHAUSTED: tenant memory budget exhausted"}}
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+tenant df30ab69-c31e-48f7-bd82-6cf6e30461dd clean-close watermark: IO_ERROR: No such file or directory (os error 2)
+test checkpoint_validation_uses_the_tenant_quota_instead_of_the_node_default ... FAILED
+
+failures:
+
+failures:
+    checkpoint_validation_uses_the_tenant_quota_instead_of_the_node_default
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 29 filtered out; finished in 0.22s
+
+error: test failed, to rerun pass `--test replication`

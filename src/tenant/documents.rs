@@ -8,6 +8,10 @@ use crate::{Error, Result, codec, model::*};
 use serde_json::Value;
 use uuid::Uuid;
 
+pub(super) fn point_read_memory(bytes: usize) -> usize {
+    bytes * 8 + 256
+}
+
 impl TenantHandle {
     pub fn put(
         &self,
@@ -294,7 +298,10 @@ impl TenantHandle {
         let Some(bytes) = bytes else {
             return Ok(None);
         };
-        let _memory = self.engine().budget.reserve(bytes.len() * 8 + 256)?;
+        let _memory = self
+            .engine()
+            .budget
+            .reserve(point_read_memory(bytes.len()))?;
         let value = codec::decode(&bytes)?;
         if crate::json::encoded_len(&value)? > self.engine().options.max_response_bytes {
             return Err(Error::limit("response byte limit"));

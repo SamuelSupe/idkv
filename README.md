@@ -160,3 +160,7 @@ python3 scripts/replication_demo.py --binary target/release/tenant-kv --root /va
 深度审查确认的复制、满盘启动、维护公平性、配额一致性和空闲开销问题，见[修复与验证](docs/deep-remediation-20261107.md)。
 
 全局复制预算、配额缩容、创建失败回收及并发备份暂存的后续修复，见[第二轮深度审查修复](docs/deep-remediation2-20261107.md)。
+
+小内存租户刷盘后不可读、复制初始化误用默认配额及相关缩容保护，见[第三轮稳定性修复](docs/deep-remediation3-20261107.md)。
+
+小磁盘配额合并停顿、fs 备份空目录累积及已确认数据核对，见[第四轮稳定性修复](docs/deep-remediation4-20261107.md)。

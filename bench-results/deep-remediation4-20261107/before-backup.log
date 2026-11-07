@@ -1,0 +1,19 @@
+   Compiling tenant-kv v0.10.1 (/var/tmp/idkv-remediation4-before-src-20261107)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.87s
+     Running tests/backup.rs (/var/tmp/idkv-remediation4-before-target-20261107/debug/deps/backup-6efa9f0702dd93ae)
+
+running 1 test
+
+thread 'pruning_reclaims_snapshot_directories_and_legacy_empty_history' panicked at tests/backup.rs:110:5:
+assertion failed: !snapshot(dir.path(), tenant, first.backup).exists()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test pruning_reclaims_snapshot_directories_and_legacy_empty_history ... FAILED
+
+failures:
+
+failures:
+    pruning_reclaims_snapshot_directories_and_legacy_empty_history
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.53s
+
+error: test failed, to rerun pass `--test backup`

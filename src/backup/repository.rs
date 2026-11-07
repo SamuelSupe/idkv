@@ -90,8 +90,10 @@ impl Inner {
         for entry in self.op.lister(&prefix).map_err(remote_error)? {
             let entry = entry.map_err(remote_error)?;
             visited += 1;
-            if visited > 4096 {
-                return Err(Error::limit("remote backup listing limit"));
+            if visited > 200_000 {
+                return Err(Error::limit(
+                    "backup inventory scan limit; retry prune to reclaim empty directories",
+                ));
             }
             let Some(name) = entry
                 .path()
@@ -104,7 +106,12 @@ impl Inner {
                 continue;
             };
             match self.manifest(tenant, id) {
-                Ok(manifest) => result.push(manifest.summary()),
+                Ok(manifest) => {
+                    result.push(manifest.summary());
+                    if result.len() > 4096 {
+                        return Err(Error::limit("remote backup listing limit"));
+                    }
+                }
                 Err(e) if e.code == "NOT_FOUND" => {
                     // A missing marker denotes an unfinished snapshot. A present
                     // marker with a missing manifest is corruption, never a GC hint.
@@ -154,6 +161,9 @@ impl Inner {
         keep: usize,
         check: impl Fn() -> Result<()>,
     ) -> Result<serde_json::Value> {
+        // Reclaim legacy residue before listing, so an inventory scan limit
+        // cannot permanently prevent the operation that removes that residue.
+        self.reclaim_empty_snapshots(tenant, &check)?;
         let manifests = self.summaries(tenant)?;
         let mut referenced = HashSet::new();
         for summary in manifests.iter().take(keep) {
@@ -176,6 +186,7 @@ impl Inner {
             self.op
                 .delete(&format!("{prefix}manifest.json"))
                 .map_err(remote_error)?;
+            self.op.delete(&prefix).map_err(remote_error)?;
             removed += 1;
         }
         let cutoff = now_ms().saturating_sub(self.config.gc_grace_seconds.saturating_mul(1000));
@@ -215,5 +226,39 @@ impl Inner {
         Ok(
             serde_json::json!({"retained_backups":manifests.len().min(keep),"deleted_backups":removed,"deleted_objects":deleted}),
         )
+    }
+
+    fn reclaim_empty_snapshots(&self, tenant: Uuid, check: &impl Fn() -> Result<()>) -> Result<()> {
+        let prefix = format!("tenants/{tenant}/snapshots/");
+        let mut removed = 0;
+        for (visited, entry) in self.op.lister(&prefix).map_err(remote_error)?.enumerate() {
+            check()?;
+            if visited >= 200_000 || removed >= 4096 {
+                break;
+            }
+            let entry = entry.map_err(remote_error)?;
+            let name = entry
+                .path()
+                .strip_prefix(&prefix)
+                .ok_or_else(|| Error::corrupt("backup listing escaped tenant prefix"))?
+                .trim_end_matches('/');
+            if !entry.metadata().is_dir() || Uuid::parse_str(name).is_err() {
+                continue;
+            }
+            let mut empty = true;
+            for child in self.op.lister(entry.path()).map_err(remote_error)? {
+                let child = child.map_err(remote_error)?;
+                // The fs backend also lists the directory itself.
+                if child.path() != entry.path() {
+                    empty = false;
+                    break;
+                }
+            }
+            if empty {
+                self.op.delete(entry.path()).map_err(remote_error)?;
+                removed += 1;
+            }
+        }
+        Ok(())
     }
 }

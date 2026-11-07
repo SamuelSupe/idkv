@@ -1,0 +1,65 @@
+[
+  {
+    "node": 0,
+    "stage": "before-backup-upgrade",
+    "file": "verified-before-backup-upgrade-node-0.json",
+    "ack_count": 200,
+    "documents": 200,
+    "mismatches": 0,
+    "sha256": "cd08d0ff2ab52df951eadba557431f1a41cf2720852a2f70e926a3c33cecf10c"
+  },
+  {
+    "node": 0,
+    "stage": "after-legacy-prune",
+    "file": "verified-after-legacy-prune-node-0.json",
+    "ack_count": 200,
+    "documents": 200,
+    "mismatches": 0,
+    "sha256": "cd08d0ff2ab52df951eadba557431f1a41cf2720852a2f70e926a3c33cecf10c"
+  },
+  {
+    "node": 1,
+    "stage": "offline-import",
+    "file": "verified-offline-import-node-1.json",
+    "ack_count": 200,
+    "documents": 200,
+    "mismatches": 0,
+    "sha256": "cd08d0ff2ab52df951eadba557431f1a41cf2720852a2f70e926a3c33cecf10c"
+  },
+  {
+    "node": 0,
+    "stage": "before-latest-import",
+    "file": "verified-before-latest-import-node-0.json",
+    "ack_count": 205,
+    "documents": 200,
+    "mismatches": 0,
+    "sha256": "7d78fde0a71ac1f7edb6cd2c91327922869c55c38f9f8598b620d014aa15a219"
+  },
+  {
+    "node": 2,
+    "stage": "offline-import",
+    "file": "verified-offline-import-node-2.json",
+    "ack_count": 205,
+    "documents": 200,
+    "mismatches": 0,
+    "sha256": "7d78fde0a71ac1f7edb6cd2c91327922869c55c38f9f8598b620d014aa15a219"
+  },
+  {
+    "node": 1,
+    "stage": "retained-import-after-gc",
+    "file": "verified-retained-import-after-gc-node-1.json",
+    "ack_count": 200,
+    "documents": 200,
+    "mismatches": 0,
+    "sha256": "cd08d0ff2ab52df951eadba557431f1a41cf2720852a2f70e926a3c33cecf10c"
+  },
+  {
+    "node": 0,
+    "stage": "final",
+    "file": "verified-final-node-0.json",
+    "ack_count": 205,
+    "documents": 200,
+    "mismatches": 0,
+    "sha256": "7d78fde0a71ac1f7edb6cd2c91327922869c55c38f9f8598b620d014aa15a219"
+  }
+]

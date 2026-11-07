@@ -1,0 +1,25 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.85s
+     Running tests/backup.rs (/var/tmp/idkv-remediation4-target-20261107/debug/deps/backup-6efa9f0702dd93ae)
+
+running 2 tests
+test completed_snapshot_limit_still_applies_after_empty_history_is_ignored ... ok
+test pruning_reclaims_snapshot_directories_and_legacy_empty_history ... FAILED
+
+failures:
+
+---- pruning_reclaims_snapshot_directories_and_legacy_empty_history stdout ----
+
+thread 'pruning_reclaims_snapshot_directories_and_legacy_empty_history' panicked at tests/backup.rs:126:5:
+assertion `left == right` failed
+  left: 4099
+ right: 2
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    pruning_reclaims_snapshot_directories_and_legacy_empty_history
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 9 filtered out; finished in 4.48s
+
+error: test failed, to rerun pass `--test backup`

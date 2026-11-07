@@ -45,7 +45,7 @@ impl Inner {
     }
     fn execute(&self, job: BackupJob) -> Result<serde_json::Value> {
         let (budget, io) = if matches!(job.operation, BackupOperation::Import { .. }) {
-            self.store.import_context()
+            self.store.import_context(None)
         } else {
             let (_, budget, io) = self.store.backup_context(job.tenant)?;
             (budget, io)

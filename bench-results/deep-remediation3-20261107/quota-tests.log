@@ -1,0 +1,11 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.41s
+     Running unittests src/lib.rs (/var/tmp/idkv-remediation3-target-20261107/debug/deps/tenant_kv-7def2c613512144d)
+
+running 3 tests
+test tenant::manager::quota::tests::a_failed_shrink_keeps_existing_data_readable_across_restart ... ok
+test tenant::manager::quota::tests::quota_validation_does_not_hold_the_node_barrier_or_slot_during_io ... ok
+test tenant::manager::quota::tests::replica_quota_shrink_flushes_a_lagging_checkpoint_under_the_old_budget ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 46 filtered out; finished in 3.19s
+
