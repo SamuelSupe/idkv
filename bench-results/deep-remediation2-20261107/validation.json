@@ -1,0 +1,12 @@
+{
+  "result": "passed",
+  "source_files_verified": 108,
+  "full_tests_passed": 160,
+  "acknowledged_mismatches": 0,
+  "native_fault_scenarios": [
+    "enospc",
+    "wal-write-eio",
+    "wal-sync-eio"
+  ],
+  "five_way_overlap_intervals": 13
+}

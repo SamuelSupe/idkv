@@ -1,0 +1,11 @@
+{
+  "result": "passed",
+  "global_mib": 64,
+  "tenant_mib": 60,
+  "payload_kib": 768,
+  "binary_sha256": "ffc7d58f914df8d76ef2913c3e055a389be13d21ae59e533168478cbd96619cb",
+  "acknowledged_seq": 34,
+  "reinitializations": 1,
+  "acknowledged_mismatches": 0,
+  "content_sha256": "1356fcc82b4ad811fae02993b79b45077b6a3ddaa3b8a0f97ab67b82f49be6dc"
+}

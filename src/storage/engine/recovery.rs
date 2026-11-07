@@ -23,6 +23,31 @@ impl SyncedWals {
 }
 
 impl Engine {
+    pub(crate) fn empty_unregistered(path: &Path) -> Result<bool> {
+        reject_symlink(&path.join("wal"))?;
+        reject_symlink(&path.join("sst"))?;
+        let info: TenantInfo = read_json(&path.join("TENANT.meta"))?;
+        let manifest = load_manifest(path)?;
+        if path.file_name().and_then(|name| name.to_str()) != Some(&info.id.to_string())
+            || manifest.version != 1
+            || manifest.tenant != info.id
+            || manifest.generation != info.generation
+            || manifest.checkpoint != 0
+            || !manifest.tables.is_empty()
+            || !manifest.retained_wals.is_empty()
+            || manifest.wals.len() != 1
+            || fs::read_dir(path.join("sst"))?.next().is_some()
+        {
+            return Ok(false);
+        }
+        let wal = path
+            .join("wal")
+            .join(format!("{}.wal", manifest.wals[0].id));
+        reject_symlink(&wal)?;
+        Ok(fs::metadata(wal)?.len() == wal::HEADER as u64
+            && fs::read_dir(path.join("wal"))?.count() == 1)
+    }
+
     pub(crate) fn ensure_durable(&self) -> Result<()> {
         if self.recovery_read_only {
             return Err(Error::limit(

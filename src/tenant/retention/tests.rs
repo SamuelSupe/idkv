@@ -480,11 +480,11 @@ fn rolling_publications_continue_beyond_the_collection_limit() {
     let mut previous = None;
     let mut context = t.retry_context("worker").unwrap();
     for i in 0..1050 {
+        let name = format!("v{i}");
+        collection(&t, &name);
         if now_ms().unwrap() + 200 >= context.submit_before_ms {
             context = t.retry_context("worker").unwrap();
         }
-        let name = format!("v{i}");
-        collection(&t, &name);
         let out = publish(&t, "rolling", &name, previous, Some(context.retry_token));
         previous = Some(out.version);
         t.retention_step().unwrap();

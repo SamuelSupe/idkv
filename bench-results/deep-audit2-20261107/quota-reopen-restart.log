@@ -1,0 +1,12 @@
+   Compiling tenant-kv v0.10.1 (/var/tmp/idkv-deep-audit2-source-20261107)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.24s
+     Running unittests src/lib.rs (/var/tmp/tkv-20261104-target/debug/deps/tenant_kv-8f896ba5f66b1091)
+
+running 1 test
+AUDIT healthy pre-change memory=1434856, quota response memory=2097152, ACK=2, open_after=RESOURCE_EXHAUSTED: tenant memory budget exhausted
+AUDIT reopen Store with persisted reduced quota still fails: RESOURCE_EXHAUSTED: tenant memory budget exhausted
+AUDIT expanding back to 8MiB restores all confirmed content and revision
+test tenant::manager::audit_quota_reopen::audit_lowering_quota_accepts_a_wal_that_cannot_be_reopened ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 43 filtered out; finished in 0.29s
+

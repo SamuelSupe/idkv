@@ -1,0 +1,82 @@
+{
+  "base_commit": "d1ca7e20fc95af3e309314e7e8a5dafa28c01727",
+  "scope": "Review only. Production source unchanged. Probes run in an isolated source copy, with test code appended only; quota reproduction stops maintenance workers to retain unflushed WAL.",
+  "findings": [
+    {
+      "id": "F1",
+      "priority": "P1",
+      "title": "Replication receiver globally over-reserves an indivisible log page and retries forever",
+      "code": "src/replication/client.rs:327-337",
+      "evidence": "replication-global-comparison.log",
+      "global_budget_mib": 64,
+      "tenant_budget_mib": 40,
+      "indexes": 16,
+      "HTTP_payload_kib": 512,
+      "source_log_HTTP_status": 200,
+      "wire_bytes": 11887822,
+      "seven_times_wire_bytes": 83214754,
+      "replica_budget_used_before_bytes": 1864,
+      "acknowledged_seq": 34,
+      "replica_seq": 33,
+      "consecutive_failures": 6,
+      "reinitializations": 0,
+      "checkpoint_bytes_64m": 53613,
+      "global_budget_mib_that_restores_progress": 128,
+      "tenant_quota_unchanged": true,
+      "content_and_revision_equal_at_128m": true
+    },
+    {
+      "id": "F2",
+      "priority": "P2",
+      "title": "Successful memory quota reduction can make all tenant reopening fail, including after Store restart",
+      "code": "src/tenant/manager.rs:603-619",
+      "evidence": "quota-reopen-restart.log",
+      "initial_quota_mib": 8,
+      "new_quota_mib": 2,
+      "memtable_mib": 1,
+      "cache_bytes": 0,
+      "acknowledged_seq": 2,
+      "document_payload_kib": 700,
+      "pre_change_memory_bytes": 1434856,
+      "failure": "RESOURCE_EXHAUSTED",
+      "survives_Store_restart": true,
+      "original_data_and_revision_equal_after_expanding": true
+    },
+    {
+      "id": "F3",
+      "priority": "P2",
+      "title": "Failed tenant creation leaves unregistered databases that startup never removes",
+      "code": "src/tenant/manager.rs:408-419",
+      "evidence": "create-orphan.log",
+      "fault": "control directory not writable, restored before restart",
+      "failed_creations": 8,
+      "registered_tenants": 0,
+      "unregistered_directories_before_restart": 8,
+      "unregistered_directories_after_restart": 8
+    },
+    {
+      "id": "F4",
+      "priority": "P2",
+      "title": "Concurrent backup staging double-counts active reservation and actual workspace",
+      "code": "src/backup/transfer.rs:210-216",
+      "evidence": "staging/result.json",
+      "concurrency": 2,
+      "max_backup_bytes": 16777216,
+      "max_staging_bytes": 33554432,
+      "first_staged_bytes": 2121212,
+      "second_job": "failed: RESOURCE_EXHAUSTED",
+      "second_job_after_first_finished": "completed",
+      "confirmed_documents_checked": 1000,
+      "acknowledged_mismatches": 0
+    }
+  ],
+  "additional_source_verified_limit": {
+    "path": "src/replication/bootstrap.rs:173-179; src/tenant/manager/lifecycle.rs:186-195",
+    "detail": "Existing-tenant checkpoint installation closes the gate before a second full copy and Engine verification. The 10s deadline only limits reader-drain polling, not that blocking I/O, as already documented. No transfer-time measurement or new defect claim."
+  },
+  "limitations": [
+    "Linux OrbStack only; no real power loss or physical device failure.",
+    "Focused reproductions, not a rerun of the full test suite.",
+    "No production fixes or remote publication in this review."
+  ]
+}

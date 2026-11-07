@@ -1,0 +1,10 @@
+{
+  "result": "passed",
+  "owned_servers": [],
+  "owned_mounts": [],
+  "credentials_remaining": [],
+  "loop_images_removed": [
+    "/var/tmp/idkv-deep-remediation2-pending-20261107/disk.img",
+    "/var/tmp/idkv-deep-remediation2-faults-20261107/enospc/disk.img"
+  ]
+}

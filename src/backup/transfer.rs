@@ -201,34 +201,44 @@ pub(super) fn object_key(tenant: Uuid, generation: Uuid, digest: &str) -> String
 
 pub(super) struct Staging<'a> {
     inner: &'a Inner,
-    reserved: u64,
+    job: Uuid,
 }
 impl<'a> Staging<'a> {
     pub fn reserve(inner: &'a Inner, bytes: u64, own: Uuid) -> Result<Self> {
         let mut reserved = inner.staging.lock();
+        if reserved.contains_key(&own) {
+            return Err(Error::new("BUSY", "backup staging already reserved"));
+        }
         let mut retained = 0;
         for entry in fs::read_dir(&inner.work_path)? {
             let path = entry?.path();
-            if path.file_name().and_then(|s| s.to_str()) != Some(&own.to_string()) {
-                retained += tree_size(&path)?;
-            }
+            let job = path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .and_then(|s| Uuid::parse_str(s).ok());
+            let covered = if job == Some(own) {
+                bytes
+            } else {
+                job.and_then(|id| reserved.get(&id)).copied().unwrap_or(0)
+            };
+            retained += tree_size(&path)?.saturating_sub(covered);
         }
-        if retained.saturating_add(*reserved).saturating_add(bytes) > inner.config.max_staging_bytes
+        if retained
+            .saturating_add(reserved.values().sum::<u64>())
+            .saturating_add(bytes)
+            > inner.config.max_staging_bytes
         {
             return Err(Error::limit(
                 "backup staging budget; forget failed jobs or increase max_staging_bytes",
             ));
         }
-        *reserved += bytes;
-        Ok(Self {
-            inner,
-            reserved: bytes,
-        })
+        reserved.insert(own, bytes);
+        Ok(Self { inner, job: own })
     }
 }
 impl Drop for Staging<'_> {
     fn drop(&mut self) {
-        *self.inner.staging.lock() -= self.reserved;
+        self.inner.staging.lock().remove(&self.job);
     }
 }
 pub(super) fn tree_size(path: &Path) -> Result<u64> {
@@ -241,4 +251,52 @@ pub(super) fn tree_size(path: &Path) -> Result<u64> {
         size = size.saturating_add(tree_size(&entry?.path())?);
     }
     Ok(size)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn staging_counts_uncovered_files_and_failed_workspaces() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path().join("data"), crate::Options::default()).unwrap();
+        let service = BackupService::open(
+            store,
+            BackupConfig {
+                service: "fs".into(),
+                options: HashMap::from([(
+                    "root".into(),
+                    dir.path().join("remote").to_string_lossy().into(),
+                )]),
+                max_backup_bytes: 1 << 20,
+                max_staging_bytes: 2 << 20,
+                reserve_free_bytes: 0,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let inner = &service.owner.inner;
+        let first = Uuid::new_v4();
+        let second = Uuid::new_v4();
+        let third = Uuid::new_v4();
+        let held = Staging::reserve(inner, 1 << 20, first).unwrap();
+        let work = inner.work_path.join(first.to_string());
+        fs::create_dir(&work).unwrap();
+        fs::write(work.join("extra"), vec![0; 1536 << 10]).unwrap();
+        assert_eq!(
+            Staging::reserve(inner, 1 << 20, second).err().unwrap().code,
+            "RESOURCE_EXHAUSTED"
+        );
+        fs::write(work.join("extra"), vec![0; 512 << 10]).unwrap();
+        let other = Staging::reserve(inner, 1 << 20, second).unwrap();
+        drop(held);
+        assert_eq!(
+            Staging::reserve(inner, 1 << 20, third).err().unwrap().code,
+            "RESOURCE_EXHAUSTED"
+        );
+        fs::remove_dir_all(work).unwrap();
+        let last = Staging::reserve(inner, 1 << 20, third).unwrap();
+        drop(last);
+        drop(other);
+    }
 }

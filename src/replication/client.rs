@@ -314,8 +314,23 @@ impl Service {
         {
             return Err(Error::limit("peer response too large"));
         }
-        let mut bytes = Vec::new();
-        let mut charges = Vec::new();
+        let check_memory = |bytes: usize| -> Result<()> {
+            if bytes > self.inner.store.options().global_memory_bytes {
+                return Err(if success && path == "/v1/replication/log" {
+                    Error::new(
+                        "REPLICA_SNAPSHOT_REQUIRED",
+                        "log response exceeds global decode budget",
+                    )
+                } else {
+                    Error::limit("peer response exceeds global decode budget")
+                });
+            }
+            Ok(())
+        };
+        let capacity = response.content_length().unwrap_or(0) as usize;
+        check_memory(capacity)?;
+        let mut input_memory = self.inner.store.reserve_http(capacity)?;
+        let mut bytes = Vec::with_capacity(capacity);
         while let Some(chunk) = response
             .chunk()
             .await
@@ -324,17 +339,20 @@ impl Service {
             if bytes.len() + chunk.len() > MAX_WIRE_BYTES {
                 return Err(Error::limit("peer response too large"));
             }
-            charges.push(
-                self.inner
-                    .store
-                    .reserve_http(chunk.len().saturating_mul(4))?,
-            );
+            let needed = bytes.len() + chunk.len();
+            if needed > bytes.capacity() {
+                let capacity = needed.next_power_of_two().min(MAX_WIRE_BYTES);
+                // Account for both allocations while the receive buffer grows.
+                check_memory(capacity.saturating_add(bytes.capacity()))?;
+                let next_memory = self.inner.store.reserve_http(capacity)?;
+                bytes.reserve_exact(capacity - bytes.len());
+                input_memory = next_memory;
+            }
             bytes.extend_from_slice(&chunk);
         }
-        let memory = self
-            .inner
-            .store
-            .reserve_http(crate::json::allocation_bound(&bytes))?;
+        let decoded = crate::json::allocation_bound(&bytes);
+        check_memory(input_memory.size().saturating_add(decoded))?;
+        let memory = self.inner.store.reserve_http(decoded)?;
         if !success {
             let value: Value = serde_json::from_slice(&bytes)?;
             return Err(Error::new(
@@ -540,7 +558,12 @@ impl Service {
             .request("/v1/replication/log", Some(serde_json::to_value(&request)?))
             .await;
         match page {
-            Err(error) if error.code == "LOG_GONE" => {
+            Err(error)
+                if matches!(
+                    error.code.as_str(),
+                    "LOG_GONE" | "REPLICA_SNAPSHOT_REQUIRED"
+                ) =>
+            {
                 self.inner.progress.lock().cursors.remove(&position.info.id);
                 self.start_initialize(source, position.info.id, true);
                 Ok(TenantSync::Idle)
@@ -567,6 +590,7 @@ impl Service {
                 let next_cursor = page.cursor.clone();
                 let store = store.clone();
                 let apply_source = source.clone();
+                let wire_memory = page._memory.size();
                 let applied = tokio::task::spawn_blocking(move || {
                     let handle = store.tenant(request.tenant)?;
                     if handle.engine().write_buffer_full() {
@@ -575,7 +599,7 @@ impl Service {
                     let apply = || {
                         handle
                             .engine()
-                            .apply_replica_page(&apply_source, after, &page)
+                            .apply_replica_page(&apply_source, after, &page, wire_memory)
                     };
                     match apply() {
                         Err(error) if error.code == "REPLICA_MEMORY_PRESSURE" => {

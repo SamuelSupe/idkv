@@ -1,0 +1,71 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.17s
+     Running tests/backup.rs (/var/tmp/tkv-20261104-target/debug/deps/backup-6efa9f0702dd93ae)
+
+running 9 tests
+test backup_during_writes_and_compaction_has_one_commit_boundary ... ok
+test concurrent_backups_count_active_staging_only_once ... ok
+test corrupted_objects_and_traversal_manifests_never_replace_live_data ... ok
+test fresh_store_import_and_import_journal_crash_recovery ... ok
+test interrupted_uploads_resume_and_only_complete_markers_are_visible ... ok
+test opendal_incremental_backup_restore_and_reference_retention ... ok
+test remote_restore_recovers_a_tenant_that_cannot_open ... ok
+test restore_after_switch_is_never_replayed_over_new_writes ... ok
+test storage_failure_and_quota_do_not_stop_local_commits ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 25.87s
+
+     Running tests/recovery.rs (/var/tmp/tkv-20261104-target/debug/deps/recovery-e0c3a44a7c47dba2)
+
+running 13 tests
+test durable_retry_receipt_and_generated_document_recover_together ... ok
+test failed_tenant_creation_is_reclaimed_without_losing_registered_data ... ok
+test healthy_reopens_reuse_synced_wals_and_unsealed_recovery_rewrites_them ... ok
+test incomplete_tail_is_discarded_but_complete_corruption_is_rejected ... ok
+test missing_or_foreign_sst_never_becomes_an_empty_database ... ok
+test process_crashes_preserve_atomic_documents_and_indexes ... ok
+test recovery_rewrite_survives_abort_before_and_after_publication ... ok
+test restore_journal_survives_both_directory_switch_crashes ... ok
+test retention_cleanup_recovers_before_and_after_atomic_progress_commits ... ok
+test temporal_corrections_history_heads_and_receipts_recover_atomically ... ok
+test tenant_creation_recovers_staging_and_both_registry_publications ... ok
+test uncertain_tenant_deletion_rejects_new_writes_until_restart ... ok
+test unpublished_flush_failure_is_retryable_without_checkpoint_gaps ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 15.05s
+
+     Running tests/replication.rs (/var/tmp/tkv-20261104-target/debug/deps/replication-9a982e8f8cdf365a)
+
+running 29 tests
+test an_oversized_log_page_rebuilds_instead_of_retrying_forever ... ok
+test busy_catalog_tenant_does_not_stall_healthy_replication ... ok
+test catchup_keeps_progress_while_source_head_and_other_tenants_advance ... ok
+test checked_batches_and_generic_publications_survive_replication_and_switch ... ok
+test checkpoint_install_waits_for_readers_without_retransferring_and_other_tenants_progress ... ok
+test checkpoint_transfer_pins_wal_beyond_the_retention_byte_window ... ok
+test client_fallback_never_bypasses_budgets_or_cursor_affinity_and_checks_capabilities ... ok
+test client_read_apis_preserve_positions_and_pin_all_cursor_forms ... ok
+test cloned_clients_reuse_primary_discovery_for_sequential_writes ... ok
+test hot_short_readers_and_cached_cursors_cannot_starve_checkpoint_installation ... ok
+test idle_replication_does_not_reopen_cold_engines_and_read_tokens_wait_for_apply ... ok
+test incompatible_successor_is_rejected_before_fencing_primary ... ok
+test indexed_http_writes_replicate_with_the_same_small_quota ... ok
+test indexed_pages_fit_global_budget_or_rebuild_without_infinite_retry ... ok
+test legacy_replication_protocol_is_rejected_before_data_or_fencing ... ok
+test middleware_client_retries_receipts_across_switch_and_requires_read_history ... ok
+test one_corrupt_source_tenant_does_not_delete_its_replica_or_stop_healthy_tenants ... ok
+test persisted_fence_survives_restart_and_stale_initial_role_configuration ... ok
+test replication_credentials_and_promotion_proof_are_enforced ... ok
+test retained_log_expiry_installs_checkpoint_and_replicates_catalog_deletion ... ok
+test retention_replicates_expiry_and_current_state_across_switchover ... ok
+test slow_checkpoint_initialization_does_not_hold_healthy_replication_cycles ... ok
+test small_memory_budget_supports_replication_and_switchover ... ok
+test stalled_export_has_a_bounded_wal_window_and_cannot_pin_the_slot_forever ... ok
+test streams_atomic_indexes_deletes_and_switches_both_directions ... ok
+test switchover_preserves_every_acknowledged_write_racing_with_the_fence ... ok
+test temporal_history_receipts_and_effective_time_survive_replication_and_switchover ... ok
+test untracked_export_hands_off_its_slot_and_advances_the_retained_log ... ok
+test valid_small_quota_configuration_keeps_replicating_after_bootstrap ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 37.08s
+

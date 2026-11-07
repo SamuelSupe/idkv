@@ -1,0 +1,20 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.46s
+     Running unittests src/lib.rs (/var/tmp/tkv-20261104-target/debug/deps/tenant_kv-8f896ba5f66b1091)
+
+running 2 tests
+
+thread 'tenant::manager::quota::tests::a_failed_shrink_keeps_existing_data_readable_across_restart' panicked at src/tenant/manager/quota.rs:153:60:
+called `Result::unwrap()` on an `Err` value: Error { code: "RESOURCE_EXHAUSTED", message: "tenant memory budget exhausted", location: None }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test tenant::manager::quota::tests::a_failed_shrink_keeps_existing_data_readable_across_restart ... FAILED
+test tenant::manager::quota::tests::replica_quota_shrink_flushes_a_lagging_checkpoint_under_the_old_budget ... ok
+
+failures:
+
+failures:
+    tenant::manager::quota::tests::a_failed_shrink_keeps_existing_data_readable_across_restart
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 44 filtered out; finished in 2.13s
+
+error: test failed, to rerun pass `--lib`

@@ -52,7 +52,7 @@ struct Inner {
     stop: Arc<AtomicBool>,
     gate: RequestGate,
     bandwidth: Mutex<Instant>,
-    staging: Mutex<u64>,
+    staging: Mutex<HashMap<Uuid, u64>>,
 }
 struct Owner {
     inner: Arc<Inner>,
@@ -235,7 +235,7 @@ impl BackupService {
             stop,
             gate: RequestGate::new(config.concurrency),
             bandwidth: Mutex::new(Instant::now()),
-            staging: Mutex::new(0),
+            staging: Mutex::new(HashMap::new()),
             config,
         });
         let mut workers = Vec::new();

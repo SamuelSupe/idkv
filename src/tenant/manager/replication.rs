@@ -449,8 +449,8 @@ impl Store {
             ));
         }
         let slot = self.slot(info.id);
-        let mut slot = slot.lock();
-        let mut registry = self.owner.inner.registry.write();
+        let slot_guard = slot.lock();
+        let registry = self.owner.inner.registry.read();
         let current = registry.tenants.get(&info.id).unwrap();
         if current.info.generation != info.generation
             || current.info.history != info.history
@@ -467,24 +467,10 @@ impl Store {
         {
             return Ok(());
         }
-        if slot.restoring || slot.installing.is_some() {
-            return Err(Error::new("BUSY", "tenant restore preparation is active"));
-        }
-        self.close_slot(&mut slot)?;
-        slot.memory.set_limit(info.memory_bytes)?;
-        let mut next = registry.clone();
-        next.tenants.get_mut(&info.id).unwrap().info = info.clone();
-        atomic_json(&self.root().join("control/tenants.json"), &next)?;
-        *registry = next;
-        atomic_json(
-            &self
-                .root()
-                .join("tenants")
-                .join(info.id.to_string())
-                .join("TENANT.meta"),
-            info,
-        )?;
-        Ok(())
+        drop(registry);
+        drop(slot_guard);
+        drop(_permission);
+        self.change_quota(info.id, info, Some(source))
     }
 }
 

@@ -1,0 +1,2 @@
+sync EIO /var/tmp/idkv-deep-remediation2-switch-20261107/node-0/tenants/a2abecdf-767d-4a5c-809b-e3ebfd2b90d4/wal/e8419ea5-6ea8-40e0-8644-a904e06ce9ae.wal
+sync EIO /var/tmp/idkv-deep-remediation2-switch-20261107/node-0/tenants/a2abecdf-767d-4a5c-809b-e3ebfd2b90d4/wal/e8419ea5-6ea8-40e0-8644-a904e06ce9ae.recover

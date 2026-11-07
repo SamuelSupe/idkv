@@ -627,7 +627,18 @@ fn retention_backup_restore_preserves_deadlines_and_blocks_absent_old_history_re
         .write_batch_with("items", ops.clone(), &opts, "worker")
         .unwrap();
     drop(t);
-    store.restore(id, backup).unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        match store.restore(id, backup) {
+            Err(error) if error.code == "BUSY" && std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            result => {
+                result.unwrap();
+                break;
+            }
+        }
+    }
     let t = store.tenant(id).unwrap();
     assert_eq!(
         t.retention_status().unwrap()["policy"]["retention_seconds"],

@@ -1,0 +1,2 @@
+write EIO /var/tmp/idkv-deep-remediation2-faults-20261107/wal-write-eio/node-0/tenants/51d45b60-52b0-421a-b277-9a45610164a7/wal/4f4e1041-0564-42e6-b1b5-93ff511263a4.wal
+write EIO /var/tmp/idkv-deep-remediation2-faults-20261107/wal-write-eio/node-0/tenants/51d45b60-52b0-421a-b277-9a45610164a7/wal/4f4e1041-0564-42e6-b1b5-93ff511263a4.recover

@@ -4,6 +4,10 @@ use tenant_kv::*;
 fn main() {
     let args: Vec<_> = std::env::args().collect();
     let store = Store::open(&args[1], Options::default()).unwrap();
+    if args[3] == "create" {
+        store.create_tenant(&args[2]).unwrap();
+        panic!("tenant creation failpoint did not trigger");
+    }
     if args[3].starts_with("remote-") {
         let id = args[2].parse().unwrap();
         let config = serde_json::from_slice(&std::fs::read(&args[4]).unwrap()).unwrap();

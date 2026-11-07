@@ -3,11 +3,18 @@ use crate::replication::{LogCursor, LogPage, LogRequest, PAGE_BYTES, Source};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 impl Engine {
-    fn reserve_replica_decode(&self, bytes: usize, held: usize) -> Result<Reservation> {
-        if held.saturating_add(bytes) > self.budget.tenant.limit() {
+    fn reserve_replica_decode(
+        &self,
+        bytes: usize,
+        held: usize,
+        wire_memory: usize,
+    ) -> Result<Reservation> {
+        if held.saturating_add(bytes) > self.budget.tenant.limit()
+            || held.saturating_add(bytes).saturating_add(wire_memory) > self.budget.global.limit()
+        {
             return Err(Error::new(
                 "REPLICA_SNAPSHOT_REQUIRED",
-                "log page decode exceeds tenant memory quota; install a checkpoint",
+                "log page decode exceeds memory quota; install a checkpoint",
             ));
         }
         self.cache.reserve(&self.budget, bytes).map_err(|error| {
@@ -142,6 +149,7 @@ impl Engine {
         source: &Source,
         after: u64,
         page: &LogPage,
+        wire_memory: usize,
     ) -> Result<()> {
         let authority = self
             .authority
@@ -172,6 +180,7 @@ impl Engine {
                 + 4096
                 + page.frames.len() * std::mem::size_of::<(u64, usize, Vec<Record>, Reservation)>(),
             0,
+            wire_memory,
         )?;
         let mut held = decode_memory.size();
         self.ensure_durable()?;
@@ -206,7 +215,7 @@ impl Engine {
                 return Err(Error::corrupt("replication sequence gap"));
             }
             let mut memory =
-                self.reserve_replica_decode(wal::decoded_memory(&frame[24..])?, held)?;
+                self.reserve_replica_decode(wal::decoded_memory(&frame[24..])?, held, wire_memory)?;
             let records = wal::decode(&frame[24..], seq)?;
             memory.shrink(records.iter().map(Record::size).sum::<usize>() * 2);
             held += memory.size();
@@ -220,8 +229,11 @@ impl Engine {
         if prepared.is_empty() {
             return Ok(());
         }
-        let _insert_memory = self
-            .reserve_replica_decode(REPLICA_INSERT_CHUNK * std::mem::size_of::<Record>(), held)?;
+        let _insert_memory = self.reserve_replica_decode(
+            REPLICA_INSERT_CHUNK * std::mem::size_of::<Record>(),
+            held,
+            wire_memory,
+        )?;
         // These writes are already committed on the source. Replay must share
         // maintenance headroom so the foreground threshold cannot block the
         // very cleanup records needed to reclaim space. The total quota remains.
@@ -343,7 +355,7 @@ mod tests {
         assert_eq!(
             handle
                 .engine()
-                .apply_replica_page(&source, after, &bad)
+                .apply_replica_page(&source, after, &bad, 0)
                 .unwrap_err()
                 .code,
             "CORRUPTION"
@@ -352,7 +364,7 @@ mod tests {
         assert!(handle.get("docs", "a").unwrap().is_none());
         handle
             .engine()
-            .apply_replica_page(&source, after, &page)
+            .apply_replica_page(&source, after, &page, 0)
             .unwrap();
         assert_eq!(handle.engine().catalog_seq(), catalog_seq);
         assert_eq!(handle.engine().metrics()["commits"], 67);
@@ -371,7 +383,7 @@ mod tests {
         assert_eq!(
             handle
                 .engine()
-                .apply_replica_page(&source, after, &page)
+                .apply_replica_page(&source, after, &page, 0)
                 .unwrap_err()
                 .code,
             "REPLICATION_CONFLICT"
@@ -388,7 +400,7 @@ mod tests {
             .unwrap();
         handle
             .engine()
-            .apply_replica_page(&source, catalog_after, &metadata)
+            .apply_replica_page(&source, catalog_after, &metadata, 0)
             .unwrap();
         assert_eq!(handle.engine().catalog_seq(), metadata.through);
         let before_delete = handle.engine().snapshot().unwrap();
@@ -411,7 +423,7 @@ mod tests {
             engine.disk.store(engine.info.disk_bytes, Ordering::Release);
             assert_eq!(
                 engine
-                    .apply_replica_page(&source, metadata.through, &cleanup)
+                    .apply_replica_page(&source, metadata.through, &cleanup, 0)
                     .unwrap_err()
                     .code,
                 "RESOURCE_EXHAUSTED"
@@ -424,7 +436,7 @@ mod tests {
             // A replica must be able to replay deletions after crossing the
             // foreground write threshold, without exceeding its total quota.
             engine
-                .apply_replica_page(&source, metadata.through, &cleanup)
+                .apply_replica_page(&source, metadata.through, &cleanup, 0)
                 .unwrap();
             engine.disk.store(actual, Ordering::Release);
         }

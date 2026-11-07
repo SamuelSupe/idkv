@@ -17,7 +17,7 @@ use std::{
 };
 use uuid::Uuid;
 
-const HEADER: usize = 64;
+pub(super) const HEADER: usize = 64;
 pub const MAX_BATCH: usize = 64 << 20;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct WalInfo {

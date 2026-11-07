@@ -1,20 +1,60 @@
 use super::*;
 
-struct RestorePreparation {
-    slot: Arc<Mutex<Slot>>,
+struct TenantPreparation {
+    slot: Option<Arc<Mutex<Slot>>>,
     path: PathBuf,
     journaled: bool,
 }
-impl Drop for RestorePreparation {
+impl Drop for TenantPreparation {
     fn drop(&mut self) {
         if !self.journaled && self.path.exists() {
             let _ = fs::remove_dir_all(&self.path);
         }
-        self.slot.lock().restoring = false;
+        if let Some(slot) = &self.slot {
+            slot.lock().restoring = false;
+        }
     }
 }
 
 impl Store {
+    pub(super) fn create_tenant_inner(
+        &self,
+        registry: &mut Registry,
+        info: TenantInfo,
+    ) -> Result<()> {
+        let root = self.root();
+        let stage = Uuid::new_v4();
+        let path = root.join("staging").join(stage.to_string());
+        let mut preparation = TenantPreparation {
+            slot: None,
+            path: path.clone(),
+            journaled: false,
+        };
+        Engine::create(&path, &info)?;
+        crate::storage::failpoint("tenant_create_staged");
+        let mut next = registry.clone();
+        next.tenants.insert(
+            info.id,
+            Registration {
+                info,
+                lifecycle: Lifecycle::Restoring {
+                    stage,
+                    old: Uuid::new_v4(),
+                },
+            },
+        );
+        // Publication may have renamed the journal before reporting an error.
+        // Keep its stage and fence the registration until startup resolves it.
+        preparation.journaled = true;
+        *registry = next;
+        atomic_json(&root.join("control/tenants.json"), registry)?;
+        crate::storage::failpoint("tenant_create_journal");
+        recover_lifecycle(root, registry)?;
+        atomic_json(&root.join("control/tenants.json"), registry)?;
+        crate::storage::failpoint("tenant_create_published");
+        Ok(())
+    }
+
     /// Publish a verified backup under its original UUID on a new Store. A UUID
     /// already present in the registry (including a deleted tenant) is never reused.
     pub(crate) fn import_checkpoint(&self, source: &Path, mut info: TenantInfo) -> Result<()> {
@@ -28,8 +68,8 @@ impl Store {
         let inner = &self.owner.inner;
         let stage = Uuid::new_v4();
         let staged = inner.root.join("staging").join(stage.to_string());
-        let mut preparation = RestorePreparation {
-            slot: self.slot(info.id),
+        let mut preparation = TenantPreparation {
+            slot: Some(self.slot(info.id)),
             path: staged.clone(),
             journaled: false,
         };
@@ -144,7 +184,7 @@ impl Store {
         let staged = inner.root.join("staging").join(stage.to_string());
         let (mut registration, memory) = {
             let mut guard = slot.lock();
-            if guard.restoring {
+            if guard.restoring || (upstream.is_none() && guard.installing.is_some()) {
                 return Err(Error::new("BUSY", "tenant restore preparation is active"));
             }
             let registration = inner
@@ -160,8 +200,8 @@ impl Store {
             guard.restoring = true;
             (registration, guard.memory.clone())
         };
-        let mut preparation = RestorePreparation {
-            slot: slot.clone(),
+        let mut preparation = TenantPreparation {
+            slot: Some(slot.clone()),
             path: staged.clone(),
             journaled: false,
         };
@@ -244,10 +284,15 @@ impl Store {
         drop(_permission);
         let cleanup = remove_lifecycle_debris(&inner.root, result?);
         if let Err(error) = &cleanup {
-            preparation.slot.lock().record_failure(Error::new(
-                "UNAVAILABLE",
-                format!("restore cleanup failed; reopen Store to recover: {error}"),
-            ));
+            preparation
+                .slot
+                .as_ref()
+                .unwrap()
+                .lock()
+                .record_failure(Error::new(
+                    "UNAVAILABLE",
+                    format!("restore cleanup failed; reopen Store to recover: {error}"),
+                ));
         }
         cleanup
     }
@@ -343,9 +388,9 @@ pub(super) fn collect_lifecycle_debris(
     startup: bool,
 ) -> Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
-    for directory in ["trash", "staging"] {
+    for directory in ["trash", "staging", "tenants"] {
         // Another tenant may be preparing an unpublished restore while serving traffic.
-        if directory == "staging" && !startup {
+        if directory != "trash" && !startup {
             continue;
         }
         for entry in fs::read_dir(root.join(directory))? {
@@ -353,14 +398,18 @@ pub(super) fn collect_lifecycle_debris(
             let Ok(id) = Uuid::parse_str(&entry.file_name().to_string_lossy()) else {
                 continue;
             };
-            let referenced =
-                registry.tenants.iter().any(|(tenant, registration)| {
-                    match registration.lifecycle {
+            let referenced = if directory == "tenants" {
+                registry.tenants.contains_key(&id)
+            } else {
+                registry
+                    .tenants
+                    .iter()
+                    .any(|(tenant, registration)| match registration.lifecycle {
                         Lifecycle::Restoring { stage, old } => id == stage || id == old,
                         Lifecycle::Deleting => id == *tenant,
                         _ => false,
-                    }
-                });
+                    })
+            };
             if !referenced {
                 reject_symlink(&entry.path())?;
                 paths.push(entry.path());
@@ -370,11 +419,43 @@ pub(super) fn collect_lifecycle_debris(
     Ok(paths)
 }
 pub(super) fn remove_lifecycle_debris(root: &Path, paths: Vec<PathBuf>) -> Result<()> {
+    let mut removed_orphan = false;
     for path in paths {
+        // Older failed creates left UUID directories outside the registry.
+        // A directly opened Engine may still own one; never unlink its database.
+        let lock = path.join("LOCK");
+        let orphan = path.parent() == Some(root.join("tenants").as_path());
+        let _owner = if orphan {
+            if lock.exists() {
+                reject_symlink(&lock)?;
+            }
+            let file = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .truncate(false)
+                .open(lock)?;
+            file.try_lock_exclusive()
+                .map_err(|_| Error::new("BUSY", "unregistered tenant is owned by a live engine"))?;
+            Some(file)
+        } else {
+            None
+        };
+        if orphan && !matches!(Engine::empty_unregistered(&path), Ok(true)) {
+            eprintln!(
+                "retaining unregistered database for inspection: {}",
+                path.display()
+            );
+            continue;
+        }
         match fs::remove_dir_all(path) {
             Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(error.into()),
             _ => {}
         }
+        removed_orphan |= orphan;
+    }
+    if removed_orphan {
+        sync_dir(&root.join("tenants"))?;
     }
     sync_dir(&root.join("trash"))?;
     sync_dir(&root.join("staging"))?;

@@ -1,0 +1,64 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.25s
+     Running unittests src/lib.rs (/var/tmp/tkv-20261104-target/debug/deps/tenant_kv-7def2c613512144d)
+
+running 44 tests
+test identity::time::tests::timezone_precision_and_clock_discontinuities ... ok
+test identity::time::tests::normal_clock_discipline_refreshes_the_anchor_but_jumps_still_fail_closed ... ok
+test storage::cache::tests::a_failed_reservation_reclaims_only_the_cache_space_it_needs ... ok
+test codec::typed::tests::typed_records_match_json_decoder_and_reject_malformed_nodes ... ok
+test resources::tests::abandoned_reads_skip_io_but_dropped_write_handles_still_execute ... ok
+test http::body::tests::response_budget_failure_preserves_completed_mutation_status ... ok
+test storage::engine::write::tests::active_replication_leases_survive_long_preparation_and_transfer_but_not_idle_expiry ... ok
+test storage::engine::write::tests::cleanup_can_use_reserved_disk_headroom_when_user_writes_are_backpressured ... ok
+test storage::engine::maintenance::tests::idle_disk_accounting_tracks_wal_growth_and_checks_drift_near_quota ... ok
+test storage::engine::write::tests::consistency_deadline_does_not_wait_for_the_writer_mutex ... ok
+test storage::wal::tests::buffered_replication_preserves_frames_limits_and_pinned_end ... ok
+test storage::sst::point_get_preserves_versions_and_tombstones_across_index_partitions ... ok
+test storage::engine::maintenance::tests::missing_checkpointed_wal_does_not_block_flush_or_lose_current_data ... ok
+test replication::client::tests::failed_preparation_releases_the_slot_for_a_new_export ... ok
+test storage::engine::write::tests::hot_retries_do_not_keep_an_uncertain_engine_alive ... ok
+test replication::client::tests::unwinding_checkpoint_preparation_releases_the_reserved_export ... ok
+test replication::client::tests::export_cleanup_failure_does_not_fail_logs_and_is_retried ... ok
+test storage::engine::write::tests::saturated_read_queue_cannot_poison_another_tenants_writer ... ok
+test storage::engine::write::tests::snapshot_admission_failure_does_not_leak_disk_reservations ... ok
+test tenant::catalog::tests::collection_resolution_preserves_snapshot_generations ... ok
+test tenant::manager::admission::tests::draining_interrupts_consistency_waits_and_timeout_reopens_old_readers ... ok
+test tenant::manager::tests::a_temporary_position_reader_does_not_close_a_reused_or_reopened_engine ... ok
+test storage::engine::write::tests::index_admission_waits_for_compaction_before_running_the_transaction_once ... ok
+test storage::engine::write::tests::uncertain_wal_tail_cannot_be_fenced_or_cached_as_the_old_position ... ok
+test tenant::retention::tests::receipt_metadata_does_not_reduce_the_public_document_batch_limit ... ok
+test tenant::manager::quota::tests::a_failed_shrink_keeps_existing_data_readable_across_restart ... ok
+test storage::engine::write::tests::read_only_transaction_waits_for_the_observed_group_commit ... ok
+test replication::client::tests::checkpoint_preparation_does_not_lock_out_other_tenant_log_progress ... ok
+test tenant::retention::tests::persisted_expiry_watermark_rejects_retry_after_clock_rollback ... ok
+test storage::engine::read::tests::disjoint_ranges_preserve_spanning_versions_and_tombstones ... ok
+test tenant::manager::replication::tests::replica_quota_updates_wait_until_restore_preparation_finishes ... ok
+test storage::engine::maintenance::tests::disk_reconciliation_accounts_for_concurrent_wal_growth ... ok
+test storage::engine::read::tests::keys_created_after_a_snapshot_still_consume_the_scan_budget ... ok
+test tenant::manager::tests::deleted_tenant_history_does_not_consume_live_tenant_capacity ... ok
+test storage::engine::replication::tests::malformed_page_is_rejected_before_mutation_and_valid_replay_survives_restart ... ok
+test tenant::manager::tests::io_open_failures_are_cached_briefly_and_recover_without_manual_close ... ok
+test tenant::retention::tests::expired_receipts_never_repeat_generated_writes_and_current_documents_survive ... ok
+test tenant::retention::tests::retention_makes_progress_with_small_byte_batches_and_long_receipt_keys ... ok
+test tenant::retention::tests::temporal_gc_keeps_predecessor_baselines_including_empty_timelines_and_latest_state ... ok
+test tenant::retention::tests::shortening_policy_cannot_remove_receipts_while_the_original_token_is_valid ... ok
+test tenant::manager::tests::cold_export_reuses_the_open_engine_until_its_log_pages_catch_up ... ok
+test tenant::retention::tests::superseded_publications_preserve_shared_current_collections_and_old_snapshots ... ok
+test tenant::retention::tests::rolling_publications_continue_beyond_the_collection_limit ... FAILED
+test tenant::manager::tests::a_full_maintenance_queue_keeps_scheduling_later_tenants ... ok
+
+failures:
+
+---- tenant::retention::tests::rolling_publications_continue_beyond_the_collection_limit stdout ----
+
+thread 'tenant::retention::tests::rolling_publications_continue_beyond_the_collection_limit' panicked at src/tenant/retention/tests.rs:303:6:
+called `Result::unwrap()` on an `Err` value: Error { code: "IDEMPOTENCY_EXPIRED", message: "submission window expired; do not obtain a new token to retry", location: None }
+
+
+failures:
+    tenant::retention::tests::rolling_publications_continue_beyond_the_collection_limit
+
+test result: FAILED. 43 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.81s
+
+error: test failed, to rerun pass `--lib`

@@ -69,7 +69,7 @@ HTTP 所有数据接口以 `/v1/tenants/{tenant_uuid}` 开头。`GET /openapi.js
 | `POST /v1/replication/follow` | `{}`；全局管理员将已停写的旧主切为其指定接任者的从库 |
 | `POST /v1/replication/force-promote` | 明确源身份、外部隔离及接受数据损失；见复制文档 |
 
-`read` 可读取、查询、执行 Lookup；`write` 额外可修改文档；租户 `admin` 可管理集合、索引、Lookup 和该租户备份恢复。创建/删除租户和修改租户配额需全局管理员。库 API 的 `Store` 是可信管理入口，`TenantHandle` 是已绑定租户的数据入口。
+`read` 可读取、查询、执行 Lookup；`write` 额外可修改文档；租户 `admin` 可管理集合、索引、Lookup 和该租户备份恢复。创建/删除租户和修改租户配额需全局管理员。缩小内存配额会预检新预算下能否重新打开和校验存储（副本配额同步会先用旧预算刷盘）；验证拒绝不会更改原配额。创建或配额发布的 I/O 错误可能表示持久结果不确定，应重开 Store 并检查名称、生命周期和配额后再操作。库 API 的 `Store` 是可信管理入口，`TenantHandle` 是已绑定租户的数据入口。
 
 `replication` 是绑定全局的专用凭证，只允许复制状态、日志、检查点和经验证的计划升主。它不能调用普通业务 API，也不能停写、发起切换或强制升主。复制内部传输接口见 OpenAPI；配置、切换顺序及重试约束见 [replication.md](replication.md)。启用复制后普通 restore/import 被拒绝；备份仍可使用。
 

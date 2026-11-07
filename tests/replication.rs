@@ -2378,3 +2378,83 @@ async fn stop_test_pair(mut pair: Pair) {
         let _ = server.await;
     }
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn indexed_pages_fit_global_budget_or_rebuild_without_infinite_retry() {
+    for (tenant_mib, payload_kib, checkpoint) in [(40, 512, false), (60, 768, true)] {
+        let pair = Pair::with_options(Options {
+            global_memory_bytes: 64 << 20,
+            tenant_memory_bytes: tenant_mib << 20,
+            cache_bytes: 64 << 10,
+            memtable_bytes: 1 << 20,
+            ..options()
+        })
+        .await;
+        for (store, role) in [(&pair.a, Role::Primary), (&pair.b, Role::Replica)] {
+            store
+                .configure_replication(&Config {
+                    cluster: store.replication_state().cluster,
+                    role,
+                    peer_url: "http://127.0.0.1:1".into(),
+                    token_file: "unused".into(),
+                    poll_ms: 10,
+                    log_retention_bytes: 64 << 20,
+                })
+                .unwrap();
+        }
+        let id = pair.a.create_tenant("global-decode").unwrap().id;
+        let source = pair.a.tenant(id).unwrap();
+        source.create_collection("docs").unwrap();
+        for n in 0..16 {
+            source
+                .create_index(
+                    "docs",
+                    IndexSpec {
+                        name: format!("i{n}"),
+                        fields: vec![IndexField {
+                            field: "/n".into(),
+                            order: Order::Asc,
+                        }],
+                        unique: false,
+                        include: vec!["/payload".into()],
+                    },
+                )
+                .unwrap();
+        }
+        pair.catch_up(false).await;
+        let before = pair.sb.status().unwrap().reinitializations;
+        let response = reqwest::Client::new()
+            .put(format!(
+                "{}/v1/tenants/{id}/collections/docs/documents",
+                pair.ua
+            ))
+            .bearer_auth(ADMIN)
+            .json(&json!({"document":{"_key":"large","n":1,"payload":"x".repeat(payload_kib<<10)}}))
+            .send()
+            .await
+            .unwrap();
+        let status = response.status();
+        let body = response.bytes().await.unwrap();
+        assert!(
+            status.is_success(),
+            "source rejected: {}",
+            String::from_utf8_lossy(&body)
+        );
+        let ack: WriteResult = serde_json::from_slice(&body).unwrap();
+        source.engine().flush().unwrap();
+        pair.catch_up(false).await;
+        let replica = pair.b.tenant(id).unwrap();
+        assert_eq!(replica.engine().seq(), ack.rev);
+        assert_eq!(
+            replica.get("docs", "large").unwrap(),
+            source.get("docs", "large").unwrap()
+        );
+        assert_eq!(
+            pair.sb.status().unwrap().reinitializations > before,
+            checkpoint
+        );
+        drop(replica);
+        drop(source);
+        stop_test_pair(pair).await;
+    }
+}

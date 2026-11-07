@@ -43,6 +43,7 @@ struct Registry {
 }
 mod admission;
 mod lifecycle;
+mod quota;
 mod replication;
 use lifecycle::{
     clean_lifecycle_debris, collect_lifecycle_debris, recover_lifecycle, remove_lifecycle_debris,
@@ -405,18 +406,7 @@ impl Store {
             memory_bytes: inner.options.tenant_memory_bytes,
             disk_bytes: inner.options.tenant_disk_bytes,
         };
-        let path = inner.root.join("tenants").join(info.id.to_string());
-        Engine::create(&path, &info)?;
-        let mut next = registry.clone();
-        next.tenants.insert(
-            info.id,
-            Registration {
-                info: info.clone(),
-                lifecycle: Lifecycle::Active,
-            },
-        );
-        atomic_json(&inner.root.join("control/tenants.json"), &next)?;
-        *registry = next;
+        self.create_tenant_inner(&mut registry, info.clone())?;
         Ok(info)
     }
     pub fn tenants(&self) -> Vec<TenantInfo> {
@@ -448,10 +438,7 @@ impl Store {
             return Err(Error::new("UNAVAILABLE", "tenant is not active"));
         }
         if slot.installing.is_some() {
-            return Err(Error::new(
-                "BUSY",
-                "replica checkpoint installation is draining readers",
-            ));
+            return Err(Error::new("BUSY", "tenant offline preparation is active"));
         }
         slot.check_failure()?;
         if slot
@@ -589,44 +576,6 @@ impl Store {
         self.close_slot(&mut slot)?;
         let _offline = self.offline_lock(id)?;
         Ok(())
-    }
-    pub fn set_quota(&self, id: Uuid, memory_bytes: usize, disk_bytes: u64) -> Result<TenantInfo> {
-        let _permission = self.owner.inner.node.write()?;
-        if !self.options().supports_quota(memory_bytes, disk_bytes) {
-            return Err(Error::invalid("quota bounds"));
-        }
-        let slot = self.slot(id);
-        let mut slot = slot.lock();
-        if slot.restoring || slot.installing.is_some() {
-            return Err(Error::new("BUSY", "tenant restore preparation is active"));
-        }
-        self.close_slot(&mut slot)?;
-        let _offline = self.offline_lock(id)?;
-        let inner = &self.owner.inner;
-        let mut registry = inner.registry.write();
-        let mut next = registry.clone();
-        let registration = next
-            .tenants
-            .get_mut(&id)
-            .ok_or_else(|| Error::missing("tenant"))?;
-        if !matches!(registration.lifecycle, Lifecycle::Active) {
-            return Err(Error::new("UNAVAILABLE", "tenant not active"));
-        }
-        slot.memory.set_limit(memory_bytes)?;
-        registration.info.memory_bytes = memory_bytes;
-        registration.info.disk_bytes = disk_bytes;
-        let info = registration.info.clone();
-        atomic_json(&inner.root.join("control/tenants.json"), &next)?;
-        *registry = next;
-        atomic_json(
-            &inner
-                .root
-                .join("tenants")
-                .join(id.to_string())
-                .join("TENANT.meta"),
-            &info,
-        )?;
-        Ok(info)
     }
     pub fn delete_tenant(&self, id: Uuid) -> Result<()> {
         self.delete_tenant_inner(id, self.owner.inner.node.write()?)
@@ -857,6 +806,11 @@ mod tests {
     fn cold_export_reuses_the_open_engine_until_its_log_pages_catch_up() {
         let dir = tempfile::tempdir().unwrap();
         let store = Store::open(dir.path(), Options::default()).unwrap();
+        // Keep the cold-export lifetime check independent of maintenance handles.
+        store.owner.stop.store(true, Ordering::Release);
+        for worker in store.owner.workers.lock().drain(..) {
+            worker.join().unwrap();
+        }
         store
             .configure_replication(&crate::replication::Config {
                 cluster: Uuid::new_v4(),

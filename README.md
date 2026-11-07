@@ -158,3 +158,5 @@ python3 scripts/replication_demo.py --binary target/release/tenant-kv --root /va
 针对外部报告的逐项核实、并发隔离与数据安全修复及回归边界，见[报告核实与修复](docs/review-remediation-20261106.md)。
 
 深度审查确认的复制、满盘启动、维护公平性、配额一致性和空闲开销问题，见[修复与验证](docs/deep-remediation-20261107.md)。
+
+全局复制预算、配额缩容、创建失败回收及并发备份暂存的后续修复，见[第二轮深度审查修复](docs/deep-remediation2-20261107.md)。

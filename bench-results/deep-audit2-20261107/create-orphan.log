@@ -1,0 +1,10 @@
+   Compiling tenant-kv v0.10.1 (/var/tmp/idkv-deep-audit2-source-20261107)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.87s
+     Running tests/audit_lifecycle.rs (/var/tmp/tkv-20261104-target/debug/deps/audit_lifecycle-d9c8efd50c0f984c)
+
+running 1 test
+AUDIT failed_creates=8 registered=0 database_directories_before_restart=8 after_restart=8 errors=[Error { code: "IO_ERROR", message: "Permission denied (os error 13)", location: None }, Error { code: "IO_ERROR", message: "Permission denied (os error 13)", location: None }, Error { code: "IO_ERROR", message: "Permission denied (os error 13)", location: None }, Error { code: "IO_ERROR", message: "Permission denied (os error 13)", location: None }, Error { code: "IO_ERROR", message: "Permission denied (os error 13)", location: None }, Error { code: "IO_ERROR", message: "Permission denied (os error 13)", location: None }, Error { code: "IO_ERROR", message: "Permission denied (os error 13)", location: None }, Error { code: "IO_ERROR", message: "Permission denied (os error 13)", location: None }]
+test audit_failed_tenant_creation_leaks_unregistered_databases_across_restart ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+

@@ -1,0 +1,21 @@
+{
+  "utc": "2026-11-06T23:58:59.295293+00:00",
+  "platform": "Linux-7.2.12-orbstack-00394-gbecdd6130068-aarch64-with-glibc2.42",
+  "binary_sha256": "ffc7d58f914df8d76ef2913c3e055a389be13d21ae59e533168478cbd96619cb",
+  "restore_binary_sha256": "cddfc8adbb630d8b9862752102752d95bff5f7ee8ea3d61706f399cd52475649",
+  "script_sha256": "95b06478ffbec39d71c880daf3aaf488c23d8caedb90a570c28a6b39c609e786",
+  "recovery_helper_sha256": "d4ec78b4cc4b816087bec7d9f388810cd2bfed050a98f94dd800dbe0fe8160c9",
+  "rows": 20000,
+  "payload_bytes": 4096,
+  "options": {
+    "global_memory_bytes": 536870912,
+    "tenant_memory_bytes": 134217728,
+    "memtable_bytes": 2097152,
+    "cache_bytes": 8388608,
+    "target_sst_bytes": 4194304,
+    "level_base_bytes": 16777216,
+    "l0_stop": 24,
+    "tenant_disk_bytes": 4294967296
+  },
+  "filesystem": "Filesystem     Type   1K-blocks      Used Available Use% Mounted on\n/dev/vdb1      btrfs 1068498944 780476416 288022528  74% /\n"
+}

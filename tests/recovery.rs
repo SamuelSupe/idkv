@@ -560,3 +560,154 @@ fn retention_cleanup_recovers_before_and_after_atomic_progress_commits() {
         t.engine().verify().unwrap();
     }
 }
+
+#[cfg(feature = "failpoints")]
+#[test]
+fn tenant_creation_recovers_staging_and_both_registry_publications() {
+    for (point, published) in [
+        ("tenant_create_staged", false),
+        ("tenant_create_journal", true),
+        ("tenant_create_published", true),
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        let id = seed(dir.path());
+        let expected = {
+            let store = Store::open(dir.path(), Options::default()).unwrap();
+            store.tenant(id).unwrap().get("assets", "old").unwrap()
+        };
+        let status = std::process::Command::new(env!("CARGO_BIN_EXE_crash-probe"))
+            .arg(dir.path())
+            .arg("created-by-crash")
+            .arg("create")
+            .env("TKV_FAILPOINT", point)
+            .status()
+            .unwrap();
+        assert!(!status.success());
+        for _ in 0..2 {
+            let store = Store::open(dir.path(), Options::default()).unwrap();
+            assert_eq!(
+                store.tenant(id).unwrap().get("assets", "old").unwrap(),
+                expected
+            );
+            let tenant = store
+                .tenants()
+                .into_iter()
+                .find(|info| info.name == "created-by-crash");
+            assert_eq!(tenant.is_some(), published);
+            if let Some(tenant) = tenant {
+                store.tenant(tenant.id).unwrap().collections().unwrap();
+            }
+            assert_eq!(fs::read_dir(dir.path().join("staging")).unwrap().count(), 0);
+            assert_eq!(
+                fs::read_dir(dir.path().join("tenants")).unwrap().count(),
+                1 + usize::from(published)
+            );
+        }
+    }
+}
+
+#[test]
+fn failed_tenant_creation_is_reclaimed_without_losing_registered_data() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let id = seed(dir.path());
+    let store = Store::open(dir.path(), Options::default()).unwrap();
+    let control = dir.path().join("control");
+    let mode = fs::metadata(&control).unwrap().permissions();
+    fs::set_permissions(&control, fs::Permissions::from_mode(0o500)).unwrap();
+    let errors: Vec<_> = (0..8)
+        .map(|n| store.create_tenant(&format!("failed-{n}")).unwrap_err())
+        .collect();
+    fs::set_permissions(&control, mode).unwrap();
+    assert!(errors.iter().all(|e| e.code == "IO_ERROR"));
+    assert_eq!(store.tenants().len(), 1);
+    assert_eq!(fs::read_dir(dir.path().join("tenants")).unwrap().count(), 1);
+    drop(store);
+    let store = Store::open(dir.path(), Options::default()).unwrap();
+    assert_eq!(store.tenants().len(), 1);
+    assert_eq!(fs::read_dir(dir.path().join("tenants")).unwrap().count(), 1);
+    assert_eq!(fs::read_dir(dir.path().join("staging")).unwrap().count(), 0);
+    assert_eq!(
+        store
+            .tenant(id)
+            .unwrap()
+            .get("assets", "old")
+            .unwrap()
+            .unwrap()["owner"],
+        "old-owner"
+    );
+    store.create_tenant("healthy-after-fault").unwrap();
+}
+
+#[test]
+fn startup_reclaims_legacy_unregistered_databases_but_preserves_a_live_engine() {
+    use tenant_kv::{
+        resources::{Budget, Counter, IoScheduler},
+        storage::Engine,
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let id = seed(dir.path());
+    let mut info = {
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        store.tenants()[0].clone()
+    };
+    info.id = uuid::Uuid::new_v4();
+    info.generation = uuid::Uuid::new_v4();
+    info.history = uuid::Uuid::new_v4();
+    let orphan = dir.path().join("tenants").join(info.id.to_string());
+    Engine::create(&orphan, &info).unwrap();
+    let options = Options::default();
+    let engine = Engine::open(
+        orphan.clone(),
+        info,
+        options.clone(),
+        Budget {
+            global: Counter::new(options.global_memory_bytes),
+            tenant: Counter::new(options.tenant_memory_bytes),
+        },
+        IoScheduler::new(1),
+    )
+    .unwrap();
+    assert_eq!(
+        Store::open(dir.path(), options.clone()).err().unwrap().code,
+        "BUSY"
+    );
+    assert!(orphan.exists());
+    drop(engine);
+    let store = Store::open(dir.path(), options.clone()).unwrap();
+    assert!(!orphan.exists());
+    assert_eq!(store.tenants().len(), 1);
+    assert_eq!(
+        store
+            .tenant(id)
+            .unwrap()
+            .get("assets", "old")
+            .unwrap()
+            .unwrap()["owner"],
+        "old-owner"
+    );
+
+    let mut info = store.tenants()[0].clone();
+    info.id = uuid::Uuid::new_v4();
+    let retained = dir.path().join("tenants").join(info.id.to_string());
+    Engine::create(&retained, &info).unwrap();
+    let engine = Engine::open(
+        retained.clone(),
+        info,
+        options.clone(),
+        Budget {
+            global: Counter::new(options.global_memory_bytes),
+            tenant: Counter::new(options.tenant_memory_bytes),
+        },
+        IoScheduler::new(1),
+    )
+    .unwrap();
+    engine
+        .transact(|tx| tx.put(b"Zprivate".to_vec(), b"preserve me".to_vec()))
+        .unwrap();
+    drop(engine);
+    drop(store);
+    let reopened = Store::open(dir.path(), options).unwrap();
+    assert!(retained.exists());
+    assert_eq!(reopened.tenants().len(), 1);
+}

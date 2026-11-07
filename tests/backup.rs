@@ -635,3 +635,78 @@ fn fresh_store_import_and_import_journal_crash_recovery() {
         );
     }
 }
+
+#[test]
+fn concurrent_backups_count_active_staging_only_once() {
+    let (dir, store, a, mut cfg) = setup();
+    let b = store.create_tenant("concurrent-staging").unwrap().id;
+    store
+        .tenant(b)
+        .unwrap()
+        .create_collection("assets")
+        .unwrap();
+    let mut random = 0x85a2bc9du64;
+    let payload: String = (0..512 << 10)
+        .map(|_| {
+            random ^= random << 13;
+            random ^= random >> 7;
+            random ^= random << 17;
+            (b'a' + (random % 26) as u8) as char
+        })
+        .collect();
+    for id in [a, b] {
+        let tenant = store.tenant(id).unwrap();
+        for n in 0..4 {
+            tenant
+                .put(
+                    "assets",
+                    json!({"_key":format!("large-{n}"),"value":payload}),
+                    None,
+                )
+                .unwrap();
+        }
+    }
+    cfg.max_backup_bytes = 16 << 20;
+    cfg.max_staging_bytes = 32 << 20;
+    cfg.bytes_per_second = 1 << 20;
+    let service = BackupService::open(store.clone(), cfg).unwrap();
+    let first = start(&service, a, BackupOperation::Create);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let job = service.job(a, first.id).unwrap();
+        if job.state == JobState::Uploading {
+            break;
+        }
+        assert!(
+            !matches!(
+                job.state,
+                JobState::Completed | JobState::Failed | JobState::Interrupted
+            ),
+            "{job:?}"
+        );
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let second = start(&service, b, BackupOperation::Create);
+    for job in [&first, &second] {
+        let done = wait(&service, job);
+        assert_eq!(done.state, JobState::Completed, "{done:?}");
+        let summaries = list(&service, job.tenant);
+        assert_eq!(summaries.len(), 1);
+        assert!(summaries[0].total_bytes < 16 << 20);
+    }
+    for id in [a, b] {
+        assert_eq!(
+            store
+                .tenant(id)
+                .unwrap()
+                .get("assets", "large-3")
+                .unwrap()
+                .unwrap()["value"],
+            payload
+        );
+    }
+    drop(service);
+    drop(store);
+    drop(dir);
+}
