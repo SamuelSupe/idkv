@@ -128,7 +128,7 @@ impl Drop for Reservation {
 
 type Job = Box<dyn FnOnce() + Send + 'static>;
 #[derive(Clone, Copy)]
-enum IoClass {
+pub(crate) enum IoClass {
     Durable,
     Read,
     Background,
@@ -355,6 +355,14 @@ impl IoScheduler {
             abandoned,
             budget,
         })
+    }
+    pub(crate) fn run_class<T: Send + 'static>(
+        &self,
+        tenant: Uuid,
+        class: IoClass,
+        f: impl FnOnce() -> Result<T> + Send + 'static,
+    ) -> Result<T> {
+        self.submit_inner(tenant, class, None, None, f)?.wait()
     }
     pub(crate) fn run_background<T: Send + 'static>(
         &self,

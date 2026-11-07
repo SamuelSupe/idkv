@@ -1,0 +1,68 @@
+{
+  "base_commit": "ab7a0ecfa6077b3d3b3a030749bd2b5be9187dc8",
+  "qualified_source": "shipping-source.json",
+  "source_matches_full_tests_clippy_fmt_release_and_runtime": true,
+  "cargo_incremental": "0",
+  "test_and_release_target": "/var/tmp/idkv-ab7a0ec-review-target-20261107",
+  "control_source": "/var/tmp/idkv-ab7a0ec-control-source-20261107",
+  "control_target": "/var/tmp/idkv-ab7a0ec-control-target-20261107",
+  "control_proof": "control-source-provenance.json",
+  "binaries": {
+    "tenant-kv": "8cbd3168f7ce50c28c63fc181158ba5bf4c768b9b9a65e75e6eb9a545b4c879e",
+    "tenant-kv-restore": "4f084fabb1c37542cc25c76dcd5ada665a2e2b9342b6efd3a08566a7837955b6"
+  },
+  "fixed_binary_directory": "/var/tmp/idkv-ab7a0ec-fixed-bin-20261107",
+  "unchanged_runtime_scripts": {
+    "scripts/qualification.py": "95b06478ffbec39d71c880daf3aaf488c23d8caedb90a570c28a6b39c609e786",
+    "scripts/qualification_faults.py": "cda72fcda67d1a459993419abc4bf04197077bd72a1bdc1b7e33adefbf7ad17c",
+    "scripts/recovery_drill.py": "d4ec78b4cc4b816087bec7d9f388810cd2bfed050a98f94dd800dbe0fe8160c9",
+    "scripts/wal_io_fault.c": "6e8fc64226454eb176e1b83983207345ccdc82d16cf59ad16e7417d747c2392f"
+  },
+  "full_test_passed": 202,
+  "validation_commands": [
+    "CARGO_INCREMENTAL=0 cargo test --features failpoints -- --test-threads=1",
+    "CARGO_INCREMENTAL=0 cargo clippy --all-targets --features failpoints -- -D warnings",
+    "cargo fmt --all -- --check",
+    "CARGO_INCREMENTAL=0 cargo build --release --bins",
+    "python3 -B scripts/qualification.py --root ROOT --binary BINARY --restore-binary RESTORE --rows 5000 --baseline-seconds 10 --combined-seconds 45 --recovery-seconds 60",
+    "python3 -B scripts/qualification_faults.py --root ROOT --binary BINARY",
+    "python3 -B bench-results/ab7a0ec-review-20261107/probe-http-protocol.py --root ROOT --predecessor-binary B206985 --before-binary AB7A0EC --binary FIXED"
+  ],
+  "toolchain": "rustc 1.90.0 (1159e78c4 2025-09-14)",
+  "control_results": [
+    {
+      "case": "cancelled_cold_get_admission_does_not_hold_execution_permits",
+      "exit_code": 101,
+      "result": "expected behavioral failure on ab7a0ec",
+      "log": "control-cancelled_cold_get_admission_does_not_hold_execution_permits.log"
+    },
+    {
+      "case": "flush_output_overtakes_a_read_backlog_and_keeps_confirmed_data",
+      "exit_code": 101,
+      "result": "expected behavioral failure on ab7a0ec",
+      "log": "control-flush_output_overtakes_a_read_backlog_and_keeps_confirmed_data.log"
+    },
+    {
+      "case": "four_index_builds_leave_maintenance_and_lifecycle_capacity_available",
+      "exit_code": 101,
+      "result": "expected behavioral failure on ab7a0ec",
+      "log": "control-four_index_builds_leave_maintenance_and_lifecycle_capacity_available.log"
+    },
+    {
+      "case": "later_history_sweeps_seek_past_the_previously_reclaimed_identifier_tail",
+      "exit_code": 101,
+      "result": "expected behavioral failure on ab7a0ec",
+      "log": "control-later_history_sweeps_seek_past_the_previously_reclaimed_identifier_tail.log"
+    },
+    {
+      "case": "physical_gc_page_observes_deletions_staged_in_the_same_transaction",
+      "exit_code": 101,
+      "result": "expected behavioral failure on ab7a0ec",
+      "log": "control-physical_gc_page_observes_deletions_staged_in_the_same_transaction.log"
+    }
+  ],
+  "runtime_summary": "runtime-summary.json",
+  "previous_b206985_features": "../b206985-review-20261107/hyper-transport-features.json",
+  "initial_lib_test_diagnostic": "initial-lib-tests.log records a corrected response-shape assertion in the test fixture; full-tests.log is the final run",
+  "publication": "Validation snapshot captured before commit; subsequent delivery is represented by the containing Git commit"
+}

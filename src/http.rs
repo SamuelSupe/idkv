@@ -16,7 +16,6 @@ mod replication;
 use crate::{Error, Result, Store, model::*};
 use axum::{
     Json, Router,
-    body::HttpBody as _,
     extract::{MatchedPath, Path, Request, State},
     http::{HeaderMap, Method, StatusCode},
     response::{IntoResponse, Response},
@@ -40,6 +39,10 @@ struct AppState {
     metrics_workers: Arc<Semaphore>,
     workers: Arc<Semaphore>,
     body_workers: Arc<Semaphore>,
+    admission_workers: Arc<Semaphore>,
+    index_workers: Arc<Semaphore>,
+    lifecycle_workers: Arc<Semaphore>,
+    lifecycle_tenants: Arc<Mutex<HashMap<Uuid, std::sync::Weak<Semaphore>>>>,
     maintenance_workers: Arc<Semaphore>,
     maintenance_tenants: Arc<Mutex<HashMap<Uuid, std::sync::Weak<Semaphore>>>>,
     tenants: Arc<Mutex<HashMap<Uuid, std::sync::Weak<Semaphore>>>>,
@@ -180,6 +183,9 @@ pub fn app_with_runtime(
     let maintenance_workers = Arc::new(Semaphore::new(
         store.options().max_http_maintenance_requests,
     ));
+    let admission_workers = Arc::new(Semaphore::new(store.options().max_http_admission_requests));
+    let index_workers = Arc::new(Semaphore::new(store.options().max_http_index_requests));
+    let lifecycle_workers = Arc::new(Semaphore::new(store.options().max_http_lifecycle_requests));
     let state = AppState {
         store,
         auth: Arc::new(auth),
@@ -189,6 +195,10 @@ pub fn app_with_runtime(
         metrics_workers: Arc::new(Semaphore::new(1)),
         workers,
         body_workers,
+        admission_workers,
+        index_workers,
+        lifecycle_workers,
+        lifecycle_tenants: Arc::new(Mutex::new(HashMap::new())),
         maintenance_workers,
         maintenance_tenants: Arc::new(Mutex::new(HashMap::new())),
         tenants: Arc::new(Mutex::new(HashMap::new())),
@@ -429,6 +439,9 @@ async fn dispatch_async(
             "global tenant administration required",
         ));
     }
+    let index = route.ends_with("/indexes") && method == Method::POST;
+    let lifecycle = route == "/v1/tenants/{tenant}/close"
+        || (route == "/v1/tenants/{tenant}" && method != Method::GET);
     let maintenance = matches!(
         route.as_str(),
         "/v1/tenants/{tenant}/compact"
@@ -437,10 +450,12 @@ async fn dispatch_async(
             | "/v1/tenants/{tenant}/backup"
             | "/v1/tenants/{tenant}/backup/{backup}"
             | "/v1/tenants/{tenant}/restore"
-            | "/v1/tenants/{tenant}/close"
-    ) || (route == "/v1/tenants/{tenant}" && method != Method::GET)
-        || (route.ends_with("/indexes") && method == Method::POST);
-    let workers = if maintenance {
+    );
+    let workers = if index {
+        &state.index_workers
+    } else if lifecycle {
+        &state.lifecycle_workers
+    } else if maintenance {
         &state.maintenance_workers
     } else {
         &state.workers
@@ -459,7 +474,7 @@ async fn dispatch_async(
         })
         .transpose()?;
     let maintenance_permit = tenant
-        .filter(|_| maintenance)
+        .filter(|_| maintenance || index)
         .map(|id| {
             tenant_admission(
                 &state.maintenance_tenants,
@@ -469,17 +484,18 @@ async fn dispatch_async(
             )
         })
         .transpose()?;
-    let empty_body = request.body().is_end_stream();
-    let worker = if empty_body {
-        Some(Arc::new(
-            workers
-                .clone()
-                .try_acquire_owned()
-                .map_err(|_| Error::limit("HTTP worker concurrency"))?,
-        ))
-    } else {
-        None
-    };
+    let lifecycle_permit = tenant
+        .filter(|_| lifecycle)
+        .map(|id| {
+            tenant_admission(
+                &state.lifecycle_tenants,
+                id,
+                1,
+                "tenant lifecycle concurrency",
+            )
+        })
+        .transpose()?;
+    let empty_body = axum::body::HttpBody::is_end_stream(request.body());
     let receiving = if empty_body {
         None
     } else {
@@ -509,12 +525,18 @@ async fn dispatch_async(
         let input_receiving = receiving.clone();
         let input_tenant = tenant_permit.clone();
         let input_maintenance = maintenance_permit.clone();
-        let input_worker = worker.clone();
+        let input_lifecycle = lifecycle_permit.clone();
+        let input_admission = state
+            .admission_workers
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| Error::limit("HTTP input admission concurrency"))?;
         let admission = tokio::task::spawn_blocking(move || {
             let _receiving = input_receiving;
             let _tenant = input_tenant;
             let _maintenance = input_maintenance;
-            let _worker = input_worker;
+            let _lifecycle = input_lifecycle;
+            let _admission = input_admission;
             input_store.http_input_budget(tenant)
         });
         tokio::time::timeout_at(body_deadline, admission)
@@ -537,15 +559,10 @@ async fn dispatch_async(
     .await
     .map_err(|_| Error::new("DEADLINE_EXCEEDED", "request body deadline"))??;
     drop(receiving);
-    let worker = match worker {
-        Some(worker) => worker,
-        None => Arc::new(
-            workers
-                .clone()
-                .try_acquire_owned()
-                .map_err(|_| Error::limit("HTTP worker concurrency"))?,
-        ),
-    };
+    let worker = workers
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| Error::limit("HTTP worker concurrency"))?;
     let minimum = match (
         headers.get("x-tkv-min-history"),
         headers.get("x-tkv-min-seq"),
@@ -573,8 +590,7 @@ async fn dispatch_async(
     let store = state.store.clone();
     let output = tokio::task::spawn_blocking(move || {
         let _trace_guard = trace_context.attach();
-        let input_memory =
-            store.reserve_http_input(tenant, crate::json::allocation_bound(&bytes))?;
+        let input_memory = input_budget.reserve(crate::json::allocation_bound(&bytes))?;
         let body = if bytes.is_empty() {
             json!({})
         } else {
@@ -584,6 +600,7 @@ async fn dispatch_async(
         drop(body_memory);
         let _worker = worker;
         let _maintenance = maintenance_permit;
+        let _lifecycle = lifecycle_permit;
         let _tenant = tenant_permit;
         let read_only = required_role(&route, &method)? == Role::Read
             && (!route.ends_with("/dsl")

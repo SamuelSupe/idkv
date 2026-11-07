@@ -1,0 +1,39 @@
+   Compiling http v1.5.0
+   Compiling http-body v1.1.0
+   Compiling http-body-util v0.1.5
+   Compiling hyper v1.12.0
+   Compiling tower-http v0.6.11
+   Compiling tonic v0.14.9
+   Compiling axum-core v0.5.6
+   Compiling hyper-util v0.1.21
+   Compiling tonic-prost v0.14.9
+   Compiling opentelemetry-proto v0.31.0
+   Compiling hyper-rustls v0.27.10
+   Compiling axum v0.8.9
+   Compiling reqwest v0.12.28
+   Compiling opentelemetry-http v0.31.0
+   Compiling reqsign v0.16.5
+   Compiling opentelemetry-otlp v0.31.1
+   Compiling opendal v0.55.0
+   Compiling tenant-kv v0.10.1 (/var/tmp/idkv-ab7a0ec-control-source-20261107)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 11.25s
+     Running unittests src/lib.rs (/var/tmp/idkv-ab7a0ec-control-target-20261107/debug/deps/tenant_kv-321137334cf1859a)
+
+running 1 test
+test tenant::manager::tests::cancelled_cold_get_admission_does_not_hold_execution_permits ... FAILED
+
+failures:
+
+---- tenant::manager::tests::cancelled_cold_get_admission_does_not_hold_execution_permits stdout ----
+
+thread 'tenant::manager::tests::cancelled_cold_get_admission_does_not_hold_execution_permits' panicked at src/tenant/manager.rs:1222:9:
+assertion failed: healthy.status().is_success()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tenant::manager::tests::cancelled_cold_get_admission_does_not_hold_execution_permits
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 74 filtered out; finished in 0.11s
+
+error: test failed, to rerun pass `--lib`

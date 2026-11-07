@@ -792,6 +792,117 @@ fn maintain_tenant(inner: &Arc<Inner>, slot: &Arc<Mutex<Slot>>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn cancelled_cold_get_admission_does_not_hold_execution_permits() {
+        use crate::http::{self, AuthConfig, Role, Token};
+        use http_body_util::BodyExt;
+        use tower::ServiceExt;
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        let a = store.create_tenant("cold-a").unwrap().id;
+        let b = store.create_tenant("cold-b").unwrap().id;
+        let good = store
+            .tenant(store.create_tenant("warm").unwrap().id)
+            .unwrap();
+        good.create_collection("docs").unwrap();
+        let ack = good
+            .put(
+                "docs",
+                serde_json::json!({"_key":"confirmed","value":7}),
+                None,
+            )
+            .unwrap();
+        store.owner.stop.store(true, Ordering::Release);
+        for worker in store.owner.workers.lock().drain(..) {
+            worker.join().unwrap();
+        }
+        let app = http::app(
+            store.clone(),
+            AuthConfig {
+                tokens: vec![Token {
+                    subject: "admin".into(),
+                    sha256: http::token_hash("cold-admission-secret"),
+                    tenant: None,
+                    role: Role::Admin,
+                }],
+            },
+        )
+        .unwrap();
+        let slots = [store.slot(a), store.slot(b)];
+        let held_slots = slots.clone();
+        let (entered, ready) = std::sync::mpsc::channel();
+        let (release, wait) = std::sync::mpsc::channel();
+        let holder = thread::spawn(move || {
+            let _a = held_slots[0].lock();
+            let _b = held_slots[1].lock();
+            entered.send(()).unwrap();
+            let _ = wait.recv_timeout(Duration::from_secs(10));
+        });
+        ready.recv().unwrap();
+        let references = slots.each_ref().map(Arc::strong_count);
+        let mut waiting = Vec::new();
+        for id in [a, b] {
+            for _ in 0..32 {
+                let app = app.clone();
+                waiting.push(tokio::spawn(async move {
+                    app.oneshot(
+                        axum::http::Request::builder()
+                            .uri(format!("/v1/tenants/{id}"))
+                            .header("authorization", "Bearer cold-admission-secret")
+                            .body(axum::body::Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap()
+                }));
+            }
+        }
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while slots
+            .iter()
+            .zip(references)
+            .any(|(slot, n)| Arc::strong_count(slot) < n + 32)
+        {
+            assert!(
+                Instant::now() < deadline,
+                "requests did not enter blocked admission"
+            );
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+        for request in waiting {
+            request.abort();
+            let _ = request.await;
+        }
+        let request = |uri: String| {
+            axum::http::Request::builder()
+                .uri(uri)
+                .header("authorization", "Bearer cold-admission-secret")
+                .body(axum::body::Body::empty())
+                .unwrap()
+        };
+        let cold = app
+            .clone()
+            .oneshot(request(format!("/v1/tenants/{a}")))
+            .await
+            .unwrap();
+        let healthy = tokio::time::timeout(
+            Duration::from_secs(1),
+            app.oneshot(request(format!(
+                "/v1/tenants/{}/collections/docs/documents/confirmed",
+                good.id()
+            ))),
+        )
+        .await;
+        release.send(()).unwrap();
+        holder.join().unwrap();
+        assert_eq!(cold.status(), axum::http::StatusCode::TOO_MANY_REQUESTS);
+        let healthy = healthy.unwrap().unwrap();
+        assert!(healthy.status().is_success());
+        let body: serde_json::Value =
+            serde_json::from_slice(&healthy.into_body().collect().await.unwrap().to_bytes())
+                .unwrap();
+        assert_eq!(body["_rev"], ack.rev);
+    }
     #[test]
     fn management_drains_overlapping_short_readers_before_changing_quota() {
         let dir = tempfile::tempdir().unwrap();

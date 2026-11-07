@@ -231,6 +231,9 @@ fn history(tx: &mut Transaction<'_>, state: &mut State, batch: usize) -> Result<
     let (rows, exhausted) = tx.gc_prefix(&prefix, state.history_after.as_deref(), batch)?;
     for record in rows {
         let k = &record.key;
+        if state.history_after.as_ref().is_some_and(|after| k <= after) {
+            continue;
+        }
         state.history_after = Some(k.clone());
         if record.value.is_none() {
             continue;
@@ -253,6 +256,13 @@ fn history(tx: &mut Transaction<'_>, state: &mut State, batch: usize) -> Result<
             } else {
                 state.baseline_kept = true;
             }
+        }
+        if ordinal < state.swept_floor {
+            // A completed sweep left at most this one baseline below its floor.
+            // History ordinals only increase, so older keys are already tombstones.
+            // The exclusive identifier bound is not itself a history record key.
+            state.history_after =
+                codec::prefix_end(&doc_prefix(collection, &format!("history:{identifier}:")));
         }
     }
     if exhausted {
@@ -298,6 +308,9 @@ pub(super) fn step(tenant: &TenantHandle) -> Result<()> {
                 }
                 history(tx, &mut state, batch)?;
             }
+            // After migration, cleanup must not schedule new expiry work here:
+            // schedule_at can rewind STATE. Any future scheduling path must merge
+            // that pending rewind before publishing this locally advanced state.
             if serde_json::to_vec(&state)? != before {
                 state.completed_rounds = state.completed_rounds.saturating_add(1);
                 put(tx, STATE.to_vec(), &state)?;

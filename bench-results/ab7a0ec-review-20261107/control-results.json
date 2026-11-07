@@ -1,0 +1,32 @@
+[
+  {
+    "case": "cancelled_cold_get_admission_does_not_hold_execution_permits",
+    "exit_code": 101,
+    "result": "expected behavioral failure on ab7a0ec",
+    "log": "control-cancelled_cold_get_admission_does_not_hold_execution_permits.log"
+  },
+  {
+    "case": "flush_output_overtakes_a_read_backlog_and_keeps_confirmed_data",
+    "exit_code": 101,
+    "result": "expected behavioral failure on ab7a0ec",
+    "log": "control-flush_output_overtakes_a_read_backlog_and_keeps_confirmed_data.log"
+  },
+  {
+    "case": "four_index_builds_leave_maintenance_and_lifecycle_capacity_available",
+    "exit_code": 101,
+    "result": "expected behavioral failure on ab7a0ec",
+    "log": "control-four_index_builds_leave_maintenance_and_lifecycle_capacity_available.log"
+  },
+  {
+    "case": "later_history_sweeps_seek_past_the_previously_reclaimed_identifier_tail",
+    "exit_code": 101,
+    "result": "expected behavioral failure on ab7a0ec",
+    "log": "control-later_history_sweeps_seek_past_the_previously_reclaimed_identifier_tail.log"
+  },
+  {
+    "case": "physical_gc_page_observes_deletions_staged_in_the_same_transaction",
+    "exit_code": 101,
+    "result": "expected behavioral failure on ab7a0ec",
+    "log": "control-physical_gc_page_observes_deletions_staged_in_the_same_transaction.log"
+  }
+]

@@ -15,6 +15,9 @@ pub struct Options {
     pub max_tenant_requests: usize,
     pub max_http_requests: usize,
     pub max_http_body_requests: usize,
+    pub max_http_admission_requests: usize,
+    pub max_http_index_requests: usize,
+    pub max_http_lifecycle_requests: usize,
     pub max_http_maintenance_requests: usize,
     pub max_http_connections: usize,
     pub http_write_timeout_ms: u64,
@@ -52,6 +55,9 @@ impl Default for Options {
             max_tenant_requests: 32,
             max_http_requests: 64,
             max_http_body_requests: 256,
+            max_http_admission_requests: 256,
+            max_http_index_requests: 4,
+            max_http_lifecycle_requests: 4,
             max_http_maintenance_requests: 4,
             max_http_connections: 1024,
             http_write_timeout_ms: 30_000,
@@ -100,6 +106,9 @@ impl Options {
             || self.max_tenant_requests > 100_000
             || !(1..=100_000).contains(&self.max_http_requests)
             || !(1..=100_000).contains(&self.max_http_body_requests)
+            || !(1..=100_000).contains(&self.max_http_admission_requests)
+            || !(1..=128).contains(&self.max_http_index_requests)
+            || !(1..=128).contains(&self.max_http_lifecycle_requests)
             || !(1..=128).contains(&self.max_http_maintenance_requests)
             || !(1..=100_000).contains(&self.max_http_connections)
             || !(1..=3_600_000).contains(&self.http_write_timeout_ms)

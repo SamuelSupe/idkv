@@ -51,6 +51,7 @@ impl Client {
         let http = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(std::time::Duration::from_secs(2))
+            .pool_idle_timeout(std::time::Duration::from_secs(4))
             .timeout(std::time::Duration::from_secs(8))
             .build()
             .map_err(|_| Error::invalid("client configuration"))?;

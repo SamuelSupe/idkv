@@ -1,0 +1,11 @@
+{
+  "result": "passed",
+  "json": 66,
+  "jsonl": 21,
+  "gzip": 30,
+  "python": 3,
+  "local_doc_links": 100,
+  "archive_hashes_match": true,
+  "credentials_and_disk_images_excluded": true,
+  "runtime_cleanup_verified": true
+}

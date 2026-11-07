@@ -2,6 +2,7 @@ use super::*;
 pub struct TableWriter<'a> {
     file: Arc<File>,
     io: Arc<IoScheduler>,
+    io_class: crate::resources::IoClass,
     tenant: Uuid,
     temp: PathBuf,
     final_path: PathBuf,
@@ -48,6 +49,7 @@ impl<'a> TableWriter<'a> {
         Ok(Self {
             file: Arc::new(file),
             io,
+            io_class: crate::resources::IoClass::Background,
             tenant,
             temp,
             final_path,
@@ -69,6 +71,10 @@ impl<'a> TableWriter<'a> {
             count: 0,
             reserve_disk: None,
         })
+    }
+    pub(crate) fn with_io_class(mut self, class: crate::resources::IoClass) -> Self {
+        self.io_class = class;
+        self
     }
     pub fn with_disk_reservation(mut self, reserve: &'a dyn Fn(u64) -> Result<()>) -> Result<Self> {
         self.reserve_disk = Some(reserve);
@@ -133,7 +139,7 @@ impl<'a> TableWriter<'a> {
         let bytes = std::mem::take(&mut self.output);
         let position = self.offset - bytes.len() as u64;
         let file = self.file.clone();
-        self.io.run_background(self.tenant, move || {
+        self.io.run_class(self.tenant, self.io_class, move || {
             file.write_all_at(&bytes, position)?;
             Ok(())
         })?;
@@ -204,7 +210,7 @@ impl<'a> TableWriter<'a> {
         self.reserve_output(footer.len())?;
         let file = self.file.clone();
         let position = self.offset;
-        self.io.run_background(self.tenant, move || {
+        self.io.run_class(self.tenant, self.io_class, move || {
             file.write_all_at(&footer, position)?;
             file.sync_all()?;
             Ok(())

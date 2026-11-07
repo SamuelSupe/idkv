@@ -225,6 +225,7 @@ impl Engine {
                             self.io.clone(),
                             self.budget.clone(),
                         )?
+                        .with_io_class(crate::resources::IoClass::Durable)
                         .with_disk_reservation(&reserve_output)?,
                     );
                 }
@@ -768,6 +769,115 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn flush_output_overtakes_a_read_backlog_and_keeps_confirmed_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::Store::open(
+            dir.path(),
+            Options {
+                io_workers: 1,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let tenant = store
+            .tenant(store.create_tenant("flush-priority").unwrap().id)
+            .unwrap();
+        let engine = tenant.engine().clone();
+        drop(tenant);
+        drop(store);
+        let payload = vec![42; 512 << 10];
+        engine
+            .transact(|tx| tx.put(b"payload".to_vec(), payload.clone()))
+            .unwrap();
+        let (entered, ready) = std::sync::mpsc::channel();
+        let (release, wait) = std::sync::mpsc::channel();
+        let blocker = engine
+            .io
+            .submit(engine.info.id, move || {
+                entered.send(()).unwrap();
+                wait.recv().unwrap();
+                Ok(())
+            })
+            .unwrap();
+        ready.recv().unwrap();
+        let flushing = engine.clone();
+        let flush = std::thread::spawn(move || flushing.flush());
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while engine.view.read().frozen.is_empty() {
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        while engine.io.stats(engine.info.id)["queued_jobs"]
+            .as_u64()
+            .unwrap()
+            == 0
+        {
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        let (read_entered, read_ready) = std::sync::mpsc::channel();
+        let (read_release, read_wait) = std::sync::mpsc::channel();
+        let first_read = engine
+            .io
+            .submit_read(engine.info.id, None, false, move || {
+                read_entered.send(()).unwrap();
+                read_wait.recv().unwrap();
+                Ok(())
+            })
+            .unwrap();
+        let early = Arc::new(AtomicBool::new(false));
+        let mut reads = Vec::new();
+        for _ in 0..31 {
+            let early = early.clone();
+            let path = engine.path.join("sst");
+            reads.push(
+                engine
+                    .io
+                    .submit_read(engine.info.id, None, false, move || {
+                        let output_written = fs::read_dir(path)?
+                            .any(|p| p.is_ok_and(|p| p.metadata().is_ok_and(|m| m.len() > 64)));
+                        if !output_written {
+                            early.store(true, Ordering::Release);
+                        }
+                        Ok(())
+                    })
+                    .unwrap(),
+            );
+        }
+        release.send(()).unwrap();
+        blocker.wait().unwrap();
+        read_ready.recv().unwrap();
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while engine.io.stats(engine.info.id)["queued_jobs"]
+            .as_u64()
+            .unwrap()
+            < 32
+        {
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        read_release.send(()).unwrap();
+        first_read.wait().unwrap();
+        flush.join().unwrap().unwrap();
+        for task in reads {
+            task.wait().unwrap();
+        }
+        assert!(
+            !early.load(Ordering::Acquire),
+            "queued reads overtook the flush output"
+        );
+        let snapshot = engine.snapshot().unwrap();
+        assert_eq!(
+            snapshot
+                .get(b"payload", &mut ReadStats::default())
+                .unwrap()
+                .unwrap()
+                .as_slice(),
+            payload
+        );
+        engine.verify().unwrap();
+    }
     #[test]
     fn wal_rotation_does_not_hold_writer_lock_during_durable_publication() {
         let dir = tempfile::tempdir().unwrap();

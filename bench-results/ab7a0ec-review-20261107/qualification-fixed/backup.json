@@ -1,0 +1,10 @@
+{
+  "service": "fs",
+  "options": {
+    "root": "/var/tmp/idkv-ab7a0ec-qualification-fixed-20261107/repository"
+  },
+  "max_backup_bytes": 536870912,
+  "max_staging_bytes": 2147483648,
+  "reserve_free_bytes": 67108864,
+  "bytes_per_second": 16777216
+}

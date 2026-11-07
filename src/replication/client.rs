@@ -139,6 +139,7 @@ impl Service {
         let client = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(Duration::from_secs(3))
+            .pool_idle_timeout(Duration::from_secs(4))
             .timeout(Duration::from_secs(30))
             .build()
             .map_err(|_| Error::new("UNAVAILABLE", "replication HTTP client"))?;

@@ -1,0 +1,62 @@
+{
+  "ab7a0ec": {
+    "registry+https://github.com/rust-lang/crates.io-index#axum@0.8.9": [
+      "default",
+      "form",
+      "http1",
+      "json",
+      "matched-path",
+      "original-uri",
+      "query",
+      "tokio",
+      "tower-log",
+      "tracing"
+    ],
+    "registry+https://github.com/rust-lang/crates.io-index#hyper@1.12.0": [
+      "client",
+      "default",
+      "http1",
+      "server"
+    ],
+    "registry+https://github.com/rust-lang/crates.io-index#hyper-util@0.1.21": [
+      "client",
+      "client-legacy",
+      "client-proxy",
+      "default",
+      "http1",
+      "server",
+      "service",
+      "tokio"
+    ]
+  },
+  "fixed": {
+    "registry+https://github.com/rust-lang/crates.io-index#axum@0.8.9": [
+      "default",
+      "form",
+      "http1",
+      "json",
+      "matched-path",
+      "original-uri",
+      "query",
+      "tokio",
+      "tower-log",
+      "tracing"
+    ],
+    "registry+https://github.com/rust-lang/crates.io-index#hyper@1.12.0": [
+      "client",
+      "default",
+      "http1",
+      "server"
+    ],
+    "registry+https://github.com/rust-lang/crates.io-index#hyper-util@0.1.21": [
+      "client",
+      "client-legacy",
+      "client-proxy",
+      "default",
+      "http1",
+      "server",
+      "service",
+      "tokio"
+    ]
+  }
+}

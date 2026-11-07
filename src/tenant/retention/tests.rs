@@ -29,6 +29,103 @@ fn pause() {
 }
 
 #[test]
+fn later_history_sweeps_seek_past_the_previously_reclaimed_identifier_tail() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(
+        dir.path(),
+        Options {
+            max_scan: 8,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let t = store
+        .tenant(store.create_tenant("history-tail-seek").unwrap().id)
+        .unwrap();
+    t.identity_initialize(&actor(), IdentityConfig::default())
+        .unwrap();
+    t.set_retention(60).unwrap();
+    drop(store);
+    let mut state = serde_json::to_value(gc::State::default()).unwrap();
+    state["migration_phase"] = json!(5);
+    state["swept_floor"] = json!(200);
+    let collection = t
+        .engine()
+        .transact(|tx| {
+            let c: Collection = parse(&tx.get(&named(b"C", COLLECTION))?.unwrap())?;
+            tx.delete(key(KNOWLEDGE, &1u64.to_be_bytes()))?;
+            put(tx, key(KNOWLEDGE, &300u64.to_be_bytes()), &Uuid::new_v4())?;
+            put(tx, STATE.to_vec(), &state)?;
+            tx.put(
+                document_key(c.id, &format!("history:z:{:016x}", !100u64)),
+                b"baseline".to_vec(),
+            )?;
+            tx.put(
+                document_key(c.id, &format!("history:z:{:016x}", !250u64)),
+                b"new baseline".to_vec(),
+            )?;
+            for n in 0u64..100 {
+                tx.delete(document_key(c.id, &format!("history:z:{:016x}", !n)))?;
+            }
+            Ok(c.id)
+        })
+        .unwrap();
+    for _ in 0..3 {
+        t.retention_step().unwrap();
+    }
+    let snapshot = t.engine().snapshot().unwrap();
+    let state: Value = parse(
+        &snapshot
+            .get(STATE, &mut ReadStats::default())
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(state["swept_floor"], 300);
+    assert!(
+        snapshot
+            .get(
+                &document_key(collection, &format!("history:z:{:016x}", !100u64)),
+                &mut ReadStats::default()
+            )
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        snapshot
+            .get(
+                &document_key(collection, &format!("history:z:{:016x}", !250u64)),
+                &mut ReadStats::default()
+            )
+            .unwrap()
+            .is_some()
+    );
+}
+
+#[test]
+fn physical_gc_page_observes_deletions_staged_in_the_same_transaction() {
+    let (_dir, store, t) = setup();
+    drop(store);
+    t.engine()
+        .transact(|tx| {
+            put(tx, key(KNOWLEDGE, &1u64.to_be_bytes()), &Uuid::new_v4())?;
+            put(tx, key(KNOWLEDGE, &2u64.to_be_bytes()), &Uuid::new_v4())
+        })
+        .unwrap();
+    t.engine()
+        .transact(|tx| {
+            tx.delete(key(KNOWLEDGE, &1u64.to_be_bytes()))?;
+            let (rows, exhausted) = tx.gc_prefix(KNOWLEDGE, None, 8)?;
+            assert!(exhausted);
+            assert_eq!(rows.len(), 2);
+            assert!(rows[0].value.is_none());
+            assert!(rows[1].value.is_some());
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
 fn cached_retention_metadata_observes_changes_within_the_same_atomic_batch() {
     let (_dir, _store, tenant) = setup();
     tenant

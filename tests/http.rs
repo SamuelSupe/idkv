@@ -11,6 +11,121 @@ use tenant_kv::{
 use tower::ServiceExt;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn four_index_builds_leave_maintenance_and_lifecycle_capacity_available() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(dir.path(), Options::default()).unwrap();
+    let mut ids = Vec::new();
+    let mut release = Vec::new();
+    let mut blockers = Vec::new();
+    for n in 0..4 {
+        let tenant = store
+            .tenant(store.create_tenant(&format!("index-{n}")).unwrap().id)
+            .unwrap();
+        tenant.create_collection("docs").unwrap();
+        ids.push(tenant.id());
+        let engine = tenant.engine().clone();
+        let (entered, ready) = std::sync::mpsc::channel();
+        let (send, wait) = std::sync::mpsc::channel();
+        release.push(send);
+        blockers.push(std::thread::spawn(move || {
+            engine.transact(|_| {
+                entered.send(()).unwrap();
+                let _ = wait.recv_timeout(std::time::Duration::from_secs(10));
+                Ok(())
+            })
+        }));
+        ready
+            .recv_timeout(std::time::Duration::from_secs(1))
+            .unwrap();
+    }
+    let healthy = store.create_tenant("healthy-maintenance").unwrap();
+    let secret = "index-lifecycle-isolation-secret";
+    let app = http::app(
+        store,
+        AuthConfig {
+            tokens: vec![Token {
+                subject: "admin".into(),
+                sha256: http::token_hash(secret),
+                tenant: None,
+                role: Role::Admin,
+            }],
+        },
+    )
+    .unwrap();
+    let mut builds = Vec::new();
+    for id in &ids {
+        let app = app.clone();
+        let id = *id;
+        builds.push(tokio::spawn(async move {
+            call(
+                &app,
+                "POST",
+                &format!("/v1/tenants/{id}/collections/docs/indexes"),
+                Some(secret),
+                json!({"name":"index","fields":[{"field":"/value"}]}),
+            )
+            .await
+        }));
+    }
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    assert!(builds.iter().all(|task| !task.is_finished()));
+    let backup = call(
+        &app,
+        "POST",
+        &format!("/v1/tenants/{}/backup", healthy.id),
+        Some(secret),
+        json!({}),
+    )
+    .await;
+    let quota = call(
+        &app,
+        "PATCH",
+        &format!("/v1/tenants/{}", healthy.id),
+        Some(secret),
+        json!({"memory_bytes":healthy.memory_bytes,"disk_bytes":healthy.disk_bytes}),
+    )
+    .await;
+    let close_busy = call(
+        &app,
+        "POST",
+        &format!("/v1/tenants/{}/close", ids[0]),
+        Some(secret),
+        json!({}),
+    )
+    .await;
+    let close = call(
+        &app,
+        "POST",
+        &format!("/v1/tenants/{}/close", healthy.id),
+        Some(secret),
+        json!({}),
+    )
+    .await;
+    let delete = call(
+        &app,
+        "DELETE",
+        &format!("/v1/tenants/{}", healthy.id),
+        Some(secret),
+        json!({}),
+    )
+    .await;
+    for send in release {
+        let _ = send.send(());
+    }
+    for blocker in blockers {
+        blocker.join().unwrap().unwrap();
+    }
+    for build in builds {
+        assert_eq!(build.await.unwrap().0, StatusCode::OK);
+    }
+    for response in [backup, quota, close, delete] {
+        assert_eq!(response.0, StatusCode::OK, "{}", response.1);
+    }
+    assert_eq!(close_busy.0, StatusCode::CONFLICT, "{}", close_busy.1);
+    assert_eq!(close_busy.1["error"]["code"], "BUSY");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn one_tenant_index_build_cannot_fill_the_maintenance_pool() {
     let dir = tempfile::tempdir().unwrap();
     let store = Store::open(dir.path(), Options::default()).unwrap();

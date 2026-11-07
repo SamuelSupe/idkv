@@ -1,0 +1,41 @@
+{
+  "result": "passed",
+  "roots": {
+    "qualification-before": "/var/tmp/idkv-ab7a0ec-qualification-before-20261107",
+    "qualification-fixed": "/var/tmp/idkv-ab7a0ec-qualification-fixed-20261107",
+    "faults": "/var/tmp/idkv-ab7a0ec-faults-20261107",
+    "protocol": "/var/tmp/idkv-ab7a0ec-protocol-20261107"
+  },
+  "qualification_document_state_checks": {
+    "qualification-before": 36200,
+    "qualification-fixed": 36200
+  },
+  "fault_prior_confirmed_documents_preserved": 6000,
+  "protocol_document_state_checks": 900,
+  "fault_cases": [
+    {
+      "case": "enospc",
+      "confirmed_documents_missing": 0,
+      "uncertain_batch_visible_before_retry": 0,
+      "restart_to_safe_retry_ms": 39.947072975337505
+    },
+    {
+      "case": "wal-write-eio",
+      "confirmed_documents_missing": 0,
+      "uncertain_batch_visible_before_retry": 0,
+      "restart_to_safe_retry_ms": 31.870267004705966
+    },
+    {
+      "case": "wal-sync-eio",
+      "confirmed_documents_missing": 0,
+      "uncertain_batch_visible_before_retry": 8,
+      "restart_to_safe_retry_ms": 30.980972049292177
+    }
+  ],
+  "protocol_versions": [
+    "b206985",
+    "ab7a0ec",
+    "fixed"
+  ],
+  "scope": "OrbStack Ubuntu aarch64 native filesystem; syscall EIO injection; OpenDAL fs backup backend"
+}

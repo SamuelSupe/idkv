@@ -1,0 +1,23 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.05s
+     Running unittests src/lib.rs (/var/tmp/idkv-ab7a0ec-control-target-20261107/debug/deps/tenant_kv-321137334cf1859a)
+
+running 1 test
+test tenant::retention::tests::later_history_sweeps_seek_past_the_previously_reclaimed_identifier_tail ... FAILED
+
+failures:
+
+---- tenant::retention::tests::later_history_sweeps_seek_past_the_previously_reclaimed_identifier_tail stdout ----
+
+thread 'tenant::retention::tests::later_history_sweeps_seek_past_the_previously_reclaimed_identifier_tail' panicked at src/tenant/retention/tests.rs:811:5:
+assertion `left == right` failed
+  left: Number(200)
+ right: 300
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tenant::retention::tests::later_history_sweeps_seek_past_the_previously_reclaimed_identifier_tail
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 74 filtered out; finished in 0.12s
+
+error: test failed, to rerun pass `--lib`

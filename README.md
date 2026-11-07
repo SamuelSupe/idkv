@@ -168,3 +168,5 @@ python3 scripts/replication_demo.py --binary target/release/tenant-kv --root /va
 本轮外部问题清单的逐项结论、资源隔离及持久化改动见[第五轮修复与验证](docs/deep-remediation5-20261107.md)。
 
 对 b206985 的跨租户阻塞、连接期限和 GC 预算问题，见[审查核实与修复](docs/b206985-review-20261107.md)。
+
+对 ab7a0ec 的冷准入、flush 优先级和维护池隔离反馈，见[复查、修复与同负载对照](docs/ab7a0ec-review-20261107.md)。

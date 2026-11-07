@@ -401,6 +401,8 @@ impl Transaction<'_> {
     }
     // GC records its last visited key even for tombstones. Bound physical work
     // without rejecting the progress that lets the next batch seek past it.
+    // Overlay changes to visited keys. New keys absent from this physical view
+    // are visited next transaction; inserting them cannot make cleanup unsafe.
     pub(crate) fn gc_prefix(
         &self,
         prefix: &[u8],
@@ -423,7 +425,7 @@ impl Transaction<'_> {
         let limit = limit.min(self.engine.options.max_scan);
         let mut rows = Vec::new();
         while let Some(record) = scan.next_for_gc(&mut stats, limit)? {
-            rows.push(record);
+            rows.push(self.changes.get(&record.key).cloned().unwrap_or(record));
         }
         Ok((rows, scan.exhausted()))
     }

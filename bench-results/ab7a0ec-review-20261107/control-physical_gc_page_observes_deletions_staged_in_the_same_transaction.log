@@ -1,0 +1,21 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running unittests src/lib.rs (/var/tmp/idkv-ab7a0ec-control-target-20261107/debug/deps/tenant_kv-321137334cf1859a)
+
+running 1 test
+test tenant::retention::tests::physical_gc_page_observes_deletions_staged_in_the_same_transaction ... FAILED
+
+failures:
+
+---- tenant::retention::tests::physical_gc_page_observes_deletions_staged_in_the_same_transaction stdout ----
+
+thread 'tenant::retention::tests::physical_gc_page_observes_deletions_staged_in_the_same_transaction' panicked at src/tenant/retention/tests.rs:848:13:
+assertion failed: rows[0].value.is_none()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tenant::retention::tests::physical_gc_page_observes_deletions_staged_in_the_same_transaction
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 74 filtered out; finished in 0.12s
+
+error: test failed, to rerun pass `--lib`

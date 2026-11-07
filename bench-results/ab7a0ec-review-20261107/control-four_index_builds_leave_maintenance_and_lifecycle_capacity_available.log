@@ -1,0 +1,24 @@
+   Compiling tenant-kv v0.10.1 (/var/tmp/idkv-ab7a0ec-control-source-20261107)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.60s
+     Running tests/http.rs (/var/tmp/idkv-ab7a0ec-control-target-20261107/debug/deps/http-afbc29b457858dda)
+
+running 1 test
+test four_index_builds_leave_maintenance_and_lifecycle_capacity_available ... FAILED
+
+failures:
+
+---- four_index_builds_leave_maintenance_and_lifecycle_capacity_available stdout ----
+
+thread 'four_index_builds_leave_maintenance_and_lifecycle_capacity_available' panicked at tests/http.rs:1479:9:
+assertion `left == right` failed: {"error":{"code":"RESOURCE_EXHAUSTED","message":"HTTP worker concurrency"}}
+  left: 429
+ right: 200
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    four_index_builds_leave_maintenance_and_lifecycle_capacity_available
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 12 filtered out; finished in 0.21s
+
+error: test failed, to rerun pass `--test http`
