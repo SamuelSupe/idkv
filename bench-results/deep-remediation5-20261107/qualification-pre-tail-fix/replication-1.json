@@ -1,0 +1,8 @@
+{
+  "cluster": "012dc253-6f26-424a-ae5a-a60e5b5ae1be",
+  "role": "replica",
+  "peer_url": "http://127.0.0.1:44215",
+  "token_file": "/var/tmp/idkv-remediation5-qualification-complete-20261107/peer-token",
+  "poll_ms": 50,
+  "log_retention_bytes": 268435456
+}

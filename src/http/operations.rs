@@ -137,6 +137,13 @@ pub(super) fn dispatch(
             return ok();
         }
         "/v1/tenants/{tenant}/backup" => return Ok(json!({"backup":store.backup(id)?})),
+        "/v1/tenants/{tenant}/backup/{backup}" => {
+            store.delete_backup(
+                id,
+                Uuid::parse_str(&params["backup"]).map_err(|_| Error::invalid("backup UUID"))?,
+            )?;
+            return ok();
+        }
         "/v1/tenants/{tenant}/restore" => {
             store.restore(id, decode::<RestoreBody>(body)?.backup)?;
             return ok();

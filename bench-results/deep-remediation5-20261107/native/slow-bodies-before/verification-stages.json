@@ -1,0 +1,29 @@
+[
+  {
+    "stage": "seed",
+    "node": 0,
+    "file": "verified-seed-node-0.json",
+    "documents": 64,
+    "mismatches": 0,
+    "ack_count": 64,
+    "sha256": "c4924e78c92b0e55526c6c79510e9c11bf1eaacf82b2658b6e2dfc244506c475"
+  },
+  {
+    "stage": "after-slow-bodies",
+    "node": 0,
+    "file": "verified-after-slow-bodies-node-0.json",
+    "documents": 64,
+    "mismatches": 0,
+    "ack_count": 64,
+    "sha256": "c4924e78c92b0e55526c6c79510e9c11bf1eaacf82b2658b6e2dfc244506c475"
+  },
+  {
+    "stage": "restart",
+    "node": 0,
+    "file": "verified-restart-node-0.json",
+    "documents": 64,
+    "mismatches": 0,
+    "ack_count": 64,
+    "sha256": "c4924e78c92b0e55526c6c79510e9c11bf1eaacf82b2658b6e2dfc244506c475"
+  }
+]

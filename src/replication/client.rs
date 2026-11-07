@@ -62,6 +62,8 @@ struct Progress {
     initialization_backoff: HashMap<Uuid, Duration>,
     waiting_for_readers: HashSet<Uuid>,
     initialization_errors: HashMap<Uuid, String>,
+    status_cache: Option<(Instant, Arc<Received<Status>>)>,
+    catalog_seen: Option<Instant>,
 }
 struct Inner {
     store: Store,
@@ -181,6 +183,8 @@ impl Service {
                     initialization_backoff: HashMap::new(),
                     waiting_for_readers: HashSet::new(),
                     initialization_errors: HashMap::new(),
+                    status_cache: None,
+                    catalog_seen: None,
                 }),
             }),
         })
@@ -233,6 +237,7 @@ impl Service {
         let service = self.clone();
         tokio::spawn(async move {
             let mut expiration = Instant::now();
+            let mut error_delay = Duration::from_millis(service.inner.config.poll_ms);
             loop {
                 if expiration.elapsed() >= Duration::from_secs(1) {
                     let expiring = service.clone();
@@ -252,7 +257,11 @@ impl Service {
                     let pending = matches!(result, Ok(true));
                     if let Err(error) = &result {
                         service.inner.progress.lock().error = Some(error.to_string());
+                        tokio::time::sleep(error_delay).await;
+                        error_delay = (error_delay * 2).min(Duration::from_secs(30));
+                        continue;
                     }
+                    error_delay = Duration::from_millis(service.inner.config.poll_ms);
                     if pending {
                         // Each round gives every pending tenant a page before revisiting
                         // a hot tenant. Sleep only at the head or after an error.
@@ -296,6 +305,11 @@ impl Service {
         let request = match body {
             Some(body) => self.inner.client.post(url).json(&body),
             None => self.inner.client.get(url),
+        };
+        let request = if path == "/v1/replication/promote" {
+            request.timeout(Duration::from_secs(150))
+        } else {
+            request
         };
         let mut response = request
             .bearer_auth(&self.inner.token)
@@ -378,7 +392,25 @@ impl Service {
         if self.inner.store.replication_state().role != Role::Replica {
             return Err(Error::new("CONFLICT", "node is not a replica"));
         }
-        let upstream: Received<Status> = self.request("/v1/replication/status", None).await?;
+        let cached = if report_error {
+            None
+        } else {
+            self.inner
+                .progress
+                .lock()
+                .status_cache
+                .as_ref()
+                .filter(|(at, _)| at.elapsed() < Duration::from_millis(100))
+                .map(|(at, status)| (*at, status.clone()))
+        };
+        let (catalog_stamp, upstream) = if let Some(cached) = cached {
+            cached
+        } else {
+            let status: Received<Status> = self.request("/v1/replication/status", None).await?;
+            let entry = (Instant::now(), Arc::new(status));
+            self.inner.progress.lock().status_cache = Some(entry.clone());
+            entry
+        };
         super::compatible(upstream.node.protocol)?;
         let store = self.inner.store.clone();
         let node = upstream.node.clone();
@@ -386,6 +418,7 @@ impl Service {
         let source = tokio::task::spawn_blocking(move || binding.bind_source(&node))
             .await
             .map_err(|_| Error::new("INTERNAL", "source binding worker failed"))??;
+        let catalog_seen = self.inner.progress.lock().catalog_seen == Some(catalog_stamp);
         let mut catalog = upstream.tenants.clone();
         catalog.extend(upstream.unavailable.iter().map(|t| TenantPosition {
             info: t.info.clone(),
@@ -394,11 +427,18 @@ impl Service {
         catalog.sort_by_key(|p| p.info.id);
         let catalog_store = store.clone();
         let catalog_source = source.clone();
-        let blocked = tokio::task::spawn_blocking(move || {
-            catalog_store.replica_catalog(&catalog_source, &catalog)
-        })
-        .await
-        .map_err(|_| Error::new("INTERNAL", "replica catalog worker failed"))??;
+        let blocked = if catalog_seen {
+            HashMap::new()
+        } else {
+            tokio::task::spawn_blocking(move || {
+                catalog_store.replica_catalog(&catalog_source, &catalog)
+            })
+            .await
+            .map_err(|_| Error::new("INTERNAL", "replica catalog worker failed"))??
+        };
+        if blocked.is_empty() {
+            self.inner.progress.lock().catalog_seen = Some(catalog_stamp);
+        }
         let mut catalog = upstream.tenants.clone();
         catalog.extend(upstream.unavailable.iter().map(|t| TenantPosition {
             info: t.info.clone(),
@@ -485,18 +525,36 @@ impl Service {
                     .sync_tenant(&source, upstream.node.cluster, &position)
                     .await
                 {
-                    Ok(TenantSync::Idle) => {}
+                    Ok(TenantSync::Idle) => {
+                        let mut progress = self.inner.progress.lock();
+                        if !progress.initializing.contains_key(&position.info.id) {
+                            progress.initialization_backoff.remove(&position.info.id);
+                            progress.retry_at.remove(&position.info.id);
+                        }
+                    }
                     Ok(TenantSync::Pending(head)) => {
+                        self.inner
+                            .progress
+                            .lock()
+                            .initialization_backoff
+                            .remove(&position.info.id);
                         // The source may advance beyond the catalog snapshot.
                         // Compare the next page with the latest authenticated head.
                         position.seq = head;
                         next.push(position);
                     }
                     Err(error) => {
-                        self.inner.progress.lock().retry_at.insert(
-                            position.info.id,
-                            Instant::now() + Duration::from_millis(100),
-                        );
+                        let mut progress = self.inner.progress.lock();
+                        let delay = *progress
+                            .initialization_backoff
+                            .entry(position.info.id)
+                            .or_insert(Duration::from_millis(100));
+                        progress
+                            .initialization_backoff
+                            .insert(position.info.id, (delay * 2).min(Duration::from_secs(30)));
+                        progress
+                            .retry_at
+                            .insert(position.info.id, Instant::now() + delay);
                         failure.get_or_insert(error);
                     }
                 }
@@ -525,15 +583,21 @@ impl Service {
         position: &TenantPosition,
     ) -> Result<TenantSync> {
         let store = self.inner.store.clone();
-        if !store.contains_tenant(position.info.id) {
-            self.start_initialize(source, position.info.id, false);
-            return Ok(TenantSync::Idle);
-        }
         let id = position.info.id;
         let position_store = store.clone();
-        let after = tokio::task::spawn_blocking(move || position_store.replication_position(id))
-            .await
-            .map_err(|_| Error::new("INTERNAL", "replica position worker failed"))??;
+        let after = tokio::task::spawn_blocking(move || {
+            if position_store.contains_tenant(id) {
+                position_store.replication_position(id).map(Some)
+            } else {
+                Ok(None)
+            }
+        })
+        .await
+        .map_err(|_| Error::new("INTERNAL", "replica position worker failed"))??;
+        let Some(after) = after else {
+            self.start_initialize(source, id, false);
+            return Ok(TenantSync::Idle);
+        };
         // An asynchronous checkpoint can install a position newer than this
         // cycle's catalog. The authenticated log endpoint checks the live head.
         if after == position.seq && self.inner.progress.lock().confirmed.get(&id) == Some(&after) {
@@ -731,7 +795,8 @@ impl Service {
         }
     }
     pub fn snapshot_chunk(&self, id: Uuid, file: usize, offset: u64) -> Result<String> {
-        self.inner.exports.lock().chunk(id, file, offset)
+        let chunk = self.inner.exports.lock().chunk(id, file, offset)?;
+        chunk.read()
     }
     pub fn release_snapshot(&self, id: Uuid) -> Result<()> {
         self.inner.exports.lock().release(id)

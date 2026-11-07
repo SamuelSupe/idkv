@@ -7,6 +7,8 @@ use auth::allows;
 pub use auth::{AuthConfig, Role, Token, token_hash};
 mod backups;
 mod body;
+mod transport;
+pub use transport::Listener;
 mod contracts;
 mod identity;
 mod openapi;
@@ -36,7 +38,9 @@ struct AppState {
     replication_workers: Arc<Semaphore>,
     metrics_workers: Arc<Semaphore>,
     workers: Arc<Semaphore>,
-    tenants: Arc<Mutex<HashMap<Uuid, Arc<Semaphore>>>>,
+    body_workers: Arc<Semaphore>,
+    maintenance_workers: Arc<Semaphore>,
+    tenants: Arc<Mutex<HashMap<Uuid, std::sync::Weak<Semaphore>>>>,
     runtime: HttpRuntime,
 }
 
@@ -100,6 +104,7 @@ const ROUTES: &[&str] = &[
     "/v1/tenants/{tenant}/replication/wait",
     "/v1/tenants/{tenant}/close",
     "/v1/tenants/{tenant}/backup",
+    "/v1/tenants/{tenant}/backup/{backup}",
     "/v1/tenants/{tenant}/restore",
     "/v1/tenants/{tenant}/remote-backups",
     "/v1/tenants/{tenant}/remote-backups/prune",
@@ -168,6 +173,11 @@ pub fn app_with_runtime(
             "backup service belongs to a different Store",
         ));
     }
+    let workers = Arc::new(Semaphore::new(store.options().max_http_requests));
+    let body_workers = Arc::new(Semaphore::new(store.options().max_http_body_requests));
+    let maintenance_workers = Arc::new(Semaphore::new(
+        store.options().max_http_maintenance_requests,
+    ));
     let state = AppState {
         store,
         auth: Arc::new(auth),
@@ -175,7 +185,9 @@ pub fn app_with_runtime(
         replication,
         replication_workers: Arc::new(Semaphore::new(4)),
         metrics_workers: Arc::new(Semaphore::new(1)),
-        workers: Arc::new(Semaphore::new(64)),
+        workers,
+        body_workers,
+        maintenance_workers,
         tenants: Arc::new(Mutex::new(HashMap::new())),
         runtime,
     };
@@ -390,29 +402,34 @@ async fn dispatch_async(
             "global tenant administration required",
         ));
     }
+    let receiving = Arc::new(
+        state
+            .body_workers
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| Error::limit("HTTP body concurrency"))?,
+    );
     let tenant_permit = if let Some(id) = tenant {
-        if !state.store.contains_tenant(id) {
-            return Err(Error::missing("tenant"));
+        let mut tenants = state.tenants.lock();
+        if tenants.len() >= 16_384 {
+            tenants.retain(|_, gate| gate.strong_count() > 0);
         }
-        let semaphore = state
-            .tenants
-            .lock()
-            .entry(id)
-            .or_insert_with(|| Arc::new(Semaphore::new(state.store.options().max_tenant_requests)))
-            .clone();
-        Some(
+        let semaphore = tenants
+            .get(&id)
+            .and_then(std::sync::Weak::upgrade)
+            .unwrap_or_else(|| {
+                let gate = Arc::new(Semaphore::new(state.store.options().max_tenant_requests));
+                tenants.insert(id, Arc::downgrade(&gate));
+                gate
+            });
+        Some(Arc::new(
             semaphore
                 .try_acquire_owned()
                 .map_err(|_| Error::limit("tenant HTTP concurrency"))?,
-        )
+        ))
     } else {
         None
     };
-    let worker = state
-        .workers
-        .clone()
-        .try_acquire_owned()
-        .map_err(|_| Error::limit("HTTP worker concurrency"))?;
     let body_timeout = read_budget
         .as_ref()
         .map_or(std::time::Duration::from_secs(5), |budget| {
@@ -421,11 +438,29 @@ async fn dispatch_async(
                 .saturating_duration_since(std::time::Instant::now())
                 .min(std::time::Duration::from_secs(5))
         });
+    let body_deadline = tokio::time::Instant::now() + body_timeout;
+    let input_budget = if let Some(budget) = state.store.try_http_input_budget(tenant)? {
+        budget
+    } else {
+        // Keep admission permits on the blocking task after HTTP cancellation.
+        // Hot requests avoid this thread hop; no async path waits on these locks.
+        let input_store = state.store.clone();
+        let input_receiving = receiving.clone();
+        let input_tenant = tenant_permit.clone();
+        let admission = tokio::task::spawn_blocking(move || {
+            let _receiving = input_receiving;
+            let _tenant = input_tenant;
+            input_store.http_input_budget(tenant)
+        });
+        tokio::time::timeout_at(body_deadline, admission)
+            .await
+            .map_err(|_| Error::new("DEADLINE_EXCEEDED", "HTTP input admission deadline"))?
+            .map_err(|_| Error::new("INTERNAL", "HTTP input admission worker failed"))??
+    };
     let (bytes, body_memory) = tokio::time::timeout(
-        body_timeout,
+        body_deadline.saturating_duration_since(tokio::time::Instant::now()),
         body::read(
-            &state.store,
-            tenant,
+            &input_budget,
             request.into_body(),
             if method == Method::GET {
                 0
@@ -436,6 +471,26 @@ async fn dispatch_async(
     )
     .await
     .map_err(|_| Error::new("DEADLINE_EXCEEDED", "request body deadline"))??;
+    drop(receiving);
+    let maintenance = matches!(
+        route.as_str(),
+        "/v1/tenants/{tenant}/compact"
+            | "/v1/tenants/{tenant}/check"
+            | "/v1/tenants/{tenant}/checkpoint"
+            | "/v1/tenants/{tenant}/backup"
+            | "/v1/tenants/{tenant}/backup/{backup}"
+            | "/v1/tenants/{tenant}/restore"
+            | "/v1/tenants/{tenant}/close"
+    ) || (route == "/v1/tenants/{tenant}" && method != Method::GET)
+        || (route.ends_with("/indexes") && method == Method::POST);
+    let worker = if maintenance {
+        &state.maintenance_workers
+    } else {
+        &state.workers
+    }
+    .clone()
+    .try_acquire_owned()
+    .map_err(|_| Error::limit("HTTP worker concurrency"))?;
     let minimum = match (
         headers.get("x-tkv-min-history"),
         headers.get("x-tkv-min-seq"),
@@ -654,6 +709,9 @@ fn required_role(route: &str, method: &Method) -> Result<Role> {
     Ok(Role::Admin)
 }
 fn allowed_methods(route: &str) -> &'static [&'static str] {
+    if route == "/v1/tenants/{tenant}/backup/{backup}" {
+        return &["DELETE"];
+    }
     if route.ends_with("/identity/entities/{entity}")
         || route.ends_with("/identity/operations/{operation}")
     {

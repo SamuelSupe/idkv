@@ -1,0 +1,38 @@
+[
+  {
+    "stage": "after-transfer-window",
+    "node": 0,
+    "file": "verified-after-transfer-window-node-0.json",
+    "documents": 128,
+    "mismatches": 0,
+    "ack_count": 176,
+    "sha256": "544bad1fba21efacf86c447f91ce4377c29ed182b772b6a83e3a398d650df002"
+  },
+  {
+    "stage": "bootstrap",
+    "node": 1,
+    "file": "verified-bootstrap-node-1.json",
+    "documents": 128,
+    "mismatches": 0,
+    "ack_count": 176,
+    "sha256": "544bad1fba21efacf86c447f91ce4377c29ed182b772b6a83e3a398d650df002"
+  },
+  {
+    "stage": "reinitialization",
+    "node": 1,
+    "file": "verified-reinitialization-node-1.json",
+    "documents": 128,
+    "mismatches": 0,
+    "ack_count": 240,
+    "sha256": "80be36ad5efc9c4f9935d117075df094c229e6d4837504adae262f634cfc20b2"
+  },
+  {
+    "stage": "restart",
+    "node": 0,
+    "file": "verified-restart-node-0.json",
+    "documents": 128,
+    "mismatches": 0,
+    "ack_count": 240,
+    "sha256": "80be36ad5efc9c4f9935d117075df094c229e6d4837504adae262f634cfc20b2"
+  }
+]

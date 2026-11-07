@@ -27,6 +27,61 @@ fn clean(t: &TenantHandle) {
 fn pause() {
     std::thread::sleep(Duration::from_millis(1100));
 }
+
+#[test]
+fn expiry_batches_resume_after_tombstones_and_revisit_backdated_insertions() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(
+        dir.path(),
+        Options {
+            max_scan: 64,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let tenant = store
+        .tenant(store.create_tenant("expiry-cursor").unwrap().id)
+        .unwrap();
+    drop(store);
+    tenant.set_retention(1).unwrap();
+    let mut state = serde_json::to_value(gc::State::default()).unwrap();
+    state["migration_phase"] = json!(5);
+    tenant
+        .engine()
+        .transact(|tx| {
+            put(tx, STATE.to_vec(), &state)?;
+            for i in 0..256 {
+                let target = format!("Z{i:04}").into_bytes();
+                tx.put(target.clone(), b"expired".to_vec())?;
+                schedule_at(tx, &target, 0, Expiration::Delete)?;
+            }
+            tx.put(b"live".to_vec(), b"confirmed".to_vec())
+        })
+        .unwrap();
+    for _ in 0..8 {
+        tenant.retention_step().unwrap();
+    }
+    tenant
+        .engine()
+        .transact(|tx| {
+            assert!(tx.get(b"Z0255")?.is_none());
+            tx.put(b"Z!backdated".to_vec(), b"expired".to_vec())?;
+            schedule_at(tx, b"Z!backdated", 0, Expiration::Delete)
+        })
+        .unwrap();
+    tenant.retention_step().unwrap();
+    let snapshot = tenant.engine().snapshot().unwrap();
+    let mut stats = ReadStats::default();
+    assert!(snapshot.get(b"Z!backdated", &mut stats).unwrap().is_none());
+    assert_eq!(
+        snapshot
+            .get(b"live", &mut stats)
+            .unwrap()
+            .unwrap()
+            .as_slice(),
+        b"confirmed"
+    );
+}
 fn options(t: &TenantHandle, id: &str) -> WriteOptions {
     let c = t.retry_context("worker").unwrap();
     WriteOptions {

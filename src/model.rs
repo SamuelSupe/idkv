@@ -13,6 +13,13 @@ pub struct Options {
     pub block_bytes: usize,
     pub io_workers: usize,
     pub max_tenant_requests: usize,
+    pub max_http_requests: usize,
+    pub max_http_body_requests: usize,
+    pub max_http_maintenance_requests: usize,
+    pub max_http_connections: usize,
+    pub http_write_timeout_ms: u64,
+    pub maintenance_reserve_free_bytes: u64,
+    pub max_local_backup_bytes: u64,
     pub idle_seconds: u64,
     pub snapshot_seconds: u64,
     pub index_build_seconds: u64,
@@ -42,6 +49,13 @@ impl Default for Options {
             block_bytes: 16 << 10,
             io_workers: 4,
             max_tenant_requests: 32,
+            max_http_requests: 64,
+            max_http_body_requests: 256,
+            max_http_maintenance_requests: 4,
+            max_http_connections: 1024,
+            http_write_timeout_ms: 30_000,
+            maintenance_reserve_free_bytes: 64 << 20,
+            max_local_backup_bytes: 1 << 30,
             idle_seconds: 300,
             snapshot_seconds: 60,
             index_build_seconds: 3600,
@@ -82,6 +96,12 @@ impl Options {
             || self.max_query_bytes > 1usize << 40
             || self.query_ms > 86_400_000
             || self.max_tenant_requests > 100_000
+            || !(1..=100_000).contains(&self.max_http_requests)
+            || !(1..=100_000).contains(&self.max_http_body_requests)
+            || !(1..=128).contains(&self.max_http_maintenance_requests)
+            || !(1..=100_000).contains(&self.max_http_connections)
+            || !(1..=3_600_000).contains(&self.http_write_timeout_ms)
+            || self.max_local_backup_bytes < 1 << 20
             || self.max_snapshots > 100_000
             || self.io_workers == 0
             || self.io_workers > 128

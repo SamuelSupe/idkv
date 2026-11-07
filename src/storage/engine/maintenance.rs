@@ -93,14 +93,35 @@ impl Engine {
         result
     }
     fn flush_locked(&self) -> Result<()> {
+        let rotate = {
+            let view = self.view.read();
+            view.frozen.is_empty() && view.mem.bytes.load(Ordering::Acquire) != 0
+        };
+        let mut prepared = if rotate {
+            self.reserve_disk(65536, true)?;
+            let start_seq = self
+                .writer
+                .lock()
+                .staged
+                .checked_add(1)
+                .ok_or_else(|| Error::limit("commit sequence exhausted"))?;
+            let wal = Wal::create(
+                &self.path.join("wal"),
+                self.info.id,
+                self.info.generation,
+                start_seq,
+            )?;
+            crate::storage::errorpoint("wal_rotate_created")?;
+            Some(wal)
+        } else {
+            None
+        };
         let (mem, checkpoint, old_wals) = {
             let mut writer = self.writer.lock();
             if let Some(error) = &writer.poison {
                 return Err(error.clone());
             }
             self.sync_writer(&mut writer)?;
-            // The writer lock already prevents new memtable writes. Keep the
-            // view readable while WAL creation and Manifest publication fsync.
             let view = self.view.read();
             if view.mem.bytes.load(Ordering::Acquire) == 0 && view.frozen.is_empty() {
                 return Ok(());
@@ -121,35 +142,65 @@ impl Engine {
                     .filter(|w| w.start_seq <= checkpoint)
                     .cloned()
                     .collect::<Vec<_>>();
-                self.reserve_disk(mem.bytes.load(Ordering::Acquire) as u64 * 3 + 65536, true)?;
+                self.reserve_disk(65536, true)?;
                 (mem, checkpoint, old_wals)
             } else {
                 let mem = view.mem.clone();
                 let checkpoint = writer.staged;
-                self.reserve_disk(mem.bytes.load(Ordering::Acquire) as u64 * 3 + 65536, true)?;
-                let new_wal = Wal::create(
-                    &self.path.join("wal"),
-                    self.info.id,
-                    self.info.generation,
-                    checkpoint + 1,
-                )?;
-                crate::storage::errorpoint("wal_rotate_created")?;
+                let mut new_wal = prepared
+                    .take()
+                    .ok_or_else(|| Error::new("BUSY", "memtable changed; retry flush"))?;
+                let start_seq = checkpoint
+                    .checked_add(1)
+                    .ok_or_else(|| Error::limit("commit sequence exhausted"))?;
+                let changed = new_wal.info.start_seq != start_seq;
+                if changed {
+                    new_wal.set_start_seq(start_seq)?;
+                }
                 let mut manifest = writer.manifest.clone();
                 let old_wals = manifest.wals.clone();
                 manifest.wals.push(new_wal.info.clone());
-                if let Err(e) = publish(&self.path, &manifest) {
-                    self.poison_writer(&mut writer, Error::new("COMMIT_UNKNOWN", e.to_string()));
-                    return Err(e);
-                }
-                writer.manifest = manifest;
+                let file = new_wal.file.clone();
                 writer.wal = new_wal;
+                // New transactions may stage into the next WAL, but no group
+                // leader may acknowledge them until its Manifest is durable.
+                writer.syncing = true;
                 drop(view);
                 let mut view = self.view.write();
                 view.mem = MemTable::new();
                 view.frozen.push(mem.clone());
+                drop(view);
+                drop(writer);
+                crate::storage::failpoint("wal_rotation_pending");
+                let path = self.path.clone();
+                let publication = self.io.run(self.info.id, move || {
+                    // The prepared header is already durable unless a concurrent
+                    // commit changed the boundary. Route publication through the
+                    // shared scheduler instead of adding unscheduled fsync load.
+                    if changed {
+                        file.sync_all()?;
+                    }
+                    publish(&path, &manifest)?;
+                    Ok(manifest)
+                });
+                let mut writer = self.writer.lock();
+                writer.syncing = false;
+                match publication {
+                    Ok(manifest) => writer.manifest = manifest,
+                    Err(error) => {
+                        self.poison_writer(
+                            &mut writer,
+                            Error::new("COMMIT_UNKNOWN", error.to_string()),
+                        );
+                        self.notify_durable();
+                        return Err(error);
+                    }
+                }
+                self.notify_durable();
                 (mem, checkpoint, old_wals)
             }
         };
+        let reserve_output = |bytes| self.reserve_disk(bytes, true);
         let result: Result<()> = (|| {
             let mut outputs = Vec::new();
             let mut builder: Option<TableWriter> = None;
@@ -164,15 +215,18 @@ impl Engine {
                 }
                 domain = next_domain.to_vec();
                 if builder.is_none() {
-                    builder = Some(TableWriter::new(
-                        &self.path.join("sst"),
-                        self.info.id,
-                        self.info.generation,
-                        0,
-                        self.options.block_bytes,
-                        self.io.clone(),
-                        self.budget.clone(),
-                    )?);
+                    builder = Some(
+                        TableWriter::new(
+                            &self.path.join("sst"),
+                            self.info.id,
+                            self.info.generation,
+                            0,
+                            self.options.block_bytes,
+                            self.io.clone(),
+                            self.budget.clone(),
+                        )?
+                        .with_disk_reservation(&reserve_output)?,
+                    );
                 }
                 for record in versions.iter().rev() {
                     builder.as_mut().unwrap().add(record.clone())?;
@@ -205,6 +259,10 @@ impl Engine {
                 .flush_bytes
                 .fetch_add(outputs.iter().map(|t| t.size).sum(), Ordering::Relaxed);
             manifest.tables.extend(outputs);
+            let metadata = crate::json::encoded_len(&manifest)? as u64 + 8 + 4096;
+            if metadata > 65536 {
+                self.reserve_disk(metadata - 65536, true)?;
+            }
             manifest
                 .wals
                 .retain(|w| !old_wals.iter().any(|old| old.id == w.id));
@@ -235,10 +293,8 @@ impl Engine {
             let mut retained_bytes: u64 = retained_sizes.values().sum();
             let mut floor = {
                 let mut leases = self.log_retention.lock();
-                leases.retain(|_, (_, expires)| {
-                    expires.is_none_or(|expires| expires > Instant::now())
-                });
-                leases.values().map(|(seq, _)| *seq).min()
+                leases.retain(|_, pin| pin.expires.is_none_or(|expires| expires > Instant::now()));
+                leases.values().map(|pin| pin.position).min()
             };
             while retained_bytes > retention && !manifest.retained_wals.is_empty() {
                 let next = manifest
@@ -248,13 +304,14 @@ impl Engine {
                     .unwrap()
                     .start_seq;
                 if floor.is_some_and(|floor| next > floor.saturating_add(1)) {
-                    if retained_bytes <= retention.saturating_mul(2) {
+                    let mut leases = self.log_retention.lock();
+                    leases.retain(|_, pin| {
+                        next <= pin.position.saturating_add(1) || retained_bytes <= pin.max_bytes
+                    });
+                    floor = leases.values().map(|pin| pin.position).min();
+                    if floor.is_some_and(|floor| next > floor.saturating_add(1)) {
                         break;
                     }
-                    // A stalled checkpoint/catch-up must not consume the primary's
-                    // entire write quota. Handles cannot resurrect invalidated pins.
-                    self.log_retention.lock().clear();
-                    floor = None;
                 }
                 let old = manifest.retained_wals.remove(0);
                 retained_bytes -= retained_sizes[&old.id];
@@ -468,7 +525,15 @@ impl Engine {
             let mut kept_base = false;
             let mut outputs = Vec::new();
             let mut builder: Option<TableWriter> = None;
+            let mut processed = 0usize;
             while let Some(item) = heap.pop() {
+                processed += 1;
+                if processed.is_multiple_of(256) && self.write_buffer_full() {
+                    // Flush under the maintenance ownership already held by this
+                    // merge. The merge's selected SSTs remain immutable and pinned.
+                    self.flush_locked()?;
+                    self.reserve_disk(METADATA_RESERVE, true)?;
+                }
                 let record = item.record;
                 if let Some(next) = cursors[item.source].next(&mut stats)? {
                     heap.push(HeapRecord {
@@ -609,6 +674,26 @@ impl Engine {
         max_bytes: u64,
         reserve_free: u64,
     ) -> Result<u64> {
+        let parent = destination
+            .parent()
+            .ok_or_else(|| Error::invalid("checkpoint parent"))?;
+        let pending = {
+            let view = self.view.read();
+            view.frozen
+                .iter()
+                .chain(std::iter::once(&view.mem))
+                .fold(0u64, |bytes, mem| {
+                    bytes.saturating_add(mem.bytes.load(Ordering::Acquire) as u64)
+                })
+        };
+        let metadata = crate::json::encoded_len(&self.writer.lock().manifest)? as u64 + 65536;
+        if fs2::available_space(parent)?
+            < reserve_free
+                .saturating_add(pending)
+                .saturating_add(metadata)
+        {
+            return Err(Error::limit("checkpoint flush free disk reserve"));
+        }
         self.flush()?;
         let maintenance = self.maintenance.lock();
         let writer = self.writer.lock();
@@ -628,9 +713,6 @@ impl Engine {
         if estimate > max_bytes {
             return Err(Error::limit("checkpoint exceeds backup byte limit"));
         }
-        let parent = destination
-            .parent()
-            .ok_or_else(|| Error::invalid("checkpoint parent"))?;
         if fs2::available_space(parent)? < estimate.saturating_add(reserve_free) {
             return Err(Error::limit("checkpoint free disk reserve"));
         }
@@ -642,12 +724,13 @@ impl Engine {
         fs::create_dir(destination.join("wal"))?;
         atomic_json(&destination.join("TENANT.meta"), &self.info)?;
         for (id, file) in files {
-            crate::storage::copy_open_file(
+            crate::storage::files::copy_open_file_limited(
                 file,
                 &destination.join("sst").join(format!("{id}.sst")),
                 self.info.id,
                 &self.budget,
                 &self.io,
+                reserve_free,
             )?;
         }
         let new_wal = Wal::create(
@@ -682,6 +765,146 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn wal_rotation_does_not_hold_writer_lock_during_durable_publication() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::Store::open(
+            dir.path(),
+            Options {
+                io_workers: 1,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let tenant = store
+            .tenant(store.create_tenant("rotation-lock").unwrap().id)
+            .unwrap();
+        let engine = tenant.engine().clone();
+        drop(tenant);
+        drop(store);
+        engine
+            .transact(|tx| tx.put(b"confirmed".to_vec(), b"before-rotation".to_vec()))
+            .unwrap();
+        let (entered, ready) = std::sync::mpsc::channel();
+        let (release, wait) = std::sync::mpsc::channel();
+        let blocker = engine
+            .io
+            .submit(engine.info.id, move || {
+                entered.send(()).unwrap();
+                wait.recv().unwrap();
+                Ok(())
+            })
+            .unwrap();
+        ready.recv().unwrap();
+        let flushing = engine.clone();
+        let worker = std::thread::spawn(move || flushing.flush());
+        let deadline = Instant::now() + Duration::from_secs(3);
+        let mut unlocked_rotation = false;
+        while Instant::now() < deadline {
+            unlocked_rotation = engine.writer.try_lock().is_some_and(|writer| {
+                writer.syncing && writer.manifest.wals.len() == 1 && writer.wal.info.start_seq == 2
+            });
+            if unlocked_rotation {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        release.send(()).unwrap();
+        blocker.wait().unwrap();
+        worker.join().unwrap().unwrap();
+        assert!(
+            unlocked_rotation,
+            "rotation held writer while waiting for I/O"
+        );
+        engine
+            .transact(|tx| tx.put(b"after".to_vec(), b"after-rotation".to_vec()))
+            .unwrap();
+        let snapshot = engine.snapshot().unwrap();
+        assert_eq!(
+            snapshot
+                .get(b"confirmed", &mut ReadStats::default())
+                .unwrap()
+                .unwrap()
+                .as_slice(),
+            b"before-rotation"
+        );
+        assert_eq!(
+            snapshot
+                .get(b"after", &mut ReadStats::default())
+                .unwrap()
+                .unwrap()
+                .as_slice(),
+            b"after-rotation"
+        );
+    }
+    #[test]
+    fn compaction_flushes_growing_memtables_before_finishing_the_merge() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::Store::open(
+            dir.path(),
+            Options {
+                memtable_bytes: 16 << 10,
+                cache_bytes: 0,
+                target_sst_bytes: 64 << 10,
+                l0_stop: 128,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let tenant = store
+            .tenant(store.create_tenant("merge-flush").unwrap().id)
+            .unwrap();
+        let engine = tenant.engine().clone();
+        drop(tenant);
+        drop(store);
+        for chunk in 0..32 {
+            engine
+                .transact(|tx| {
+                    for i in chunk * 32..(chunk + 1) * 32 {
+                        tx.put(format!("Z{i:04}").into_bytes(), vec![i as u8; 256])?;
+                    }
+                    Ok(())
+                })
+                .unwrap();
+            engine.flush().unwrap();
+        }
+        engine
+            .transact(|tx| {
+                for i in 0..32 {
+                    tx.put(format!("Q{i:04}").into_bytes(), vec![i as u8; 1024])?;
+                }
+                Ok(())
+            })
+            .unwrap();
+        assert!(engine.write_buffer_full());
+        engine.compact(true).unwrap();
+        assert!(
+            !engine.write_buffer_full(),
+            "merge left the foreground memtable backpressured"
+        );
+        let snapshot = engine.snapshot().unwrap();
+        for i in 0..1024 {
+            assert_eq!(
+                snapshot
+                    .get(format!("Z{i:04}").as_bytes(), &mut ReadStats::default())
+                    .unwrap()
+                    .unwrap()
+                    .as_slice(),
+                vec![i as u8; 256]
+            );
+        }
+        for i in 0..32 {
+            assert_eq!(
+                snapshot
+                    .get(format!("Q{i:04}").as_bytes(), &mut ReadStats::default())
+                    .unwrap()
+                    .unwrap()
+                    .as_slice(),
+                vec![i as u8; 1024]
+            );
+        }
+        engine.verify().unwrap();
+    }
     #[test]
     fn idle_disk_accounting_tracks_wal_growth_and_checks_drift_near_quota() {
         let dir = tempfile::tempdir().unwrap();

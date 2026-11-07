@@ -2444,6 +2444,27 @@
             "minimum": 0,
             "type": "integer"
           },
+          "initialization_attempts": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "initialization_errors": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "initialization_failures": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "initializing": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          },
           "last_error": {
             "type": [
               "string",
@@ -2452,6 +2473,10 @@
           },
           "node": {
             "$ref": "#/components/schemas/ReplicationNode"
+          },
+          "reinitializations": {
+            "minimum": 0,
+            "type": "integer"
           },
           "tenants": {
             "items": {
@@ -2464,6 +2489,13 @@
               "$ref": "#/components/schemas/ReplicationUnavailableTenant"
             },
             "type": "array"
+          },
+          "waiting_for_readers": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "required": [
@@ -2471,7 +2503,13 @@
           "tenants",
           "unavailable",
           "last_error",
-          "completed_cycles"
+          "completed_cycles",
+          "initialization_attempts",
+          "initialization_failures",
+          "reinitializations",
+          "initializing",
+          "waiting_for_readers",
+          "initialization_errors"
         ],
         "type": "object"
       },
@@ -7000,6 +7038,197 @@
               }
             },
             "description": "Success"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Tenant or role denied"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Method not allowed"
+          },
+          "408": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Read deadline"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Expired cursor, replication log or snapshot"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Collection scan disallowed by request"
+          },
+          "428": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "History token required for conditional/idempotent writes"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Resource budget exceeded"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Storage error or unknown commit outcome"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Tenant unavailable"
+          }
+        }
+      }
+    },
+    "/v1/tenants/{tenant}/backup/{backup}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "backup",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Read-only consistency. Supply both headers. Wait at most five seconds; controlled KV reads share their request deadline with this wait. History mismatch is an error.",
+            "in": "header",
+            "name": "X-TKV-Min-History",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Read-only consistency. Supply both headers. Wait at most five seconds; controlled KV reads share their request deadline with this wait. History mismatch is an error.",
+            "in": "header",
+            "name": "X-TKV-Min-Seq",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "X-TKV-History": {
+                "description": "Opaque tenant/history/epoch token. Pair with _rev in write_options.expected_history; pair with write rev in X-TKV-Min-History and X-TKV-Min-Seq for consistent reads.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "400": {
             "content": {

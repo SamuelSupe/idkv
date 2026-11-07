@@ -1,0 +1,172 @@
+{
+  "diagnostic_only": true,
+  "warning": "strace adds overhead; fixed trace is intermediate binary 72cc236d, not shipping 23827ee1",
+  "runs": {
+    "before": {
+      "binary_sha256": "658da6e593bffe34fb2d44a5f17b510588dab15d59f965b6997098f91ad88309",
+      "phases": {
+        "baseline": {
+          "wal_fsync_calls": 200,
+          "wal_fsync_p99_ms": 12.066,
+          "worst_acks": [
+            {
+              "ack_ms": 21.963297040201724,
+              "longest_overlapping_wal_fsync_ms": 18.887999999999998
+            },
+            {
+              "ack_ms": 16.10646297922358,
+              "longest_overlapping_wal_fsync_ms": 10.693
+            },
+            {
+              "ack_ms": 16.03221200639382,
+              "longest_overlapping_wal_fsync_ms": 13.544
+            },
+            {
+              "ack_ms": 15.234128979500383,
+              "longest_overlapping_wal_fsync_ms": 6.929
+            },
+            {
+              "ack_ms": 14.463294995948672,
+              "longest_overlapping_wal_fsync_ms": 12.066
+            }
+          ]
+        },
+        "combined": {
+          "wal_fsync_calls": 1115,
+          "wal_fsync_p99_ms": 27.331999999999997,
+          "worst_acks": [
+            {
+              "ack_ms": 99.36156601179391,
+              "longest_overlapping_wal_fsync_ms": 96.275
+            },
+            {
+              "ack_ms": 79.94488801341504,
+              "longest_overlapping_wal_fsync_ms": 75.126
+            },
+            {
+              "ack_ms": 50.94278499018401,
+              "longest_overlapping_wal_fsync_ms": 47.754
+            },
+            {
+              "ack_ms": 49.456034030299634,
+              "longest_overlapping_wal_fsync_ms": 43.794
+            },
+            {
+              "ack_ms": 48.853326006792486,
+              "longest_overlapping_wal_fsync_ms": 43.077
+            }
+          ]
+        },
+        "recovery": {
+          "wal_fsync_calls": 259,
+          "wal_fsync_p99_ms": 6.944,
+          "worst_acks": [
+            {
+              "ack_ms": 42.30573697714135,
+              "longest_overlapping_wal_fsync_ms": 1.9719999999999998
+            },
+            {
+              "ack_ms": 38.04986004251987,
+              "longest_overlapping_wal_fsync_ms": 1.4289999999999998
+            },
+            {
+              "ack_ms": 32.95998100657016,
+              "longest_overlapping_wal_fsync_ms": 1.434
+            },
+            {
+              "ack_ms": 24.531390983611345,
+              "longest_overlapping_wal_fsync_ms": 8.753
+            },
+            {
+              "ack_ms": 23.432807996869087,
+              "longest_overlapping_wal_fsync_ms": 1.8090000000000002
+            }
+          ]
+        }
+      }
+    },
+    "fixed": {
+      "binary_sha256": "72cc236d518a6f8cc7ae06f4843525ae8550c09f74771df0bd8fb450e7129ccb",
+      "phases": {
+        "baseline": {
+          "wal_fsync_calls": 201,
+          "wal_fsync_p99_ms": 7.296,
+          "worst_acks": [
+            {
+              "ack_ms": 25.7589349639602,
+              "longest_overlapping_wal_fsync_ms": 19.541
+            },
+            {
+              "ack_ms": 22.306182014290243,
+              "longest_overlapping_wal_fsync_ms": 14.886999999999999
+            },
+            {
+              "ack_ms": 20.69409698015079,
+              "longest_overlapping_wal_fsync_ms": 5.96
+            },
+            {
+              "ack_ms": 16.763511986937374,
+              "longest_overlapping_wal_fsync_ms": 1.2249999999999999
+            },
+            {
+              "ack_ms": 16.0648439778015,
+              "longest_overlapping_wal_fsync_ms": 1.703
+            }
+          ]
+        },
+        "combined": {
+          "wal_fsync_calls": 1151,
+          "wal_fsync_p99_ms": 18.56,
+          "worst_acks": [
+            {
+              "ack_ms": 268.3807039866224,
+              "longest_overlapping_wal_fsync_ms": 264.961
+            },
+            {
+              "ack_ms": 79.60883795749396,
+              "longest_overlapping_wal_fsync_ms": 75.647
+            },
+            {
+              "ack_ms": 48.07513701962307,
+              "longest_overlapping_wal_fsync_ms": 42.505
+            },
+            {
+              "ack_ms": 30.546572001185268,
+              "longest_overlapping_wal_fsync_ms": 26.818
+            },
+            {
+              "ack_ms": 30.05452803336084,
+              "longest_overlapping_wal_fsync_ms": 2.0439999999999996
+            }
+          ]
+        },
+        "recovery": {
+          "wal_fsync_calls": 293,
+          "wal_fsync_p99_ms": 6.148,
+          "worst_acks": [
+            {
+              "ack_ms": 11.389709019567817,
+              "longest_overlapping_wal_fsync_ms": 6.266
+            },
+            {
+              "ack_ms": 10.89345704531297,
+              "longest_overlapping_wal_fsync_ms": 4.5
+            },
+            {
+              "ack_ms": 10.586288990452886,
+              "longest_overlapping_wal_fsync_ms": 4.928
+            },
+            {
+              "ack_ms": 9.83895402168855,
+              "longest_overlapping_wal_fsync_ms": 5.622
+            },
+            {
+              "ack_ms": 9.742828027810901,
+              "longest_overlapping_wal_fsync_ms": 3.232
+            }
+          ]
+        }
+      }
+    }
+  }
+}

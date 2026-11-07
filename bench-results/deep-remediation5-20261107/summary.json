@@ -1,0 +1,18 @@
+{
+  "result": "passed",
+  "full_tests_passed": 185,
+  "new_regression_tests": 17,
+  "native_cases_passed": 6,
+  "native_acknowledgements": 674,
+  "native_verification_stages": 16,
+  "native_document_reads": 1156,
+  "native_mismatches": 0,
+  "qualification_result": "passed",
+  "qualification_document_state_checks": 31200,
+  "backup_restored_documents": 5000,
+  "qualification_mismatches": 0,
+  "fault_cases_passed": 3,
+  "fault_confirmed_documents_preserved": 6000,
+  "fault_confirmed_documents_missing": 0,
+  "performance_caveat": "Latest baseline to final light-writer P99: combined 11.577 to 13.982 ms (+20.77%), recovery 21.389 to 10.793 ms (-49.54%); short runs vary. No universal tail-latency win."
+}

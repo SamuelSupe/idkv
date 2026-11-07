@@ -17,9 +17,9 @@ use crate::{
 };
 use fs2::FileExt;
 use parking_lot::{Condvar, Mutex, RwLock};
+use read::HeapRecord;
 pub use read::Scan;
 pub(crate) use read::ScanRange;
-use read::{HeapRecord, get_one};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BinaryHeap, HashSet},
@@ -38,28 +38,33 @@ pub(crate) struct LogRetention {
     engine: Arc<Engine>,
     id: Uuid,
 }
+struct LogPin {
+    position: u64,
+    expires: Option<Instant>,
+    max_bytes: u64,
+}
 impl LogRetention {
     pub(crate) fn valid(&self) -> bool {
         self.engine
             .log_retention
             .lock()
             .get(&self.id)
-            .is_some_and(|(_, expires)| expires.is_none_or(|expires| expires > Instant::now()))
+            .is_some_and(|pin| pin.expires.is_none_or(|expires| expires > Instant::now()))
     }
     pub(crate) fn renew(&self, position: u64) -> bool {
         self.renew_at(position, Instant::now())
     }
     fn renew_at(&self, position: u64, now: Instant) -> bool {
         let mut leases = self.engine.log_retention.lock();
-        let Some((floor, expires)) = leases.get_mut(&self.id) else {
+        let Some(pin) = leases.get_mut(&self.id) else {
             return false;
         };
-        if expires.is_some_and(|expires| expires <= now) {
+        if pin.expires.is_some_and(|expires| expires <= now) {
             leases.remove(&self.id);
             return false;
         }
-        *floor = (*floor).max(position);
-        *expires = Some(now + Duration::from_secs(300));
+        pin.position = pin.position.max(position);
+        pin.expires = Some(now + Duration::from_secs(300));
         true
     }
 }
@@ -251,6 +256,7 @@ pub struct Engine {
     manager_guard: Mutex<Option<Arc<File>>>,
     authority: RwLock<Option<Arc<crate::replication::Node>>>,
     view: RwLock<View>,
+    transaction: Mutex<()>,
     writer: Mutex<Writer>,
     committed: AtomicU64,
     catalog_seq: AtomicU64,
@@ -260,7 +266,7 @@ pub struct Engine {
     maintenance: Mutex<()>,
     cache: Arc<Cache>,
     snapshots: Mutex<BTreeMap<Uuid, Weak<Lease>>>,
-    log_retention: Mutex<BTreeMap<Uuid, (u64, Option<Instant>)>>,
+    log_retention: Mutex<BTreeMap<Uuid, LogPin>>,
     disk: AtomicU64,
     disk_inventory: Mutex<DiskInventory>,
     metrics: Metrics,
@@ -400,6 +406,7 @@ impl Engine {
                 frozen: vec![],
                 tables: versions,
             }),
+            transaction: Mutex::new(()),
             writer: Mutex::new(Writer {
                 wal: active.unwrap(),
                 manifest,
@@ -456,6 +463,17 @@ impl Engine {
     pub(crate) fn replication_position(&self) -> Result<u64> {
         self.ensure_durable()?;
         let writer = self.writer.lock();
+        if let Some(error) = &writer.poison {
+            return Err(error.clone());
+        }
+        Ok(self.seq())
+    }
+    pub(crate) fn try_replication_position(&self) -> Result<u64> {
+        self.ensure_durable()?;
+        let writer = self
+            .writer
+            .try_lock()
+            .ok_or_else(|| Error::new("BUSY", "tenant maintenance active; retry role change"))?;
         if let Some(error) = &writer.poison {
             return Err(error.clone());
         }
@@ -531,11 +549,24 @@ impl Engine {
             engine: self.clone(),
             id: Uuid::new_v4(),
         };
-        self.log_retention
-            .lock()
-            // Preparation owns this handle while copying and hashing. The byte
-            // window can invalidate it; inactivity starts after preparation.
-            .insert(lease.id, (0, None));
+        let retention = self
+            .authority
+            .read()
+            .as_ref()
+            .map_or(0, |node| node.retention.load(Ordering::Acquire));
+        // Large checkpoints need a transfer window related to their size. Keep
+        // that extra WAL bounded by one quarter of the tenant quota.
+        let max_bytes = retention
+            .saturating_mul(2)
+            .max(self.disk_bytes().min(self.info.disk_bytes / 4));
+        self.log_retention.lock().insert(
+            lease.id,
+            LogPin {
+                position: self.seq(),
+                expires: None,
+                max_bytes,
+            },
+        );
         lease
     }
     fn pin(self: &Arc<Self>, view: View, seq: u64, seconds: u64) -> Result<Snapshot> {

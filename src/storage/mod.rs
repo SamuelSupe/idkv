@@ -9,7 +9,6 @@ pub(crate) use engine::ScanRange;
 pub(crate) use engine::directory_size;
 pub use engine::{Engine, Scan, Snapshot, Transaction};
 pub(crate) use files::copy_file;
-pub(crate) use files::copy_open_file;
 pub use files::{atomic_json, read_json, reject_symlink, sync_dir};
 pub use sst::Record;
 

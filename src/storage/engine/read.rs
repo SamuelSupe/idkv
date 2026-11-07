@@ -169,7 +169,7 @@ pub(super) fn get_one(
 ) -> Result<Option<Record>> {
     get_one_controlled(view, key, seq, stats, None)
 }
-fn get_one_controlled(
+pub(super) fn get_one_controlled(
     view: &View,
     key: &[u8],
     seq: u64,
@@ -464,7 +464,7 @@ impl<'a> Scan<'a> {
         scan.seek(&range, stats)?;
         Ok(scan)
     }
-    fn unstarted(
+    pub(super) fn unstarted(
         view: &'a View,
         seq: u64,
         start: Vec<u8>,
@@ -527,7 +527,7 @@ impl<'a> Scan<'a> {
             cancellation: None,
         })
     }
-    fn seek(&mut self, range: &ScanRange, stats: &mut ReadStats) -> Result<()> {
+    pub(super) fn seek(&mut self, range: &ScanRange, stats: &mut ReadStats) -> Result<()> {
         self.heap.clear();
         self.last = None;
         if range.end.as_ref().is_some_and(|end| range.start >= *end) {
@@ -571,11 +571,30 @@ impl<'a> Scan<'a> {
         Ok(())
     }
     pub fn next(&mut self, stats: &mut ReadStats) -> Result<Option<Record>> {
+        self.next_inner(stats, false, None)
+    }
+    pub(super) fn next_for_gc(
+        &mut self,
+        stats: &mut ReadStats,
+        physical_limit: usize,
+    ) -> Result<Option<Record>> {
+        self.next_inner(stats, true, Some(physical_limit))
+    }
+    fn next_inner(
+        &mut self,
+        stats: &mut ReadStats,
+        tombstones: bool,
+        physical_limit: Option<usize>,
+    ) -> Result<Option<Record>> {
         if let Some(snapshot) = self.snapshot {
             snapshot.check()?;
         }
         self.check_cancellation()?;
-        while let Some(item) = self.heap.pop() {
+        while !self.heap.is_empty() {
+            if physical_limit.is_some_and(|limit| stats.scanned_entries >= limit as u64) {
+                break;
+            }
+            let item = self.heap.pop().unwrap();
             self.check_cancellation()?;
             stats.scanned_entries += 1;
             if let Some((limit, deadline)) = self.limits {
@@ -597,7 +616,7 @@ impl<'a> Scan<'a> {
                 continue;
             }
             self.last = Some(record.key.clone());
-            if record.value.is_some() {
+            if tombstones || record.value.is_some() {
                 return Ok(Some(record));
             }
         }

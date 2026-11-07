@@ -41,7 +41,8 @@ HTTP 所有数据接口以 `/v1/tenants/{tenant_uuid}` 开头。`GET /openapi.js
 | `POST C/explain` | Query，仅返回计划；实际 I/O 统计在 query 结果中 |
 | `DELETE T/cursors/{cursor}` | 提前释放分页快照，read 角色即可，仍校验租户 |
 | `POST T/checkpoint` | 刷盘并建立持久 checkpoint |
-| `POST T/backup` | 返回 `{"backup":"UUID"}` |
+| `POST T/backup` | 返回 `{"backup":"UUID"}`；本地总额/数量/空闲空间受限 |
+| `DELETE T/backup/{backup}` | 删除本租户本地备份，需要 admin；不删除远端备份 |
 | `POST T/restore` | `{"backup":"UUID"}`，仅允许本租户备份 |
 | `GET / POST T/remote-backups` | 列出远端备份 / 提交异步创建任务 |
 | `POST T/remote-backups/{backup}/verify` | 提交全文件 SHA-256 校验 |

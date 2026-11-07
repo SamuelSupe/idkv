@@ -127,8 +127,28 @@ impl Drop for Reservation {
 }
 
 type Job = Box<dyn FnOnce() + Send + 'static>;
+#[derive(Default)]
+struct TenantQueue {
+    durable: VecDeque<Job>,
+    reads: VecDeque<Job>,
+    durable_burst: usize,
+}
+impl TenantQueue {
+    fn len(&self) -> usize {
+        self.durable.len() + self.reads.len()
+    }
+    fn pop(&mut self) -> Job {
+        if !self.durable.is_empty() && (self.reads.is_empty() || self.durable_burst < 8) {
+            self.durable_burst += 1;
+            self.durable.pop_front().unwrap()
+        } else {
+            self.durable_burst = 0;
+            self.reads.pop_front().unwrap()
+        }
+    }
+}
 struct Queue {
-    jobs: HashMap<Uuid, VecDeque<Job>>,
+    jobs: HashMap<Uuid, TenantQueue>,
     ready: VecDeque<Uuid>,
     count: usize,
     stopped: bool,
@@ -213,8 +233,8 @@ impl IoScheduler {
                         }
                         let id = q.ready.pop_front().unwrap();
                         let jobs = q.jobs.get_mut(&id).unwrap();
-                        let job = jobs.pop_front().unwrap();
-                        if jobs.is_empty() {
+                        let job = jobs.pop();
+                        if jobs.len() == 0 {
                             q.jobs.remove(&id);
                         } else {
                             q.ready.push_back(id);
@@ -297,7 +317,12 @@ impl IoScheduler {
             let _ = tx.send(result);
         });
         let fresh = !q.jobs.contains_key(&tenant);
-        q.jobs.entry(tenant).or_default().push_back(job);
+        let jobs = q.jobs.entry(tenant).or_default();
+        if abandoned.is_some() {
+            jobs.reads.push_back(job);
+        } else {
+            jobs.durable.push_back(job);
+        }
         if fresh {
             q.ready.push_back(tenant);
         }
@@ -312,7 +337,7 @@ impl IoScheduler {
     pub fn stats(&self, tenant: Uuid) -> serde_json::Value {
         let q = self.inner.queue.lock();
         if let Some(stats) = q.stats.get(&tenant) {
-            serde_json::json!({"completed_jobs":stats.completed.load(Ordering::Relaxed),"cancelled_jobs":stats.cancelled.load(Ordering::Relaxed),"queue_wait_ns":stats.wait_ns.load(Ordering::Relaxed),"queued_jobs":q.jobs.get(&tenant).map_or(0,VecDeque::len)})
+            serde_json::json!({"completed_jobs":stats.completed.load(Ordering::Relaxed),"cancelled_jobs":stats.cancelled.load(Ordering::Relaxed),"queue_wait_ns":stats.wait_ns.load(Ordering::Relaxed),"queued_jobs":q.jobs.get(&tenant).map_or(0,TenantQueue::len)})
         } else {
             serde_json::json!({"completed_jobs":0,"cancelled_jobs":0,"queue_wait_ns":0,"queued_jobs":0})
         }
@@ -387,6 +412,51 @@ struct TenantIo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn durable_io_bypasses_read_backlog_without_starving_reads() {
+        let io = IoScheduler::new(1);
+        let tenant = Uuid::new_v4();
+        let (entered, ready) = mpsc::channel();
+        let (release, wait) = mpsc::channel();
+        let blocker = io
+            .submit(tenant, move || {
+                entered.send(()).unwrap();
+                wait.recv().unwrap();
+                Ok(())
+            })
+            .unwrap();
+        ready.recv().unwrap();
+        let order = Arc::new(Mutex::new(Vec::new()));
+        let reads: Vec<_> = (0..32)
+            .map(|_| {
+                let order = order.clone();
+                io.submit_read(tenant, None, move || {
+                    order.lock().push('R');
+                    Ok(())
+                })
+                .unwrap()
+            })
+            .collect();
+        let writes: Vec<_> = (0..32)
+            .map(|_| {
+                let order = order.clone();
+                io.submit(tenant, move || {
+                    order.lock().push('W');
+                    Ok(())
+                })
+                .unwrap()
+            })
+            .collect();
+        release.send(()).unwrap();
+        blocker.wait().unwrap();
+        for task in reads.into_iter().chain(writes) {
+            task.wait().unwrap();
+        }
+        let order = order.lock();
+        assert_eq!(order[0], 'W');
+        assert!(order.iter().position(|c| *c == 'R').unwrap() <= 8);
+        assert_eq!(order.len(), 64);
+    }
 
     #[test]
     fn abandoned_reads_skip_io_but_dropped_write_handles_still_execute() {

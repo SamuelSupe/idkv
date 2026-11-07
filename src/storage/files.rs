@@ -92,6 +92,16 @@ pub(crate) fn copy_open_file(
     budget: &crate::resources::Budget,
     io: &crate::resources::IoScheduler,
 ) -> Result<()> {
+    copy_open_file_limited(source, destination, tenant, budget, io, 0)
+}
+pub(crate) fn copy_open_file_limited(
+    source: std::sync::Arc<File>,
+    destination: &Path,
+    tenant: Uuid,
+    budget: &crate::resources::Budget,
+    io: &crate::resources::IoScheduler,
+    reserve_free: u64,
+) -> Result<()> {
     use std::os::unix::fs::FileExt;
     let _charge = budget.reserve(256 << 10)?;
     let mut target = OpenOptions::new()
@@ -102,6 +112,9 @@ pub(crate) fn copy_open_file(
     let mut offset = 0;
     while offset < size {
         let count = (size - offset).min(256 << 10) as usize;
+        if fs2::available_space(destination)? < reserve_free.saturating_add(count as u64) {
+            return Err(Error::limit("checkpoint copy free disk reserve"));
+        }
         let input = source.clone();
         target = io.run(tenant, move || {
             let mut buffer = vec![0; count];

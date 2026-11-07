@@ -1,0 +1,8 @@
+{
+  "cluster": "39ff9b96-ee7a-4ce5-8e57-4e4f56ea01ff",
+  "role": "replica",
+  "peer_url": "http://127.0.0.1:35867",
+  "token_file": "/var/tmp/idkv-remediation5-faults-shipping-20261107/wal-write-eio/peer-token",
+  "poll_ms": 50,
+  "log_retention_bytes": 268435456
+}

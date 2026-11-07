@@ -23,16 +23,17 @@ pub(crate) struct ReplicaInstall {
     id: Uuid,
     started: Instant,
     revoked: bool,
+    timeout: Duration,
 }
 impl ReplicaInstall {
     pub(crate) fn expire_readers(&mut self) -> Result<()> {
-        if self.started.elapsed() >= Duration::from_secs(10) {
+        if self.started.elapsed() >= self.timeout {
             return Err(Error::new(
                 "DEADLINE_EXCEEDED",
-                "checkpoint reader drain exceeded ten seconds",
+                "tenant reader drain deadline",
             ));
         }
-        if !self.revoked && self.started.elapsed() >= Duration::from_secs(1) {
+        if !self.revoked && self.started.elapsed() >= Duration::from_secs(1).min(self.timeout / 2) {
             if let Some(slot) = &self.slot {
                 let slot = slot.lock();
                 if let Some(core) = &slot.core {
@@ -94,7 +95,41 @@ impl Store {
             id: gate,
             started: Instant::now(),
             revoked: false,
+            timeout: Duration::from_secs(10),
         })
+    }
+    pub(super) fn drain_for_management(&self, id: Uuid, restoring: bool) -> Result<ReplicaInstall> {
+        self.backup_context(id)?;
+        let slot = self.slot(id);
+        let gate = Uuid::new_v4();
+        {
+            let mut guard = slot.lock();
+            if guard.installing.is_some() || (guard.restoring && !restoring) {
+                return Err(Error::new("BUSY", "tenant offline preparation is active"));
+            }
+            guard.installing = Some(gate);
+            if let Some(core) = &guard.core {
+                core.gate.close();
+                core.engine.set_draining(true);
+            }
+        }
+        let mut drain = ReplicaInstall {
+            slot: Some(slot.clone()),
+            id: gate,
+            started: Instant::now(),
+            revoked: false,
+            timeout: Duration::from_secs(1),
+        };
+        loop {
+            drain.expire_readers().map_err(|_| {
+                Error::new("BUSY", "tenant handles did not drain within one second")
+            })?;
+            match self.close_slot(&mut slot.lock()) {
+                Ok(()) => return Ok(drain),
+                Err(error) if error.code == "BUSY" => thread::sleep(Duration::from_millis(5)),
+                Err(error) => return Err(error),
+            }
+        }
     }
 }
 

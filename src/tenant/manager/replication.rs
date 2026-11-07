@@ -82,6 +82,31 @@ impl Store {
             })
             .collect()
     }
+    fn cached_replication_positions(&self) -> Result<Vec<TenantPosition>> {
+        if !self.pending_lifecycle_tenants().is_empty() {
+            return Err(Error::new(
+                "UNAVAILABLE",
+                "tenant lifecycle recovery is pending",
+            ));
+        }
+        self.tenants()
+            .into_iter()
+            .map(|info| {
+                let slot = self.slot(info.id);
+                let mut guard = slot
+                    .try_lock()
+                    .ok_or_else(|| Error::new("BUSY", "tenant opening; retry role change"))?;
+                guard.check_failure()?;
+                let seq = match &guard.core {
+                    Some(core) => core.engine.try_replication_position()?,
+                    None => guard.last_seq.ok_or_else(|| {
+                        Error::new("BUSY", "tenant catalog changed; retry role change")
+                    })?,
+                };
+                Ok(TenantPosition { info, seq })
+            })
+            .collect()
+    }
 
     pub(crate) fn pending_lifecycle_tenants(&self) -> Vec<TenantInfo> {
         self.owner
@@ -123,6 +148,7 @@ impl Store {
     /// Durably stop all business writes, including existing embedded handles.
     /// This is restart-safe and idempotent for the same intended successor.
     pub fn fence_primary(&self, target: Uuid) -> Result<Fence> {
+        self.replication_positions()?;
         let node = &self.owner.inner.node;
         let _barrier = node.barrier.write();
         let mut state = self.replication_state();
@@ -149,7 +175,7 @@ impl Store {
                 epoch: state.epoch,
             },
             target,
-            tenants: self.replication_positions()?,
+            tenants: self.cached_replication_positions()?,
         };
         state.role = Role::Fenced;
         state.fence = Some(fence.clone());
@@ -195,6 +221,7 @@ impl Store {
     /// Promote only after the caller has authenticated the old primary's durable
     /// fence. Network callers use Service::promote, which fetches that proof itself.
     pub(crate) fn promote_verified(&self, fence: &Fence) -> Result<NodeState> {
+        self.replication_positions()?;
         let node = &self.owner.inner.node;
         let _barrier = node.barrier.write();
         let mut state = self.replication_state();
@@ -223,7 +250,7 @@ impl Store {
     }
 
     fn check_positions(&self, expected: &[TenantPosition]) -> Result<()> {
-        let actual = self.replication_positions()?;
+        let actual = self.cached_replication_positions()?;
         if actual.len() != expected.len()
             || actual.iter().zip(expected).any(|(a, b)| {
                 a.info.id != b.info.id
@@ -244,6 +271,7 @@ impl Store {
     }
 
     pub(crate) fn follow_verified(&self, upstream: &NodeState) -> Result<NodeState> {
+        self.replication_positions()?;
         let node = &self.owner.inner.node;
         let _barrier = node.barrier.write();
         let mut state = self.replication_state();

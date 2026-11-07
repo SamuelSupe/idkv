@@ -1,0 +1,8 @@
+{
+  "cluster": "2080d7ce-0f90-4365-88d5-910c7b6d8c12",
+  "role": "replica",
+  "peer_url": "http://127.0.0.1:42689",
+  "token_file": "/var/tmp/idkv-remediation5-native-verified-20261107/local-backups-before/peer-token",
+  "poll_ms": 50,
+  "log_retention_bytes": 268435456
+}

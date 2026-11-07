@@ -6,13 +6,12 @@ use uuid::Uuid;
 /// Charge each owned allocation before copying network frames. Content-Length
 /// is deliberately not trusted and chunked requests use the same bounded path.
 pub(super) async fn read(
-    store: &Store,
-    tenant: Option<Uuid>,
+    budget: &crate::resources::Budget,
     mut body: Body,
     limit: usize,
 ) -> Result<(Vec<u8>, Reservation)> {
     let mut bytes = Vec::new();
-    let mut charge = store.reserve_http_input(tenant, 0)?;
+    let mut charge = budget.reserve(0)?;
     while let Some(frame) = body.frame().await {
         let frame = frame.map_err(|_| Error::invalid("invalid request body"))?;
         let Ok(data) = frame.into_data() else {
@@ -25,7 +24,7 @@ pub(super) async fn read(
             .ok_or_else(|| Error::limit("request body exceeds limit"))?;
         if size > bytes.capacity() {
             let capacity = size.max(bytes.capacity().saturating_mul(2)).min(limit);
-            let next_charge = store.reserve_http_input(tenant, capacity)?;
+            let next_charge = budget.reserve(capacity)?;
             let mut next = Vec::with_capacity(capacity);
             next.extend_from_slice(&bytes);
             bytes = next;

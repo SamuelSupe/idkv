@@ -48,11 +48,9 @@ impl Store {
             Some(source) => inner.node.replica_write(source)?,
             None => inner.node.write()?,
         };
+        let _drain = self.drain_for_management(id, false)?;
         let slot = self.slot(id);
         let mut guard = slot.lock();
-        if guard.restoring || guard.installing.is_some() {
-            return Err(Error::new("BUSY", "tenant offline preparation is active"));
-        }
         let current = inner.registry.read().tenants[&id].clone();
         if !matches!(current.lifecycle, Lifecycle::Active)
             || current.info.generation != info.generation

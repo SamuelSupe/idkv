@@ -164,3 +164,5 @@ python3 scripts/replication_demo.py --binary target/release/tenant-kv --root /va
 小内存租户刷盘后不可读、复制初始化误用默认配额及相关缩容保护，见[第三轮稳定性修复](docs/deep-remediation3-20261107.md)。
 
 小磁盘配额合并停顿、fs 备份空目录累积及已确认数据核对，见[第四轮稳定性修复](docs/deep-remediation4-20261107.md)。
+
+本轮外部问题清单的逐项结论、资源隔离及持久化改动见[第五轮修复与验证](docs/deep-remediation5-20261107.md)。

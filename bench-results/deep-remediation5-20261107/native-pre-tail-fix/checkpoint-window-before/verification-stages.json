@@ -1,0 +1,20 @@
+[
+  {
+    "stage": "after-transfer-window",
+    "node": 0,
+    "file": "verified-after-transfer-window-node-0.json",
+    "documents": 128,
+    "mismatches": 0,
+    "ack_count": 176,
+    "sha256": "544bad1fba21efacf86c447f91ce4377c29ed182b772b6a83e3a398d650df002"
+  },
+  {
+    "stage": "restart",
+    "node": 0,
+    "file": "verified-restart-node-0.json",
+    "documents": 128,
+    "mismatches": 0,
+    "ack_count": 176,
+    "sha256": "544bad1fba21efacf86c447f91ce4377c29ed182b772b6a83e3a398d650df002"
+  }
+]

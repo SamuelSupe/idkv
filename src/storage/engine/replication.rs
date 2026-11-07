@@ -184,6 +184,7 @@ impl Engine {
         )?;
         let mut held = decode_memory.size();
         self.ensure_durable()?;
+        let _transaction = self.transaction.lock();
         let mut writer = self.writer.lock();
         if let Some(error) = &writer.poison {
             return Err(error.clone());

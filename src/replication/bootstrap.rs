@@ -96,7 +96,8 @@ impl Service {
             fs::create_dir(&path)?;
             fs::create_dir(path.join("sst"))?;
             fs::create_dir(path.join("wal"))?;
-            if fs2::available_space(&path)? < total.saturating_mul(2).saturating_add(64 << 20) {
+            let reserve_free = self.store().options().maintenance_reserve_free_bytes;
+            if fs2::available_space(&path)? < total.saturating_add(reserve_free) {
                 return Err(Error::limit("checkpoint staging free space"));
             }
             for (index, file) in info.files.iter().enumerate() {
@@ -127,6 +128,10 @@ impl Service {
                         || data.len() as u64 > file.size - offset
                     {
                         return Err(Error::corrupt("snapshot chunk size"));
+                    }
+                    if fs2::available_space(&path)? < reserve_free.saturating_add(data.len() as u64)
+                    {
+                        return Err(Error::limit("checkpoint receive free disk reserve"));
                     }
                     output.write_all(&data)?;
                     digest.update(&data);

@@ -22,6 +22,45 @@ fn primary(options: Options) -> (tempfile::TempDir, Store, Service) {
     (dir, store, service)
 }
 
+#[test]
+fn checkpoint_free_space_reserve_rejects_replication_and_local_backup_without_poisoning_writes() {
+    let (_dir, store, service) = primary(Options {
+        maintenance_reserve_free_bytes: u64::MAX,
+        ..Default::default()
+    });
+    let info = store.create_tenant("free-space-reserve").unwrap();
+    let tenant = store.tenant(info.id).unwrap();
+    tenant.create_collection("docs").unwrap();
+    let receipt = tenant
+        .put("docs", json!({"_key":"confirmed","value":1}), None)
+        .unwrap();
+    let state = store.replication_state();
+    assert_eq!(
+        service
+            .snapshot(state.cluster, state.epoch, info.id)
+            .err()
+            .unwrap()
+            .code,
+        "RESOURCE_EXHAUSTED"
+    );
+    assert_eq!(
+        store.backup(info.id).unwrap_err().code,
+        "RESOURCE_EXHAUSTED"
+    );
+    assert!(
+        tenant.engine().table_counts().is_empty(),
+        "free-space rejection flushed the live engine"
+    );
+    assert!(tenant.engine().writable());
+    assert_eq!(
+        tenant.get("docs", "confirmed").unwrap().unwrap()["_rev"],
+        receipt.rev
+    );
+    tenant
+        .put("docs", json!({"_key":"next","value":2}), None)
+        .unwrap();
+}
+
 #[tokio::test]
 async fn checkpoint_preparation_does_not_lock_out_other_tenant_log_progress() {
     let (_dir, store, service) = primary(Options {

@@ -67,6 +67,7 @@ struct Inner {
     slots: Mutex<HashMap<Uuid, Arc<Mutex<Slot>>>>,
     memory: Arc<Counter>,
     io: Arc<IoScheduler>,
+    local_backups: Mutex<()>,
     node: Arc<crate::replication::Node>,
 }
 struct Owner {
@@ -181,6 +182,7 @@ impl Store {
             slots: Mutex::new(HashMap::new()),
             memory: Counter::new(options.global_memory_bytes),
             io: IoScheduler::new(options.io_workers),
+            local_backups: Mutex::new(()),
         });
         let stop = Arc::new(AtomicBool::new(false));
         let (sender, receiver) = std::sync::mpsc::sync_channel::<Arc<Mutex<Slot>>>(128);
@@ -301,10 +303,41 @@ impl Store {
         tenant: Option<Uuid>,
         bytes: usize,
     ) -> Result<crate::resources::Reservation> {
+        self.http_input_budget(tenant)?.reserve(bytes)
+    }
+    pub(crate) fn http_input_budget(&self, tenant: Option<Uuid>) -> Result<Budget> {
         match tenant {
-            Some(id) => self.backup_context(id)?.1.reserve(bytes),
-            None => self.reserve_http(bytes),
+            Some(id) => Ok(self.backup_context(id)?.1),
+            None => Ok(Budget {
+                global: self.owner.inner.memory.clone(),
+                tenant: Counter::new(self.options().global_memory_bytes),
+            }),
         }
+    }
+    pub(crate) fn try_http_input_budget(&self, tenant: Option<Uuid>) -> Result<Option<Budget>> {
+        let Some(id) = tenant else {
+            return self.http_input_budget(None).map(Some);
+        };
+        let inner = &self.owner.inner;
+        let Some(registry) = inner.registry.try_read() else {
+            return Ok(None);
+        };
+        if !registry.tenants.contains_key(&id) {
+            return Err(Error::missing("tenant"));
+        }
+        let Some(slots) = inner.slots.try_lock() else {
+            return Ok(None);
+        };
+        let Some(slot) = slots.get(&id) else {
+            return Ok(None);
+        };
+        let Some(slot) = slot.try_lock() else {
+            return Ok(None);
+        };
+        Ok(Some(Budget {
+            global: inner.memory.clone(),
+            tenant: slot.memory.clone(),
+        }))
     }
     pub fn options(&self) -> &Options {
         &self.owner.inner.options
@@ -575,11 +608,9 @@ impl Store {
         Ok(Some(file))
     }
     pub fn close_tenant(&self, id: Uuid) -> Result<()> {
+        let _drain = self.drain_for_management(id, false)?;
         let slot = self.slot(id);
         let mut slot = slot.lock();
-        if slot.restoring || slot.installing.is_some() {
-            return Err(Error::new("BUSY", "tenant restore preparation is active"));
-        }
         self.close_slot(&mut slot)?;
         let _offline = self.offline_lock(id)?;
         Ok(())
@@ -592,11 +623,9 @@ impl Store {
         id: Uuid,
         permission: parking_lot::RwLockReadGuard<'_, ()>,
     ) -> Result<()> {
+        let _drain = self.drain_for_management(id, false)?;
         let slot = self.slot(id);
         let mut slot = slot.lock();
-        if slot.restoring || slot.installing.is_some() {
-            return Err(Error::new("BUSY", "tenant restore preparation is active"));
-        }
         self.close_slot(&mut slot)?;
         let _offline = self.offline_lock(id)?;
         let inner = &self.owner.inner;
@@ -753,6 +782,112 @@ fn maintain_tenant(inner: &Arc<Inner>, slot: &Arc<Mutex<Slot>>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn management_drains_overlapping_short_readers_before_changing_quota() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        let info = store.create_tenant("hot-management").unwrap();
+        let receipt = {
+            let tenant = store.tenant(info.id).unwrap();
+            tenant.create_collection("docs").unwrap();
+            tenant
+                .put("docs", serde_json::json!({"_key":"ack","value":7}), None)
+                .unwrap()
+        };
+        let barrier = Arc::new(std::sync::Barrier::new(3));
+        thread::scope(|scope| {
+            for _ in 0..2 {
+                let store = store.clone();
+                let barrier = barrier.clone();
+                scope.spawn(move || {
+                    let tenant = store.tenant(info.id).unwrap();
+                    barrier.wait();
+                    thread::sleep(Duration::from_millis(30));
+                    drop(tenant);
+                    let until = Instant::now() + Duration::from_millis(100);
+                    while Instant::now() < until {
+                        if let Ok(tenant) = store.tenant(info.id) {
+                            let _ = tenant.get("docs", "ack");
+                        }
+                    }
+                });
+            }
+            barrier.wait();
+            store
+                .set_quota(info.id, info.memory_bytes, info.disk_bytes + (1 << 20))
+                .unwrap();
+        });
+        let tenant = store.tenant(info.id).unwrap();
+        assert_eq!(
+            tenant.get("docs", "ack").unwrap().unwrap()["_rev"],
+            receipt.rev
+        );
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn locked_cold_tenant_does_not_block_async_health_or_timers() {
+        use crate::http::{self, AuthConfig, Role, Token};
+        use tower::ServiceExt;
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        let id = store.create_tenant("cold-http").unwrap().id;
+        let app = http::app(
+            store.clone(),
+            AuthConfig {
+                tokens: vec![Token {
+                    subject: "admin".into(),
+                    sha256: http::token_hash("cold-tenant-test-secret"),
+                    tenant: None,
+                    role: Role::Admin,
+                }],
+            },
+        )
+        .unwrap();
+        let slot = store.slot(id);
+        let (entered, ready) = std::sync::mpsc::channel();
+        let holder = thread::spawn(move || {
+            let _slot = slot.lock();
+            entered.send(()).unwrap();
+            thread::sleep(Duration::from_millis(350));
+        });
+        ready.recv().unwrap();
+        let started = Instant::now();
+        let requests: Vec<_> = (0..4)
+            .map(|_| {
+                let app = app.clone();
+                tokio::spawn(async move {
+                    app.oneshot(
+                        axum::http::Request::builder()
+                            .uri(format!("/v1/tenants/{id}"))
+                            .header("authorization", "Bearer cold-tenant-test-secret")
+                            .body(axum::body::Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap()
+                })
+            })
+            .collect();
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        let health = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/health")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let elapsed = started.elapsed();
+        holder.join().unwrap();
+        for request in requests {
+            assert!(request.await.unwrap().status().is_success());
+        }
+        assert!(health.status().is_success());
+        assert!(
+            elapsed < Duration::from_millis(200),
+            "async workers stalled for {elapsed:?}"
+        );
+    }
     #[test]
     fn replica_checkpoint_validation_shares_the_serving_tenant_budget() {
         let dir = tempfile::tempdir().unwrap();

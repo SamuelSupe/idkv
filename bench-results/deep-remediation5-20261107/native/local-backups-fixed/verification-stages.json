@@ -1,0 +1,20 @@
+[
+  {
+    "stage": "after-backup-limit",
+    "node": 0,
+    "file": "verified-after-backup-limit-node-0.json",
+    "documents": 1,
+    "mismatches": 0,
+    "ack_count": 1,
+    "sha256": "a4eb46c5fadf1cc93c334cd3973e885de3c31d64a07e510a62df6e5794da5982"
+  },
+  {
+    "stage": "restart",
+    "node": 0,
+    "file": "verified-restart-node-0.json",
+    "documents": 1,
+    "mismatches": 0,
+    "ack_count": 1,
+    "sha256": "a4eb46c5fadf1cc93c334cd3973e885de3c31d64a07e510a62df6e5794da5982"
+  }
+]

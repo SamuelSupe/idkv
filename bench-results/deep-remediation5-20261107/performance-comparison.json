@@ -1,0 +1,325 @@
+{
+  "before_run": "qualification-before-repeat",
+  "fixed_run": "qualification-fixed",
+  "rows": 5000,
+  "payload_bytes": 4096,
+  "durations_seconds": [
+    10,
+    45,
+    10
+  ],
+  "phases": [
+    {
+      "phase": "baseline",
+      "overlap_intervals_before": 0,
+      "overlap_intervals_after": 0,
+      "verified_backups_before": 0,
+      "verified_backups_after": 0,
+      "operations": {
+        "index_query_20": {
+          "before": {
+            "calls": 500,
+            "calls_per_second": 49.999,
+            "p50_ms": 0.461,
+            "p95_ms": 1.075,
+            "p99_ms": 1.86,
+            "errors": {}
+          },
+          "after": {
+            "calls": 500,
+            "calls_per_second": 49.985,
+            "p50_ms": 0.684,
+            "p95_ms": 1.427,
+            "p99_ms": 1.703,
+            "errors": {}
+          },
+          "p99_change_percent": -8.44
+        },
+        "lookup_20": {
+          "before": {
+            "calls": 999,
+            "calls_per_second": 99.896,
+            "p50_ms": 0.461,
+            "p95_ms": 1.089,
+            "p99_ms": 1.725,
+            "errors": {}
+          },
+          "after": {
+            "calls": 1000,
+            "calls_per_second": 99.996,
+            "p50_ms": 0.69,
+            "p95_ms": 1.449,
+            "p99_ms": 1.88,
+            "errors": {}
+          },
+          "p99_change_percent": 8.99
+        },
+        "get": {
+          "before": {
+            "calls": 1992,
+            "calls_per_second": 199.164,
+            "p50_ms": 0.37,
+            "p95_ms": 0.882,
+            "p99_ms": 1.503,
+            "errors": {}
+          },
+          "after": {
+            "calls": 2000,
+            "calls_per_second": 199.973,
+            "p50_ms": 0.551,
+            "p95_ms": 1.125,
+            "p99_ms": 1.512,
+            "errors": {}
+          },
+          "p99_change_percent": 0.6
+        },
+        "light_writer": {
+          "before": {
+            "calls": 200,
+            "calls_per_second": 19.991,
+            "p50_ms": 5.276,
+            "p95_ms": 7.728,
+            "p99_ms": 10.103,
+            "errors": {}
+          },
+          "after": {
+            "calls": 200,
+            "calls_per_second": 19.999,
+            "p50_ms": 4.725,
+            "p95_ms": 9.44,
+            "p99_ms": 13.654,
+            "errors": {}
+          },
+          "p99_change_percent": 35.15
+        },
+        "heavy_writer": {
+          "before": {
+            "calls": 400,
+            "calls_per_second": 39.96,
+            "p50_ms": 6.479,
+            "p95_ms": 11.524,
+            "p99_ms": 24.985,
+            "errors": {}
+          },
+          "after": {
+            "calls": 399,
+            "calls_per_second": 39.896,
+            "p50_ms": 7.231,
+            "p95_ms": 11.033,
+            "p99_ms": 16.72,
+            "errors": {}
+          },
+          "p99_change_percent": -33.08
+        }
+      }
+    },
+    {
+      "phase": "combined",
+      "overlap_intervals_before": 2,
+      "overlap_intervals_after": 2,
+      "verified_backups_before": 2,
+      "verified_backups_after": 2,
+      "operations": {
+        "index_query_20": {
+          "before": {
+            "calls": 2250,
+            "calls_per_second": 49.997,
+            "p50_ms": 0.414,
+            "p95_ms": 0.986,
+            "p99_ms": 1.56,
+            "errors": {}
+          },
+          "after": {
+            "calls": 2250,
+            "calls_per_second": 49.997,
+            "p50_ms": 0.516,
+            "p95_ms": 1.328,
+            "p99_ms": 1.861,
+            "errors": {}
+          },
+          "p99_change_percent": 19.29
+        },
+        "lookup_20": {
+          "before": {
+            "calls": 4499,
+            "calls_per_second": 99.969,
+            "p50_ms": 0.408,
+            "p95_ms": 0.972,
+            "p99_ms": 1.581,
+            "errors": {}
+          },
+          "after": {
+            "calls": 4500,
+            "calls_per_second": 99.997,
+            "p50_ms": 0.491,
+            "p95_ms": 1.228,
+            "p99_ms": 1.757,
+            "errors": {}
+          },
+          "p99_change_percent": 11.13
+        },
+        "get": {
+          "before": {
+            "calls": 8983,
+            "calls_per_second": 199.6,
+            "p50_ms": 0.326,
+            "p95_ms": 0.782,
+            "p99_ms": 1.28,
+            "errors": {}
+          },
+          "after": {
+            "calls": 8998,
+            "calls_per_second": 199.949,
+            "p50_ms": 0.383,
+            "p95_ms": 1.023,
+            "p99_ms": 1.473,
+            "errors": {}
+          },
+          "p99_change_percent": 15.08
+        },
+        "heavy_writer": {
+          "before": {
+            "calls": 1796,
+            "calls_per_second": 39.906,
+            "p50_ms": 6.546,
+            "p95_ms": 10.364,
+            "p99_ms": 19.376,
+            "errors": {}
+          },
+          "after": {
+            "calls": 1788,
+            "calls_per_second": 39.732,
+            "p50_ms": 6.682,
+            "p95_ms": 10.577,
+            "p99_ms": 15.795,
+            "errors": {}
+          },
+          "p99_change_percent": -18.48
+        },
+        "light_writer": {
+          "before": {
+            "calls": 901,
+            "calls_per_second": 20.018,
+            "p50_ms": 5.138,
+            "p95_ms": 8.549,
+            "p99_ms": 11.577,
+            "errors": {}
+          },
+          "after": {
+            "calls": 898,
+            "calls_per_second": 19.955,
+            "p50_ms": 4.923,
+            "p95_ms": 8.724,
+            "p99_ms": 13.982,
+            "errors": {}
+          },
+          "p99_change_percent": 20.77
+        }
+      }
+    },
+    {
+      "phase": "recovery",
+      "overlap_intervals_before": 1,
+      "overlap_intervals_after": 1,
+      "verified_backups_before": 0,
+      "verified_backups_after": 0,
+      "operations": {
+        "get": {
+          "before": {
+            "calls": 1996,
+            "calls_per_second": 199.583,
+            "p50_ms": 0.297,
+            "p95_ms": 0.658,
+            "p99_ms": 1.092,
+            "errors": {}
+          },
+          "after": {
+            "calls": 2000,
+            "calls_per_second": 199.975,
+            "p50_ms": 0.37,
+            "p95_ms": 0.795,
+            "p99_ms": 1.256,
+            "errors": {}
+          },
+          "p99_change_percent": 15.02
+        },
+        "light_writer": {
+          "before": {
+            "calls": 200,
+            "calls_per_second": 19.998,
+            "p50_ms": 4.932,
+            "p95_ms": 9.397,
+            "p99_ms": 21.389,
+            "errors": {}
+          },
+          "after": {
+            "calls": 200,
+            "calls_per_second": 19.998,
+            "p50_ms": 4.564,
+            "p95_ms": 8.689,
+            "p99_ms": 10.793,
+            "errors": {}
+          },
+          "p99_change_percent": -49.54
+        },
+        "index_query_20": {
+          "before": {
+            "calls": 500,
+            "calls_per_second": 49.994,
+            "p50_ms": 0.415,
+            "p95_ms": 0.907,
+            "p99_ms": 1.876,
+            "errors": {}
+          },
+          "after": {
+            "calls": 500,
+            "calls_per_second": 49.995,
+            "p50_ms": 0.515,
+            "p95_ms": 1.014,
+            "p99_ms": 1.839,
+            "errors": {}
+          },
+          "p99_change_percent": -1.97
+        },
+        "lookup_20": {
+          "before": {
+            "calls": 1001,
+            "calls_per_second": 100.087,
+            "p50_ms": 0.398,
+            "p95_ms": 0.816,
+            "p99_ms": 1.375,
+            "errors": {}
+          },
+          "after": {
+            "calls": 1001,
+            "calls_per_second": 100.059,
+            "p50_ms": 0.493,
+            "p95_ms": 1.013,
+            "p99_ms": 1.523,
+            "errors": {}
+          },
+          "p99_change_percent": 10.76
+        },
+        "heavy_writer": {
+          "before": {
+            "calls": 400,
+            "calls_per_second": 39.989,
+            "p50_ms": 6.503,
+            "p95_ms": 11.485,
+            "p99_ms": 17.248,
+            "errors": {}
+          },
+          "after": {
+            "calls": 400,
+            "calls_per_second": 39.987,
+            "p50_ms": 6.85,
+            "p95_ms": 9.452,
+            "p99_ms": 11.223,
+            "errors": {}
+          },
+          "p99_change_percent": -34.93
+        }
+      }
+    }
+  ]
+}

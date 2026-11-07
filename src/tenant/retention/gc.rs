@@ -7,6 +7,8 @@ pub(super) struct State {
     migration_phase: u8,
     migration_after: Option<Vec<u8>>,
     history_after: Option<Vec<u8>>,
+    #[serde(default)]
+    pub(super) expiry_after: Option<Vec<u8>>,
     history_identifier: Option<String>,
     baseline_kept: bool,
     sweeping_floor: u64,
@@ -119,7 +121,9 @@ fn migration(
     Ok(())
 }
 fn expire(tx: &mut Transaction<'_>, state: &mut State, batch: usize) -> Result<()> {
-    for (queue_key, bytes) in tx.prefix_first(EXPIRY, batch)? {
+    let rows = tx.gc_prefix(EXPIRY, state.expiry_after.as_deref(), batch)?;
+    for record in rows {
+        let queue_key = record.key;
         let at = u64::from_be_bytes(
             queue_key[EXPIRY.len()..EXPIRY.len() + 8]
                 .try_into()
@@ -128,6 +132,10 @@ fn expire(tx: &mut Transaction<'_>, state: &mut State, batch: usize) -> Result<(
         if at > state.watermark_ms {
             break;
         }
+        state.expiry_after = Some(queue_key.clone());
+        let Some(bytes) = record.value else {
+            continue;
+        };
         let job: Scheduled = parse(&bytes)?;
         match job.action {
             Expiration::Delete => {
@@ -258,9 +266,12 @@ pub(super) fn step(tenant: &TenantHandle) -> Result<()> {
             } else {
                 let now = now_ms()?.max(state.watermark_ms);
                 // Do not generate empty maintenance WAL traffic simply to tick time.
-                let due = tx.prefix_first(EXPIRY, 1)?.first().is_some_and(|(k, _)| {
-                    &k[EXPIRY.len()..EXPIRY.len() + 8] <= now.to_be_bytes().as_slice()
-                });
+                let due = tx
+                    .gc_prefix(EXPIRY, state.expiry_after.as_deref(), 1)?
+                    .first()
+                    .is_some_and(|r| {
+                        &r.key[EXPIRY.len()..EXPIRY.len() + 8] <= now.to_be_bytes().as_slice()
+                    });
                 if due {
                     state.watermark_ms = now;
                     expire(tx, &mut state, expiry_batch)?;

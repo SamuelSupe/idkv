@@ -1,0 +1,10 @@
+{
+  "service": "fs",
+  "options": {
+    "root": "/var/tmp/idkv-remediation5-native-verified-20261107/checkpoint-window-before/repository"
+  },
+  "max_backup_bytes": 536870912,
+  "max_staging_bytes": 2147483648,
+  "reserve_free_bytes": 67108864,
+  "bytes_per_second": 16777216
+}

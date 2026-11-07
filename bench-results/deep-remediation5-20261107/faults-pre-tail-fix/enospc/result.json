@@ -1,0 +1,48 @@
+{
+  "case": "enospc",
+  "result": "passed",
+  "tenant": "65b06b6c-4df8-4ae3-a387-6df92dc10aa4",
+  "before": {
+    "node": 0,
+    "tenant": "65b06b6c-4df8-4ae3-a387-6df92dc10aa4",
+    "documents": 2000,
+    "sha256": "982e513df21fb5971d7ab40a97768152f222e52bf1b9acb919aa0e32c4adf612",
+    "acknowledged_mismatches": 0
+  },
+  "disk_full": {
+    "available_before": 220516352,
+    "available_after": 0,
+    "filler_bytes": 220512256,
+    "mount": "TARGET                                                            SOURCE     FSTYPE OPTIONS\n/var/tmp/idkv-remediation5-faults-complete-20261107/enospc/volume /dev/loop0 ext4   rw,relatime\n"
+  },
+  "fault_response": {
+    "status": 500,
+    "body": {
+      "error": {
+        "code": "COMMIT_UNKNOWN",
+        "message": "IO_ERROR: No space left on device (os error 28)"
+      }
+    }
+  },
+  "poisoned_response": {
+    "status": 429,
+    "body": {
+      "error": {
+        "code": "RESOURCE_EXHAUSTED",
+        "message": "WAL recovery needs free disk space; read-only until closed and reopened"
+      }
+    }
+  },
+  "uncertain_batch_visible_before_retry": 0,
+  "restart_to_safe_retry_ms": 42.17087500728667,
+  "after": {
+    "node": 0,
+    "tenant": "65b06b6c-4df8-4ae3-a387-6df92dc10aa4",
+    "documents": 2008,
+    "sha256": "1aaa210c39c8e38123dcf85fa7fa56209fb46f224665b75cbecb6c405006eed1",
+    "acknowledged_mismatches": 0
+  },
+  "failure_through_validation_ms": 116.68061598902568,
+  "confirmed_documents_preserved": 2000,
+  "confirmed_documents_missing": 0
+}

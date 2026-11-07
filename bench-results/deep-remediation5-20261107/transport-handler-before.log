@@ -1,0 +1,21 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.05s
+     Running unittests src/lib.rs (/var/tmp/idkv-remediation5-target-20261107/debug/deps/tenant_kv-7def2c613512144d)
+
+running 1 test
+test http::transport::tests::slow_handler_is_not_a_socket_write_timeout ... FAILED
+
+failures:
+
+---- http::transport::tests::slow_handler_is_not_a_socket_write_timeout stdout ----
+
+thread 'http::transport::tests::slow_handler_is_not_a_socket_write_timeout' panicked at src/http/transport.rs:135:33:
+called `Result::unwrap()` on an `Err` value: reqwest::Error { kind: Request, url: "http://127.0.0.1:41489/slow", source: hyper_util::client::legacy::Error(SendRequest, hyper::Error(IncompleteMessage)) }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    http::transport::tests::slow_handler_is_not_a_socket_write_timeout
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 60 filtered out; finished in 0.04s
+
+error: test failed, to rerun pass `--lib`

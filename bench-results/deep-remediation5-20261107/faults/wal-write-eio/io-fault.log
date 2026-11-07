@@ -1,0 +1,2 @@
+write EIO /var/tmp/idkv-remediation5-faults-shipping-20261107/wal-write-eio/node-0/tenants/fb0de863-8233-4cf5-8024-382596198eda/wal/22e22c6c-eb2f-4823-b78f-7eec8c676f88.wal
+write EIO /var/tmp/idkv-remediation5-faults-shipping-20261107/wal-write-eio/node-0/tenants/fb0de863-8233-4cf5-8024-382596198eda/wal/22e22c6c-eb2f-4823-b78f-7eec8c676f88.recover

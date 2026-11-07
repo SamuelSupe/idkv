@@ -1,0 +1,8 @@
+{
+  "cluster": "4df639a0-841e-43a1-a3d1-248473c77873",
+  "role": "primary",
+  "peer_url": "http://127.0.0.1:33071",
+  "token_file": "/var/tmp/idkv-remediation5-native-verified-20261107/checkpoint-window-before/peer-token",
+  "poll_ms": 50,
+  "log_retention_bytes": 1048576
+}

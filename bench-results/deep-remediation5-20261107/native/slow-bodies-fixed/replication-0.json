@@ -1,0 +1,8 @@
+{
+  "cluster": "8b9fecbf-83fa-4daa-9dd6-49222936f79e",
+  "role": "primary",
+  "peer_url": "http://127.0.0.1:44779",
+  "token_file": "/var/tmp/idkv-remediation5-native-shipping-20261107/slow-bodies-fixed/peer-token",
+  "poll_ms": 50,
+  "log_retention_bytes": 268435456
+}

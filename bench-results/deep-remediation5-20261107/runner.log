@@ -1,0 +1,8 @@
+START native
+EXIT native 0
+START qualification-before
+EXIT qualification-before 0
+START qualification-fixed
+EXIT qualification-fixed 0
+START faults
+EXIT faults 0

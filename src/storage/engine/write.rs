@@ -50,7 +50,7 @@ impl Engine {
     ) -> Result<(T, Option<Snapshot>)> {
         self.ensure_durable()?;
         let authority = self.authority.read().clone();
-        let (_permission, mut writer, view) = loop {
+        let (_permission, transaction, writer, view) = loop {
             if let Some(check) = check {
                 check()?;
             }
@@ -59,6 +59,7 @@ impl Engine {
                 return Err(Error::new("UNAVAILABLE", "tenant closed"));
             }
             let waiting = Instant::now();
+            let transaction = self.transaction.lock();
             let writer = self.writer.lock();
             if let Some(check) = check {
                 check()?;
@@ -78,7 +79,7 @@ impl Engine {
                 None
             };
             let Some(backlog) = backlog else {
-                break (permission, writer, view);
+                break (permission, transaction, writer, view);
             };
             if check.is_none() {
                 return Err(Error::limit(backlog));
@@ -87,6 +88,7 @@ impl Engine {
             // FnOnce transaction instead of failing halfway through publication.
             // Neither the writer lock nor the node fence is held while waiting.
             drop(writer);
+            drop(transaction);
             drop(permission);
             self.wait_progress(self.seq(), Duration::from_millis(10));
         };
@@ -101,17 +103,36 @@ impl Engine {
             seq,
             changes: BTreeMap::new(),
             memory: Vec::new(),
+            read_budget: crate::read::ReadBudget::new(
+                &crate::ReadOptions::default(),
+                &self.options,
+            )?,
         };
+        let read_seq = writer.staged;
+        drop(writer);
+        // Serialize transaction evaluation independently from durable publication.
+        // A cold read must not keep a preceding fsync from confirming its prefix.
         let result = f(&mut tx)?;
+        tx.read_budget.check()?;
+        let mut writer = self.writer.lock();
+        if let Some(error) = &writer.poison {
+            return Err(error.clone());
+        }
+        debug_assert_eq!(writer.staged, read_seq);
         if tx.changes.is_empty() {
             // Idempotent retries can observe a preceding staged transaction.
             // Its receipt must not escape before the original WAL is durable.
             let observed = writer.staged;
             let snapshot = if pin {
-                Some(self.pin(view.clone(), observed, self.options.index_build_seconds)?)
+                Some(self.pin(
+                    self.view.read().clone(),
+                    observed,
+                    self.options.index_build_seconds,
+                )?)
             } else {
                 None
             };
+            drop(transaction);
             while self.seq() < observed && writer.poison.is_none() {
                 self.durable.wait(&mut writer);
             }
@@ -127,7 +148,11 @@ impl Engine {
         )?;
         let bytes = wal::encode(seq, &records)?;
         let snapshot = if pin {
-            Some(self.pin(view.clone(), seq, self.options.index_build_seconds)?)
+            Some(self.pin(
+                self.view.read().clone(),
+                seq,
+                self.options.index_build_seconds,
+            )?)
         } else {
             None
         };
@@ -144,8 +169,9 @@ impl Engine {
             return Err(error);
         }
         self.record_staged_commit(&mut writer, seq, &records, wal_bytes);
-        view.mem.apply(records, memory);
+        self.view.read().mem.apply(records, memory);
         writer.staged = seq;
+        drop(transaction);
         while self.seq() < seq && writer.poison.is_none() {
             if writer.syncing {
                 self.durable.wait(&mut writer);
@@ -216,6 +242,9 @@ impl Engine {
         if let Some(error) = &writer.poison {
             return Err(error.clone());
         }
+        if self.seq() == writer.staged {
+            return Ok(());
+        }
         if let Err(error) = writer.wal.sync(&self.io, self.info.id) {
             let error = Error::new("COMMIT_UNKNOWN", error.to_string());
             self.poison_writer(&mut *writer, error.clone());
@@ -252,8 +281,36 @@ pub struct Transaction<'a> {
     pub seq: u64,
     pub(super) changes: BTreeMap<Vec<u8>, Record>,
     pub(super) memory: Vec<Reservation>,
+    read_budget: crate::read::ReadBudget,
 }
 impl Transaction<'_> {
+    fn scan_prefix<'a>(
+        &'a self,
+        prefix: &[u8],
+        start: Vec<u8>,
+        stats: &mut ReadStats,
+    ) -> Result<Scan<'a>> {
+        self.read_budget.check()?;
+        let end = codec::prefix_end(prefix);
+        let mut scan = Scan::unstarted(
+            self.view,
+            self.read_seq,
+            start.clone(),
+            end.clone(),
+            None,
+            stats,
+        )?;
+        scan.set_read_budget(&self.read_budget);
+        scan.seek(
+            &ScanRange {
+                start,
+                end,
+                prefix: None,
+            },
+            stats,
+        )?;
+        Ok(scan)
+    }
     pub(crate) fn check_expanded_limits(&self) -> Result<()> {
         let bytes = 28usize.saturating_add(
             self.changes
@@ -274,6 +331,34 @@ impl Transaction<'_> {
     pub fn prefix_first(&self, prefix: &[u8], limit: usize) -> Result<Vec<(Vec<u8>, Arc<Bytes>)>> {
         self.prefix_first_after(prefix, None, limit)
     }
+    // GC records its last visited key even for tombstones. Bound physical work
+    // without rejecting the progress that lets the next batch seek past it.
+    pub(crate) fn gc_prefix(
+        &self,
+        prefix: &[u8],
+        after: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<Vec<Record>> {
+        let mut start = after.map_or_else(
+            || prefix.to_vec(),
+            |key| {
+                let mut next = key.to_vec();
+                next.push(0);
+                next
+            },
+        );
+        if start.as_slice() < prefix {
+            start = prefix.to_vec();
+        }
+        let mut stats = ReadStats::default();
+        let mut scan = self.scan_prefix(prefix, start, &mut stats)?;
+        let limit = limit.min(self.read_budget.max_scan);
+        let mut rows = Vec::new();
+        while let Some(record) = scan.next_for_gc(&mut stats, limit)? {
+            rows.push(record);
+        }
+        Ok(rows)
+    }
     pub fn prefix_first_after(
         &self,
         prefix: &[u8],
@@ -292,15 +377,7 @@ impl Transaction<'_> {
             start = prefix.to_vec();
         }
         let mut stats = ReadStats::default();
-        let mut scan = Scan::new(
-            self.view,
-            self.read_seq,
-            start.clone(),
-            codec::prefix_end(prefix),
-            None,
-            None,
-            &mut stats,
-        )?;
+        let mut scan = self.scan_prefix(prefix, start.clone(), &mut stats)?;
         let mut records = BTreeMap::new();
         while records.len() < limit.saturating_add(self.changes.len()) {
             let Some(record) = scan.next(&mut stats)? else {
@@ -321,13 +398,18 @@ impl Transaction<'_> {
         Ok(records.into_iter().take(limit).collect())
     }
     pub fn get(&self, key: &[u8]) -> Result<Option<Arc<Bytes>>> {
+        self.read_budget.check()?;
         if let Some(record) = self.changes.get(key) {
             return Ok(record.value.clone());
         }
-        Ok(
-            get_one(self.view, key, self.read_seq, &mut ReadStats::default())?
-                .and_then(|r| r.value),
-        )
+        Ok(read::get_one_controlled(
+            self.view,
+            key,
+            self.read_seq,
+            &mut ReadStats::default(),
+            Some(&self.read_budget),
+        )?
+        .and_then(|r| r.value))
     }
     pub fn put(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<()> {
         self.put_with_prefix(key, value, 0)
@@ -338,6 +420,7 @@ impl Transaction<'_> {
         value: Vec<u8>,
         prefix_len: usize,
     ) -> Result<()> {
+        self.read_budget.check()?;
         if key.len() > codec::MAX_KEY || prefix_len > key.len() {
             return Err(Error::limit("encoded key exceeds limit"));
         }
@@ -361,6 +444,7 @@ impl Transaction<'_> {
         self.delete_with_prefix(key, 0)
     }
     pub fn delete_with_prefix(&mut self, key: Vec<u8>, prefix_len: usize) -> Result<()> {
+        self.read_budget.check()?;
         if key.len() > codec::MAX_KEY || prefix_len > key.len() {
             return Err(Error::limit("encoded key exceeds limit"));
         }
@@ -379,15 +463,7 @@ impl Transaction<'_> {
     }
     pub fn prefix(&self, prefix: &[u8], limit: usize) -> Result<Vec<(Vec<u8>, Arc<Bytes>)>> {
         let mut stats = ReadStats::default();
-        let mut scan = Scan::new(
-            self.view,
-            self.read_seq,
-            prefix.to_vec(),
-            codec::prefix_end(prefix),
-            None,
-            None,
-            &mut stats,
-        )?;
+        let mut scan = self.scan_prefix(prefix, prefix.to_vec(), &mut stats)?;
         let mut records = BTreeMap::new();
         while let Some(record) = scan.next(&mut stats)? {
             if records.len() >= limit {
@@ -416,6 +492,177 @@ impl Transaction<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn transaction_snapshot_contains_its_write_when_flush_rotates_during_evaluation() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::Store::open(dir.path(), Options::default()).unwrap();
+        let tenant = store
+            .tenant(store.create_tenant("rotation-snapshot").unwrap().id)
+            .unwrap();
+        let engine = tenant.engine().clone();
+        drop(tenant);
+        drop(store);
+        engine
+            .transact(|tx| tx.put(b"seed".to_vec(), b"first".to_vec()))
+            .unwrap();
+        let (entered, ready) = std::sync::mpsc::channel();
+        let (release, wait) = std::sync::mpsc::channel();
+        let writing = engine.clone();
+        let writer = std::thread::spawn(move || {
+            writing.transact_snapshot(|tx| {
+                tx.put(b"own".to_vec(), b"confirmed".to_vec())?;
+                entered.send(()).unwrap();
+                wait.recv().unwrap();
+                Ok(())
+            })
+        });
+        ready.recv_timeout(Duration::from_secs(3)).unwrap();
+        engine.flush().unwrap();
+        release.send(()).unwrap();
+        let (_, snapshot) = writer.join().unwrap().unwrap();
+        assert_eq!(
+            snapshot
+                .get(b"own", &mut ReadStats::default())
+                .unwrap()
+                .unwrap()
+                .as_slice(),
+            b"confirmed"
+        );
+        assert_eq!(
+            snapshot
+                .get(b"seed", &mut ReadStats::default())
+                .unwrap()
+                .unwrap()
+                .as_slice(),
+            b"first"
+        );
+    }
+    #[test]
+    fn transaction_evaluation_does_not_block_preceding_commit_confirmation() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::Store::open(dir.path(), Options::default()).unwrap();
+        let tenant = store
+            .tenant(store.create_tenant("separate-evaluation").unwrap().id)
+            .unwrap();
+        let engine = tenant.engine().clone();
+        let _maintenance = engine.maintenance.lock();
+        let mut writer = engine.writer.lock();
+        let seq = writer.staged + 1;
+        let records = vec![Record {
+            key: b"first".to_vec(),
+            seq,
+            value: Some(Arc::new(Bytes::new(b"confirmed".to_vec()))),
+            prefix_len: 0,
+        }];
+        writer
+            .wal
+            .append(
+                wal::encode(seq, &records).unwrap(),
+                &engine.io,
+                engine.info.id,
+            )
+            .unwrap();
+        engine
+            .view
+            .read()
+            .mem
+            .apply(records, engine.budget.reserve(4096).unwrap());
+        writer.staged = seq;
+        writer.syncing = true;
+        drop(writer);
+        let (entered, ready) = std::sync::mpsc::channel();
+        let (release, wait) = std::sync::mpsc::channel();
+        let evaluating = engine.clone();
+        let evaluation = std::thread::spawn(move || {
+            evaluating.transact(|tx| {
+                assert_eq!(tx.get(b"first")?.unwrap().as_slice(), b"confirmed");
+                entered.send(()).unwrap();
+                wait.recv().unwrap();
+                tx.put(b"second".to_vec(), b"next".to_vec())
+            })
+        });
+        ready.recv_timeout(Duration::from_secs(3)).unwrap();
+        let syncing = engine.clone();
+        let (done, completed) = std::sync::mpsc::channel();
+        let sync = std::thread::spawn(move || {
+            let mut writer = syncing.writer.lock();
+            writer.syncing = false;
+            syncing.sync_writer(&mut writer).unwrap();
+            done.send(()).unwrap();
+        });
+        let confirmed_while_evaluating = completed.recv_timeout(Duration::from_millis(200)).is_ok();
+        release.send(()).unwrap();
+        evaluation.join().unwrap().unwrap();
+        sync.join().unwrap();
+        assert!(confirmed_while_evaluating);
+        assert!(engine.seq() > seq);
+        let snapshot = engine.snapshot().unwrap();
+        assert_eq!(
+            snapshot
+                .get(b"first", &mut ReadStats::default())
+                .unwrap()
+                .unwrap()
+                .as_slice(),
+            b"confirmed"
+        );
+        assert_eq!(
+            snapshot
+                .get(b"second", &mut ReadStats::default())
+                .unwrap()
+                .unwrap()
+                .as_slice(),
+            b"next"
+        );
+    }
+    #[test]
+    fn transaction_prefix_scans_charge_tombstones_and_leave_failed_work_uncommitted() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::Store::open(
+            dir.path(),
+            Options {
+                max_scan: 8,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let tenant = store
+            .tenant(store.create_tenant("bounded-transaction").unwrap().id)
+            .unwrap();
+        let engine = tenant.engine();
+        let _maintenance = engine.maintenance.lock();
+        engine
+            .transact(|tx| {
+                for i in 0..32 {
+                    tx.delete(format!("Z{i:04}").into_bytes())?;
+                }
+                tx.put(b"Zlast".to_vec(), b"confirmed".to_vec())
+            })
+            .unwrap();
+        let seq = engine.seq();
+        let error = engine
+            .transact(|tx| {
+                tx.put(b"uncommitted".to_vec(), b"rejected".to_vec())?;
+                tx.prefix_first(b"Z", 1)
+            })
+            .unwrap_err();
+        assert_eq!(error.code, "RESOURCE_EXHAUSTED");
+        assert_eq!(engine.seq(), seq);
+        let snapshot = engine.snapshot().unwrap();
+        assert!(
+            snapshot
+                .get(b"uncommitted", &mut ReadStats::default())
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            snapshot
+                .get(b"Zlast", &mut ReadStats::default())
+                .unwrap()
+                .unwrap()
+                .as_slice(),
+            b"confirmed"
+        );
+    }
     #[test]
     fn hot_retries_do_not_keep_an_uncertain_engine_alive() {
         let dir = tempfile::tempdir().unwrap();

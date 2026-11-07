@@ -673,6 +673,70 @@ async fn checkpoint_transfer_pins_wal_beyond_the_retention_byte_window() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn large_checkpoint_keeps_its_log_pin_beyond_twice_normal_retention() {
+    let pair = Pair::with_options(Options {
+        l0_stop: 128,
+        tenant_disk_bytes: 64 << 20,
+        ..options()
+    })
+    .await;
+    let info = pair.a.create_tenant("large-transfer-window").unwrap();
+    let tenant = pair.a.tenant(info.id).unwrap();
+    let mut random = 17u64;
+    for n in 0..24 {
+        let data: Vec<_> = (0..256 << 10)
+            .map(|_| {
+                random ^= random << 13;
+                random ^= random >> 7;
+                random ^= random << 17;
+                random as u8
+            })
+            .collect();
+        tenant
+            .engine()
+            .transact(|tx| tx.put(format!("Zseed{n:04}").into_bytes(), data))
+            .unwrap();
+        tenant.engine().flush().unwrap();
+    }
+    let state = pair.a.replication_state();
+    let snapshot = pair
+        .sa
+        .snapshot(state.cluster, state.epoch, info.id)
+        .unwrap();
+    for n in 0..48 {
+        tenant
+            .engine()
+            .transact(|tx| tx.put(format!("Ztail{n:04}").into_bytes(), vec![n as u8; 64 << 10]))
+            .unwrap();
+        tenant.engine().flush().unwrap();
+    }
+    assert!(
+        !pair
+            .sa
+            .snapshot_chunk(snapshot.id, 0, 0)
+            .unwrap()
+            .is_empty()
+    );
+    let mut request = tenant_kv::replication::LogRequest {
+        protocol: tenant_kv::replication::PROTOCOL,
+        cluster: state.cluster,
+        epoch: state.epoch,
+        tenant: info.id,
+        generation: info.generation,
+        after: snapshot.position,
+        cursor: None,
+    };
+    while request.after < tenant.engine().seq() {
+        let page = pair.sa.export_log(&request).unwrap();
+        assert!(page.through > request.after);
+        request.after = page.through;
+        request.cursor = page.cursor;
+    }
+    assert_eq!(request.after, snapshot.position + 48);
+    tenant.engine().verify().unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn stalled_export_has_a_bounded_wal_window_and_cannot_pin_the_slot_forever() {
     let mut pair = Pair::with_options(Options {
         l0_stop: 128,

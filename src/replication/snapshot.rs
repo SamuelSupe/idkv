@@ -51,6 +51,18 @@ struct Catchup {
     generation: Uuid,
     lease: crate::storage::LogRetention,
 }
+pub(super) struct ChunkRead {
+    path: PathBuf,
+    size: usize,
+    offset: u64,
+}
+impl ChunkRead {
+    pub(super) fn read(self) -> Result<String> {
+        let mut bytes = vec![0; self.size];
+        File::open(self.path)?.read_exact_at(&mut bytes, self.offset)?;
+        Ok(STANDARD.encode(bytes))
+    }
+}
 impl Exports {
     pub fn open(store: &Store) -> Result<Self> {
         let root = store.root().join("replication-work/export");
@@ -150,7 +162,7 @@ impl Exports {
             }
         }
     }
-    pub fn chunk(&mut self, id: Uuid, file: usize, offset: u64) -> Result<String> {
+    pub(super) fn chunk(&mut self, id: Uuid, file: usize, offset: u64) -> Result<ChunkRead> {
         let (info, created, path, lease) = self
             .current
             .as_mut()
@@ -169,10 +181,12 @@ impl Exports {
         if offset > item.size {
             return Err(Error::invalid("snapshot file offset"));
         }
-        let mut bytes = vec![0; (item.size - offset).min(super::PAGE_BYTES as u64) as usize];
-        File::open(path.join(&item.path))?.read_exact_at(&mut bytes, offset)?;
         *created = Instant::now();
-        Ok(STANDARD.encode(bytes))
+        Ok(ChunkRead {
+            path: path.join(&item.path),
+            size: (item.size - offset).min(super::PAGE_BYTES as u64) as usize,
+            offset,
+        })
     }
     pub fn release(&mut self, id: Uuid) -> Result<()> {
         if self.current.as_ref().is_some_and(|(s, _, _, _)| s.id == id) {
@@ -234,9 +248,11 @@ impl Preparation {
         let tenant = handle.info();
         // Own the pin outside the exports lock throughout copying and hashing.
         let lease = handle.engine().retain_replication_log();
-        let position = handle
-            .engine()
-            .checkpoint_limited(&self.path, tenant.disk_bytes, 0)?;
+        let position = handle.engine().checkpoint_limited(
+            &self.path,
+            tenant.disk_bytes,
+            store.options().maintenance_reserve_free_bytes,
+        )?;
         let mut files = Vec::new();
         enumerate(&self.path, &self.path, &mut files)?;
         if files.len() > 20_000 {

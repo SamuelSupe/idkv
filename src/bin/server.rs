@@ -41,6 +41,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             let auth: AuthConfig = serde_json::from_slice(&std::fs::read(auth.ok_or("--auth is required")?)?)?;
             let options = if let Some(path) = config { serde_json::from_slice(&std::fs::read(path)?)? } else { Options::default() };
             let store = Store::open(&root, options)?;
+            let transport_options = store.options().clone();
             let backups = if let Some(path) = backup_config { Some(tenant_kv::backup::BackupService::open(store.clone(), serde_json::from_slice(&std::fs::read(path)?)?)?) } else { None };
             let replication = if let Some(path) = replication_config { Some(tenant_kv::replication::Service::open(store.clone(), serde_json::from_slice(&std::fs::read(path)?)?)?) } else { None };
             let telemetry_config: telemetry::Config = if let Some(path) = telemetry_config { serde_json::from_slice(&std::fs::read(path)?)? } else { Default::default() };
@@ -51,6 +52,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             let replication_worker = replication.as_ref().map(|service| service.start());
             eprintln!("tenant-kv listening on {}", listener.local_addr()?);
             let (draining, drained) = tokio::sync::oneshot::channel();
+            let listener = http::Listener::new(listener, &transport_options);
             let server = axum::serve(listener, router).with_graceful_shutdown(async move {
                 shutdown_signal().await;
                 runtime.drain();

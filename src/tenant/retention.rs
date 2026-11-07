@@ -103,10 +103,24 @@ pub(crate) fn schedule_at(
     if tx.get(&dk)?.is_some() {
         return Ok(());
     }
+    let queue_key = expiry_key(at, target);
+    if let Some(bytes) = tx.get(STATE)? {
+        let mut state: gc::State = parse(&bytes)?;
+        if state
+            .expiry_after
+            .as_ref()
+            .is_some_and(|after| queue_key <= *after)
+        {
+            // Backdated insertions must be visited without restarting at all
+            // historical tombstones. A strict prefix sorts before this key.
+            state.expiry_after = Some(queue_key[..queue_key.len() - 1].to_vec());
+            put(tx, STATE.to_vec(), &state)?;
+        }
+    }
     put(tx, dk, &at)?;
     put(
         tx,
-        expiry_key(at, target),
+        queue_key,
         &Scheduled {
             target: target.to_vec(),
             action,

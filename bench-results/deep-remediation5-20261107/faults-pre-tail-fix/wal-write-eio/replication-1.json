@@ -1,0 +1,8 @@
+{
+  "cluster": "ca5de1c4-f9ba-4815-b1c6-fc68f62bbccf",
+  "role": "replica",
+  "peer_url": "http://127.0.0.1:46915",
+  "token_file": "/var/tmp/idkv-remediation5-faults-complete-20261107/wal-write-eio/peer-token",
+  "poll_ms": 50,
+  "log_retention_bytes": 268435456
+}

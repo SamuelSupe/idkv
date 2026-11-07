@@ -215,6 +215,7 @@ fn process_crashes_preserve_atomic_documents_and_indexes() {
         "wal_appended",
         "wal_synced",
         "manifest_published",
+        "wal_rotation_pending",
         "sst_synced",
         "compaction_synced",
         "index_ready",
@@ -249,6 +250,7 @@ fn process_crashes_preserve_atomic_documents_and_indexes() {
         );
         if [
             "wal_synced",
+            "wal_rotation_pending",
             "manifest_published",
             "sst_synced",
             "compaction_synced",

@@ -10,6 +10,130 @@ use tenant_kv::{
 };
 use tower::ServiceExt;
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn slow_bodies_do_not_consume_other_tenants_execution_capacity() {
+    use std::io::Write;
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(dir.path(), Options::default()).unwrap();
+    let a = store.create_tenant("slow-a").unwrap().id;
+    let b = store.create_tenant("slow-b").unwrap().id;
+    let c = store.create_tenant("healthy-c").unwrap().id;
+    let secret = "slow-body-regression-secret";
+    let app = http::app(
+        store,
+        AuthConfig {
+            tokens: vec![Token {
+                subject: "admin".into(),
+                sha256: http::token_hash(secret),
+                tenant: None,
+                role: Role::Admin,
+            }],
+        },
+    )
+    .unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(axum::serve(listener, app.clone()).into_future());
+    let mut clients = Vec::new();
+    for id in [a, b] {
+        for _ in 0..32 {
+            let mut client = std::net::TcpStream::connect(address).unwrap();
+            write!(client, "POST /v1/tenants/{id}/collections HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer {secret}\r\nContent-Length: 100\r\n\r\n").unwrap();
+            clients.push(client);
+        }
+    }
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    let (status, body) = call(
+        &app,
+        "GET",
+        &format!("/v1/tenants/{c}"),
+        Some(secret),
+        json!({}),
+    )
+    .await;
+    drop(clients);
+    server.abort();
+    let _ = server.await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+}
+
+#[tokio::test]
+async fn local_backup_deletion_requires_admin_and_preserves_tenant_scope() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(dir.path(), Options::default()).unwrap();
+    let a = store.create_tenant("backup-a").unwrap().id;
+    let b = store.create_tenant("backup-b").unwrap().id;
+    let tenant = store.tenant(a).unwrap();
+    tenant.create_collection("docs").unwrap();
+    let receipt = tenant
+        .put("docs", json!({"_key":"ack","value":7}), None)
+        .unwrap();
+    let backup_a = store.backup(a).unwrap();
+    let backup_b = store.backup(b).unwrap();
+    let admin = "local-backup-admin-secret";
+    let reader = "local-backup-reader-secret";
+    let app = http::app(
+        store.clone(),
+        AuthConfig {
+            tokens: vec![
+                Token {
+                    subject: "admin-a".into(),
+                    sha256: http::token_hash(admin),
+                    tenant: Some(a),
+                    role: Role::Admin,
+                },
+                Token {
+                    subject: "reader-a".into(),
+                    sha256: http::token_hash(reader),
+                    tenant: Some(a),
+                    role: Role::Read,
+                },
+            ],
+        },
+    )
+    .unwrap();
+    let route = format!("/v1/tenants/{a}/backup/{backup_a}");
+    assert_eq!(
+        call(&app, "DELETE", &route, Some(reader), json!({}))
+            .await
+            .0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        call(
+            &app,
+            "DELETE",
+            &format!("/v1/tenants/{b}/backup/{backup_b}"),
+            Some(admin),
+            json!({})
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        call(
+            &app,
+            "DELETE",
+            &format!("/v1/tenants/{a}/backup/{backup_b}"),
+            Some(admin),
+            json!({})
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        call(&app, "DELETE", &route, Some(admin), json!({})).await.0,
+        StatusCode::OK
+    );
+    assert!(dir.path().join(format!("backups/{b}/{backup_b}")).exists());
+    assert_eq!(
+        tenant.get("docs", "ack").unwrap().unwrap()["_rev"],
+        receipt.rev
+    );
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn server_exposes_not_ready_before_closing_its_listener_on_sigterm() {

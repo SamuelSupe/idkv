@@ -112,6 +112,85 @@ fn compaction_record(
 }
 
 #[test]
+fn local_backup_capacity_is_bounded_and_deletion_releases_capacity() {
+    let dir = tempfile::tempdir().unwrap();
+    let options = Options {
+        global_memory_bytes: 64 << 20,
+        tenant_memory_bytes: 32 << 20,
+        cache_bytes: 0,
+        memtable_bytes: 64 << 10,
+        tenant_disk_bytes: 8 << 20,
+        max_local_backup_bytes: 1 << 20,
+        ..Default::default()
+    };
+    let store = Store::open(dir.path(), options).unwrap();
+    let id = store.create_tenant("local-backup-cap").unwrap().id;
+    let tenant = store.tenant(id).unwrap();
+    let expected = compaction_record(tenant.engine(), 0, 0, 400 << 10);
+    let first = store.backup(id).unwrap();
+    let last = store.backup(id).unwrap();
+    assert_eq!(store.backup(id).unwrap_err().code, "RESOURCE_EXHAUSTED");
+    assert_eq!(
+        std::fs::read_dir(dir.path().join("backups").join(id.to_string()))
+            .unwrap()
+            .count(),
+        2
+    );
+    store.delete_backup(id, first).unwrap();
+    assert_eq!(
+        store.delete_backup(id, first).unwrap_err().code,
+        "NOT_FOUND"
+    );
+    store.backup(id).unwrap();
+    assert_eq!(
+        tenant
+            .engine()
+            .snapshot()
+            .unwrap()
+            .get(b"Z0000", &mut ReadStats::default())
+            .unwrap()
+            .unwrap()
+            .as_slice(),
+        expected
+    );
+    drop(tenant);
+    store.restore(id, last).unwrap();
+    assert_eq!(
+        store
+            .tenant(id)
+            .unwrap()
+            .engine()
+            .snapshot()
+            .unwrap()
+            .get(b"Z0000", &mut ReadStats::default())
+            .unwrap()
+            .unwrap()
+            .as_slice(),
+        expected
+    );
+}
+
+#[test]
+fn flush_can_use_actual_output_space_without_multiplying_memtable_allocations() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = compaction_engine(&dir.path().join("engine"), 1 << 20);
+    let expected = compaction_record(&engine, 0, 0, 180 << 10);
+    engine.flush().unwrap();
+    engine.verify().unwrap();
+    assert_eq!(
+        engine
+            .snapshot()
+            .unwrap()
+            .get(b"Z0000", &mut ReadStats::default())
+            .unwrap()
+            .unwrap()
+            .as_slice(),
+        expected
+    );
+    assert!(engine.disk_bytes() < 1 << 20);
+}
+
+#[test]
 fn small_disk_compaction_keeps_confirmed_updates_readable_without_raising_quota() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("engine");

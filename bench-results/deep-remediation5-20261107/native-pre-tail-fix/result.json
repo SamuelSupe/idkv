@@ -1,0 +1,184 @@
+{
+  "fixed_sha256": "2ba39bd887ab6148a177c00c4096d9df5985b9099f70d1db85e7bc9af67bf0ec",
+  "before_sha256": "658da6e593bffe34fb2d44a5f17b510588dab15d59f965b6997098f91ad88309",
+  "cases": [
+    {
+      "case": "slow-bodies-before",
+      "slow_connections": 64,
+      "healthy_writes_succeeded": 0,
+      "healthy_write_errors": {
+        "RESOURCE_EXHAUSTED": 128
+      },
+      "health_max_ms": 0.46479201409965754,
+      "checked": {
+        "stage": "after-slow-bodies",
+        "node": 0,
+        "file": "verified-after-slow-bodies-node-0.json",
+        "documents": 64,
+        "mismatches": 0,
+        "ack_count": 64,
+        "sha256": "c4924e78c92b0e55526c6c79510e9c11bf1eaacf82b2658b6e2dfc244506c475"
+      },
+      "restart": {
+        "stage": "restart",
+        "node": 0,
+        "file": "verified-restart-node-0.json",
+        "documents": 64,
+        "mismatches": 0,
+        "ack_count": 64,
+        "sha256": "c4924e78c92b0e55526c6c79510e9c11bf1eaacf82b2658b6e2dfc244506c475"
+      }
+    },
+    {
+      "case": "local-backups-before",
+      "tenant_disk_quota": 1048576,
+      "successful_backups": 32,
+      "backup_bytes_at_limit": 2164416,
+      "limit_error": null,
+      "checked": {
+        "stage": "after-backup-limit",
+        "node": 0,
+        "file": "verified-after-backup-limit-node-0.json",
+        "documents": 1,
+        "mismatches": 0,
+        "ack_count": 1,
+        "sha256": "a4eb46c5fadf1cc93c334cd3973e885de3c31d64a07e510a62df6e5794da5982"
+      },
+      "restart": {
+        "stage": "restart",
+        "node": 0,
+        "file": "verified-restart-node-0.json",
+        "documents": 1,
+        "mismatches": 0,
+        "ack_count": 1,
+        "sha256": "a4eb46c5fadf1cc93c334cd3973e885de3c31d64a07e510a62df6e5794da5982"
+      }
+    },
+    {
+      "case": "checkpoint-window-before",
+      "retention_bytes": 1048576,
+      "checkpoint_bytes": 8483820,
+      "tail_updates_before_transfer": 48,
+      "snapshot_expired": true,
+      "checked": {
+        "stage": "after-transfer-window",
+        "node": 0,
+        "file": "verified-after-transfer-window-node-0.json",
+        "documents": 128,
+        "mismatches": 0,
+        "ack_count": 176,
+        "sha256": "544bad1fba21efacf86c447f91ce4377c29ed182b772b6a83e3a398d650df002"
+      },
+      "replica_stages": [],
+      "restart": {
+        "stage": "restart",
+        "node": 0,
+        "file": "verified-restart-node-0.json",
+        "documents": 128,
+        "mismatches": 0,
+        "ack_count": 176,
+        "sha256": "544bad1fba21efacf86c447f91ce4377c29ed182b772b6a83e3a398d650df002"
+      }
+    },
+    {
+      "case": "slow-bodies-fixed",
+      "slow_connections": 64,
+      "healthy_writes_succeeded": 128,
+      "healthy_write_errors": {},
+      "health_max_ms": 3.8285869522951543,
+      "checked": {
+        "stage": "after-slow-bodies",
+        "node": 0,
+        "file": "verified-after-slow-bodies-node-0.json",
+        "documents": 64,
+        "mismatches": 0,
+        "ack_count": 192,
+        "sha256": "96a77fa9d837bb59c7fc6fcde3291b6a4a1c88531b8e1121753852a4ced3c938"
+      },
+      "restart": {
+        "stage": "restart",
+        "node": 0,
+        "file": "verified-restart-node-0.json",
+        "documents": 64,
+        "mismatches": 0,
+        "ack_count": 192,
+        "sha256": "96a77fa9d837bb59c7fc6fcde3291b6a4a1c88531b8e1121753852a4ced3c938"
+      }
+    },
+    {
+      "case": "local-backups-fixed",
+      "tenant_disk_quota": 1048576,
+      "successful_backups": 15,
+      "backup_bytes_at_limit": 1014540,
+      "limit_error": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "checkpoint exceeds backup byte limit"
+        }
+      },
+      "checked": {
+        "stage": "after-backup-limit",
+        "node": 0,
+        "file": "verified-after-backup-limit-node-0.json",
+        "documents": 1,
+        "mismatches": 0,
+        "ack_count": 1,
+        "sha256": "a4eb46c5fadf1cc93c334cd3973e885de3c31d64a07e510a62df6e5794da5982"
+      },
+      "restart": {
+        "stage": "restart",
+        "node": 0,
+        "file": "verified-restart-node-0.json",
+        "documents": 1,
+        "mismatches": 0,
+        "ack_count": 1,
+        "sha256": "a4eb46c5fadf1cc93c334cd3973e885de3c31d64a07e510a62df6e5794da5982"
+      }
+    },
+    {
+      "case": "checkpoint-window-fixed",
+      "retention_bytes": 1048576,
+      "checkpoint_bytes": 8484072,
+      "tail_updates_before_transfer": 48,
+      "snapshot_expired": false,
+      "checked": {
+        "stage": "after-transfer-window",
+        "node": 0,
+        "file": "verified-after-transfer-window-node-0.json",
+        "documents": 128,
+        "mismatches": 0,
+        "ack_count": 176,
+        "sha256": "544bad1fba21efacf86c447f91ce4377c29ed182b772b6a83e3a398d650df002"
+      },
+      "replica_stages": [
+        {
+          "stage": "bootstrap",
+          "node": 1,
+          "file": "verified-bootstrap-node-1.json",
+          "documents": 128,
+          "mismatches": 0,
+          "ack_count": 176,
+          "sha256": "544bad1fba21efacf86c447f91ce4377c29ed182b772b6a83e3a398d650df002"
+        },
+        {
+          "stage": "reinitialization",
+          "node": 1,
+          "file": "verified-reinitialization-node-1.json",
+          "documents": 128,
+          "mismatches": 0,
+          "ack_count": 240,
+          "sha256": "80be36ad5efc9c4f9935d117075df094c229e6d4837504adae262f634cfc20b2"
+        }
+      ],
+      "restart": {
+        "stage": "restart",
+        "node": 0,
+        "file": "verified-restart-node-0.json",
+        "documents": 128,
+        "mismatches": 0,
+        "ack_count": 240,
+        "sha256": "80be36ad5efc9c4f9935d117075df094c229e6d4837504adae262f634cfc20b2"
+      }
+    }
+  ]
+}

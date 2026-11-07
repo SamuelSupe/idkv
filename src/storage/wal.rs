@@ -216,6 +216,12 @@ impl Wal {
         super::failpoint("wal_appended");
         Ok(())
     }
+    pub(super) fn set_start_seq(&mut self, start_seq: u64) -> Result<()> {
+        use std::os::unix::fs::FileExt;
+        self.file.write_all_at(&start_seq.to_le_bytes(), 56)?;
+        self.info.start_seq = start_seq;
+        Ok(())
+    }
     pub fn sync(&self, io: &IoScheduler, tenant: Uuid) -> Result<()> {
         let file = self.file.clone();
         io.run(tenant, move || {

@@ -130,29 +130,65 @@ impl Store {
         atomic_json(&inner.root.join("control/tenants.json"), &*registry)
     }
     pub fn backup(&self, id: Uuid) -> Result<Uuid> {
+        let _backup = self.owner.inner.local_backups.lock();
         let tenant = self.tenant(id)?;
         let backup = Uuid::new_v4();
         let parent = self.root().join("backups").join(id.to_string());
         fs::create_dir_all(&parent)?;
         reject_symlink(&parent)?;
+        if fs::read_dir(&parent)?.count() >= 64 {
+            return Err(Error::limit("local backup count limit; delete old backups"));
+        }
+        let limit = tenant
+            .info()
+            .disk_bytes
+            .min(self.options().max_local_backup_bytes);
+        let remaining = limit
+            .checked_sub(crate::storage::directory_size(&parent)?)
+            .ok_or_else(|| Error::limit("local backup byte limit"))?;
         let destination = parent.join(backup.to_string());
-        tenant.engine().checkpoint(&destination)?;
-        let check = Engine::open(
-            destination.clone(),
-            tenant.info(),
-            self.options().clone(),
-            Budget {
-                global: self.owner.inner.memory.clone(),
-                tenant: tenant.engine().budget.tenant.clone(),
-            },
-            self.owner.inner.io.clone(),
-        )?;
-        check.verify()?;
-        drop(check);
-        sync_dir(&parent)?;
+        let result = (|| -> Result<()> {
+            tenant.engine().checkpoint_limited(
+                &destination,
+                remaining,
+                self.options().maintenance_reserve_free_bytes,
+            )?;
+            let check = Engine::open(
+                destination.clone(),
+                tenant.info(),
+                self.options().clone(),
+                Budget {
+                    global: self.owner.inner.memory.clone(),
+                    tenant: tenant.engine().budget.tenant.clone(),
+                },
+                self.owner.inner.io.clone(),
+            )?;
+            check.verify()?;
+            drop(check);
+            sync_dir(&parent)?;
+            Ok(())
+        })();
+        if result.is_err() {
+            let _ = fs::remove_dir_all(&destination);
+        }
+        result?;
         Ok(backup)
     }
+    /// Delete a local backup. The online database and remote backups are unaffected.
+    pub fn delete_backup(&self, id: Uuid, backup: Uuid) -> Result<()> {
+        let _backup = self.owner.inner.local_backups.lock();
+        self.backup_context(id)?;
+        let parent = self.root().join("backups").join(id.to_string());
+        let path = parent.join(backup.to_string());
+        if !path.try_exists()? {
+            return Err(Error::missing("local backup"));
+        }
+        reject_symlink(&path)?;
+        fs::remove_dir_all(path)?;
+        sync_dir(&parent)
+    }
     pub fn restore(&self, id: Uuid, backup: Uuid) -> Result<()> {
+        let _backup = self.owner.inner.local_backups.lock();
         let source = self
             .root()
             .join("backups")
@@ -223,7 +259,15 @@ impl Store {
             global: inner.memory.clone(),
             tenant: memory,
         };
-        copy_tree(source, &staged, id, &budget, &inner.io)?;
+        if upstream.is_some()
+            && source.parent() == Some(inner.root.join("replication-work/import").as_path())
+        {
+            fs::rename(source, &staged)?;
+            sync_dir(source.parent().unwrap())?;
+            sync_dir(&inner.root.join("staging"))?;
+        } else {
+            copy_tree(source, &staged, id, &budget, &inner.io)?;
+        }
         atomic_json(&staged.join("TENANT.meta"), &registration.info)?;
         let check = Engine::open(
             staged.clone(),
@@ -244,6 +288,11 @@ impl Store {
                 self.require_local_restore()?;
                 permission
             }
+        };
+        let _drain = if upstream.is_none() {
+            Some(self.drain_for_management(id, true)?)
+        } else {
+            None
         };
         let mut slot = slot.lock();
         self.close_slot(&mut slot)?;

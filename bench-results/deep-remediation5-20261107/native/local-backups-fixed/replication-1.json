@@ -1,0 +1,8 @@
+{
+  "cluster": "e563c9c2-c996-47f6-97dd-0d23376da38c",
+  "role": "replica",
+  "peer_url": "http://127.0.0.1:34513",
+  "token_file": "/var/tmp/idkv-remediation5-native-shipping-20261107/local-backups-fixed/peer-token",
+  "poll_ms": 50,
+  "log_retention_bytes": 268435456
+}
