@@ -1,0 +1,1532 @@
+{
+  "commit": "2969a142de632936219bd0bd96984fe1a724ad52",
+  "confirmed_findings": [
+    {
+      "id": "P1-MEMORY-PROGRESS",
+      "status": "reproduced twice; not fixed",
+      "description": "Cross-tenant memory exhaustion below flush thresholds prevents write and explicit checkpoint progress"
+    }
+  ],
+  "cases": {
+    "memory": {
+      "binary_sha256": "3ae4a3d1b6fec42bc37b4045efe79c65b358d2584f77a04fe0e560f9c1f4b451",
+      "options": {
+        "global_memory_bytes": 67108864,
+        "tenant_memory_bytes": 67108864,
+        "memtable_bytes": 16777216,
+        "cache_bytes": 0,
+        "target_sst_bytes": 4194304,
+        "level_base_bytes": 16777216,
+        "l0_stop": 24,
+        "tenant_disk_bytes": 4294967296
+      },
+      "confirmed_after_load": 1012,
+      "sentinel_write_error": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "global memory budget exhausted"
+        }
+      },
+      "retry_observation_s": 6.020296776958276,
+      "health": {
+        "status": "ok"
+      },
+      "manual_flush": [
+        {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "global memory budget exhausted"
+          }
+        },
+        {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "global memory budget exhausted"
+          }
+        },
+        {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "global memory budget exhausted"
+          }
+        },
+        {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "global memory budget exhausted"
+          }
+        },
+        {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "global memory budget exhausted"
+          }
+        },
+        {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "global memory budget exhausted"
+          }
+        },
+        {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "global memory budget exhausted"
+          }
+        },
+        {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "global memory budget exhausted"
+          }
+        }
+      ],
+      "close_results": [
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok"
+      ],
+      "verified_after_close": 1486,
+      "verified_after_restart": 1486,
+      "acknowledged_mismatches": 0,
+      "load_errors": [
+        {
+          "attempt": 1011,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1012,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1013,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1014,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1015,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1016,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1017,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1018,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        }
+      ],
+      "retry_error_counts": {
+        "RESOURCE_EXHAUSTED": 522
+      },
+      "retry_successes": 0,
+      "pressure_memory_bytes": 66748584,
+      "pressure_tenants": [
+        {
+          "name": "memory-3",
+          "memory_bytes": 8318616,
+          "flush_bytes": 0,
+          "maintenance_error": null,
+          "snapshots": 0
+        },
+        {
+          "name": "memory-4",
+          "memory_bytes": 8318620,
+          "flush_bytes": 0,
+          "maintenance_error": null,
+          "snapshots": 0
+        },
+        {
+          "name": "memory-1",
+          "memory_bytes": 8384632,
+          "flush_bytes": 0,
+          "maintenance_error": null,
+          "snapshots": 0
+        },
+        {
+          "name": "memory-0",
+          "memory_bytes": 8384632,
+          "flush_bytes": 0,
+          "maintenance_error": null,
+          "snapshots": 0
+        },
+        {
+          "name": "memory-8",
+          "memory_bytes": 1396,
+          "flush_bytes": 0,
+          "maintenance_error": null,
+          "snapshots": 0
+        },
+        {
+          "name": "memory-6",
+          "memory_bytes": 8318620,
+          "flush_bytes": 0,
+          "maintenance_error": null,
+          "snapshots": 0
+        },
+        {
+          "name": "memory-2",
+          "memory_bytes": 8384636,
+          "flush_bytes": 0,
+          "maintenance_error": null,
+          "snapshots": 0
+        },
+        {
+          "name": "memory-5",
+          "memory_bytes": 8318620,
+          "flush_bytes": 0,
+          "maintenance_error": null,
+          "snapshots": 0
+        },
+        {
+          "name": "memory-7",
+          "memory_bytes": 8318620,
+          "flush_bytes": 0,
+          "maintenance_error": null,
+          "snapshots": 0
+        }
+      ]
+    },
+    "memory-repeat": {
+      "binary_sha256": "3ae4a3d1b6fec42bc37b4045efe79c65b358d2584f77a04fe0e560f9c1f4b451",
+      "options": {
+        "global_memory_bytes": 67108864,
+        "tenant_memory_bytes": 67108864,
+        "memtable_bytes": 16777216,
+        "cache_bytes": 0,
+        "target_sst_bytes": 4194304,
+        "level_base_bytes": 16777216,
+        "l0_stop": 24,
+        "tenant_disk_bytes": 4294967296
+      },
+      "confirmed_after_load": 1012,
+      "sentinel_write_error": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "global memory budget exhausted"
+        }
+      },
+      "retry_observation_s": 20.004103467974346,
+      "health": {
+        "status": "ok"
+      },
+      "manual_flush": [
+        {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "global memory budget exhausted"
+          }
+        },
+        {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "global memory budget exhausted"
+          }
+        },
+        {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "global memory budget exhausted"
+          }
+        },
+        {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "global memory budget exhausted"
+          }
+        },
+        {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "global memory budget exhausted"
+          }
+        },
+        {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "global memory budget exhausted"
+          }
+        },
+        {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "global memory budget exhausted"
+          }
+        },
+        {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "global memory budget exhausted"
+          }
+        }
+      ],
+      "close_results": [
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok"
+      ],
+      "verified_after_close": 1486,
+      "verified_after_restart": 1486,
+      "acknowledged_mismatches": 0,
+      "load_errors": [
+        {
+          "attempt": 1011,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1012,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1013,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1014,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1015,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1016,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1017,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1018,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        }
+      ],
+      "retry_error_counts": {
+        "RESOURCE_EXHAUSTED": 1692
+      },
+      "retry_successes": 0,
+      "pressure_memory_bytes": 66748584,
+      "pressure_tenants": [
+        {
+          "name": "memory-5",
+          "memory_bytes": 8318620,
+          "flush_bytes": 0,
+          "maintenance_error": null,
+          "snapshots": 0
+        },
+        {
+          "name": "memory-0",
+          "memory_bytes": 8384632,
+          "flush_bytes": 0,
+          "maintenance_error": null,
+          "snapshots": 0
+        },
+        {
+          "name": "memory-3",
+          "memory_bytes": 8318616,
+          "flush_bytes": 0,
+          "maintenance_error": null,
+          "snapshots": 0
+        },
+        {
+          "name": "memory-7",
+          "memory_bytes": 8318620,
+          "flush_bytes": 0,
+          "maintenance_error": null,
+          "snapshots": 0
+        },
+        {
+          "name": "memory-4",
+          "memory_bytes": 8318620,
+          "flush_bytes": 0,
+          "maintenance_error": null,
+          "snapshots": 0
+        },
+        {
+          "name": "memory-2",
+          "memory_bytes": 8384636,
+          "flush_bytes": 0,
+          "maintenance_error": null,
+          "snapshots": 0
+        },
+        {
+          "name": "memory-1",
+          "memory_bytes": 8384632,
+          "flush_bytes": 0,
+          "maintenance_error": null,
+          "snapshots": 0
+        },
+        {
+          "name": "memory-6",
+          "memory_bytes": 8318620,
+          "flush_bytes": 0,
+          "maintenance_error": null,
+          "snapshots": 0
+        },
+        {
+          "name": "memory-8",
+          "memory_bytes": 1396,
+          "flush_bytes": 0,
+          "maintenance_error": null,
+          "snapshots": 0
+        }
+      ]
+    },
+    "memory-control": {
+      "binary_sha256": "3ae4a3d1b6fec42bc37b4045efe79c65b358d2584f77a04fe0e560f9c1f4b451",
+      "options": {
+        "global_memory_bytes": 67108864,
+        "tenant_memory_bytes": 67108864,
+        "memtable_bytes": 1048576,
+        "cache_bytes": 0,
+        "target_sst_bytes": 4194304,
+        "level_base_bytes": 16777216,
+        "l0_stop": 24,
+        "tenant_disk_bytes": 4294967296
+      },
+      "confirmed_after_load": 2501,
+      "close_results": [
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok"
+      ],
+      "verified_after_close": 2501,
+      "verified_after_restart": 2501,
+      "acknowledged_mismatches": 0,
+      "load_errors": [],
+      "retry_error_counts": {},
+      "retry_successes": 0,
+      "pressure_memory_bytes": 6298892,
+      "pressure_tenants": [
+        {
+          "name": "memory-8",
+          "memory_bytes": 1396,
+          "flush_bytes": 0,
+          "maintenance_error": null,
+          "snapshots": 0
+        },
+        {
+          "name": "memory-6",
+          "memory_bytes": 729397,
+          "flush_bytes": 96113,
+          "maintenance_error": null,
+          "snapshots": 0
+        },
+        {
+          "name": "memory-2",
+          "memory_bytes": 465314,
+          "flush_bytes": 97699,
+          "maintenance_error": null,
+          "snapshots": 0
+        },
+        {
+          "name": "memory-4",
+          "memory_bytes": 465316,
+          "flush_bytes": 97380,
+          "maintenance_error": null,
+          "snapshots": 0
+        },
+        {
+          "name": "memory-0",
+          "memory_bytes": 1059493,
+          "flush_bytes": 94840,
+          "maintenance_error": null,
+          "snapshots": 0
+        },
+        {
+          "name": "memory-7",
+          "memory_bytes": 861437,
+          "flush_bytes": 95524,
+          "maintenance_error": null,
+          "snapshots": 0
+        },
+        {
+          "name": "memory-3",
+          "memory_bytes": 927457,
+          "flush_bytes": 95535,
+          "maintenance_error": null,
+          "snapshots": 0
+        },
+        {
+          "name": "memory-5",
+          "memory_bytes": 729397,
+          "flush_bytes": 96067,
+          "maintenance_error": null,
+          "snapshots": 0
+        },
+        {
+          "name": "memory-1",
+          "memory_bytes": 1059493,
+          "flush_bytes": 94897,
+          "maintenance_error": null,
+          "snapshots": 0
+        }
+      ]
+    },
+    "mixed": {
+      "result": "passed",
+      "tenants": [
+        "a9488d1f-2293-4f75-8192-9d10a9269ad6",
+        "3ebff9ef-af31-4db8-9132-e6bd2dd27f93"
+      ],
+      "before_restart": [
+        {
+          "node": 0,
+          "tenant": "a9488d1f-2293-4f75-8192-9d10a9269ad6",
+          "documents": 5000,
+          "sha256": "87409959d2341f8d12dde1f7cbfffc0a765f10b4b666c3518b8bb267dd7d018a",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 0,
+          "tenant": "3ebff9ef-af31-4db8-9132-e6bd2dd27f93",
+          "documents": 200,
+          "sha256": "66b05a1ac3fddc4f39ab94cf2fcb32cde7f0d9960569d797bccbfb010f297024",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 1,
+          "tenant": "a9488d1f-2293-4f75-8192-9d10a9269ad6",
+          "documents": 5000,
+          "sha256": "87409959d2341f8d12dde1f7cbfffc0a765f10b4b666c3518b8bb267dd7d018a",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 1,
+          "tenant": "3ebff9ef-af31-4db8-9132-e6bd2dd27f93",
+          "documents": 200,
+          "sha256": "66b05a1ac3fddc4f39ab94cf2fcb32cde7f0d9960569d797bccbfb010f297024",
+          "acknowledged_mismatches": 0
+        }
+      ],
+      "interrupted_backup": {
+        "backup": "a212154b-e89c-47e2-90c5-da9eca726794",
+        "checkpoint_seq": null,
+        "created_ms": 1794109800614,
+        "error": null,
+        "id": "9eef52a6-91e9-48fa-8c45-75c0eacf66e7",
+        "operation": {
+          "operation": "create"
+        },
+        "processed_files": 0,
+        "result": null,
+        "reused_bytes": 0,
+        "state": "queued",
+        "tenant": "a9488d1f-2293-4f75-8192-9d10a9269ad6",
+        "updated_ms": 1794109800614,
+        "uploaded_bytes": 0
+      },
+      "restart_to_write_and_replica_caught_up_ms": 99.46897201007232,
+      "after_restart": [
+        {
+          "node": 0,
+          "tenant": "a9488d1f-2293-4f75-8192-9d10a9269ad6",
+          "documents": 5000,
+          "sha256": "87409959d2341f8d12dde1f7cbfffc0a765f10b4b666c3518b8bb267dd7d018a",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 0,
+          "tenant": "3ebff9ef-af31-4db8-9132-e6bd2dd27f93",
+          "documents": 200,
+          "sha256": "66b05a1ac3fddc4f39ab94cf2fcb32cde7f0d9960569d797bccbfb010f297024",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 1,
+          "tenant": "a9488d1f-2293-4f75-8192-9d10a9269ad6",
+          "documents": 5000,
+          "sha256": "87409959d2341f8d12dde1f7cbfffc0a765f10b4b666c3518b8bb267dd7d018a",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 1,
+          "tenant": "3ebff9ef-af31-4db8-9132-e6bd2dd27f93",
+          "documents": 200,
+          "sha256": "66b05a1ac3fddc4f39ab94cf2fcb32cde7f0d9960569d797bccbfb010f297024",
+          "acknowledged_mismatches": 0
+        }
+      ],
+      "final_validation": [
+        {
+          "node": 0,
+          "tenant": "a9488d1f-2293-4f75-8192-9d10a9269ad6",
+          "documents": 5000,
+          "sha256": "535b1f55d372213db142ecab962098efc98303af504adbe8a3f4e3ed93518901",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 0,
+          "tenant": "3ebff9ef-af31-4db8-9132-e6bd2dd27f93",
+          "documents": 200,
+          "sha256": "a3064ee8ffd57fbdbcc2a689b92c356bca8ce0bb110a7d7cd9c4428395ab9380",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 1,
+          "tenant": "a9488d1f-2293-4f75-8192-9d10a9269ad6",
+          "documents": 5000,
+          "sha256": "535b1f55d372213db142ecab962098efc98303af504adbe8a3f4e3ed93518901",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 1,
+          "tenant": "3ebff9ef-af31-4db8-9132-e6bd2dd27f93",
+          "documents": 200,
+          "sha256": "a3064ee8ffd57fbdbcc2a689b92c356bca8ce0bb110a7d7cd9c4428395ab9380",
+          "acknowledged_mismatches": 0
+        }
+      ],
+      "gc_drained": {
+        "expiration_lag_ms": 0,
+        "gc": {
+          "completed_rounds": 753,
+          "history_sweep_active": false,
+          "knowledge_floor": 0,
+          "migration_complete": true,
+          "reclaimed_records": 4710,
+          "watermark_ms": 1794109846577
+        },
+        "next_expiration_ms": null,
+        "physical_reclamation": "as snapshots release and compaction completes",
+        "policy": {
+          "activated_seq": 865,
+          "legacy_expires_at_ms": 1794109750024,
+          "retention_seconds": 20
+        }
+      },
+      "publication_gc": {
+        "published_versions": 19,
+        "current_readable": true,
+        "expired_version_rejected": true,
+        "remaining_collections": [
+          {
+            "id": "b6aa4e14-a126-4bb9-be87-b8960cb49213",
+            "name": "assets"
+          },
+          {
+            "id": "56d3bc87-34a0-4f28-911d-716f40683065",
+            "name": "probes"
+          },
+          {
+            "id": "566a32e7-a31f-4c9b-901b-c8f1f4f07151",
+            "name": "reference_recovery_4"
+          }
+        ]
+      },
+      "restored_backup": {
+        "node": 2,
+        "tenant": "a9488d1f-2293-4f75-8192-9d10a9269ad6",
+        "documents": 5000,
+        "sha256": "535b1f55d372213db142ecab962098efc98303af504adbe8a3f4e3ed93518901",
+        "acknowledged_mismatches": 0
+      },
+      "backup_checkpoint": {
+        "backup": "a4612122-3bcf-4ea5-a486-b2dacb298133",
+        "checkpoint_seq": 5528,
+        "created_ms": 1794109847092,
+        "error": null,
+        "id": "d358d8c2-1785-4324-9e8c-96ad6cea204e",
+        "operation": {
+          "operation": "create"
+        },
+        "processed_files": 82,
+        "result": {
+          "backup": "a4612122-3bcf-4ea5-a486-b2dacb298133",
+          "checkpoint_ms": 1794109847303,
+          "checkpoint_seq": 5528,
+          "files": 82,
+          "generation": "ab0781ff-6f7c-403c-bb2c-41aed625c111",
+          "tenant": "a9488d1f-2293-4f75-8192-9d10a9269ad6",
+          "total_bytes": 38285257
+        },
+        "reused_bytes": 18909601,
+        "state": "completed",
+        "tenant": "a9488d1f-2293-4f75-8192-9d10a9269ad6",
+        "updated_ms": 1794109852960,
+        "uploaded_bytes": 19375656
+      },
+      "admission_retries_total": {
+        "BUSY": 216
+      },
+      "phases": [
+        {
+          "phase": "baseline",
+          "requested_seconds": 20,
+          "actual_seconds": 20.018891420972068,
+          "operations": {
+            "get": {
+              "calls": 3997,
+              "calls_per_second": 199.836,
+              "p50_ms": 0.289,
+              "p95_ms": 0.695,
+              "p99_ms": 1.151,
+              "errors": {}
+            },
+            "light_writer": {
+              "calls": 398,
+              "calls_per_second": 19.898,
+              "p50_ms": 5.085,
+              "p95_ms": 9.969,
+              "p99_ms": 30.724,
+              "errors": {}
+            },
+            "lookup_20": {
+              "calls": 1984,
+              "calls_per_second": 99.189,
+              "p50_ms": 0.383,
+              "p95_ms": 0.851,
+              "p99_ms": 1.417,
+              "errors": {}
+            },
+            "index_query_20": {
+              "calls": 1000,
+              "calls_per_second": 49.992,
+              "p50_ms": 0.387,
+              "p95_ms": 0.871,
+              "p99_ms": 1.666,
+              "errors": {}
+            },
+            "heavy_writer": {
+              "calls": 789,
+              "calls_per_second": 39.438,
+              "p50_ms": 6.514,
+              "p95_ms": 11.234,
+              "p99_ms": 20.626,
+              "errors": {}
+            }
+          },
+          "completed_verified_backups": 0,
+          "admission_retries": {},
+          "overlap_sample_intervals": 0
+        },
+        {
+          "phase": "combined",
+          "requested_seconds": 70,
+          "actual_seconds": 70.05720672098687,
+          "operations": {
+            "lookup_20": {
+              "calls": 7000,
+              "calls_per_second": 99.99,
+              "p50_ms": 0.412,
+              "p95_ms": 0.99,
+              "p99_ms": 1.533,
+              "errors": {}
+            },
+            "light_writer": {
+              "calls": 1401,
+              "calls_per_second": 20.012,
+              "p50_ms": 5.23,
+              "p95_ms": 9.263,
+              "p99_ms": 13.92,
+              "errors": {}
+            },
+            "index_query_20": {
+              "calls": 3501,
+              "calls_per_second": 50.007,
+              "p50_ms": 0.448,
+              "p95_ms": 1.088,
+              "p99_ms": 1.615,
+              "errors": {}
+            },
+            "get": {
+              "calls": 13994,
+              "calls_per_second": 199.879,
+              "p50_ms": 0.33,
+              "p95_ms": 0.829,
+              "p99_ms": 1.353,
+              "errors": {}
+            },
+            "heavy_writer": {
+              "calls": 2796,
+              "calls_per_second": 39.933,
+              "p50_ms": 6.835,
+              "p95_ms": 10.85,
+              "p99_ms": 17.112,
+              "errors": {}
+            }
+          },
+          "completed_verified_backups": 4,
+          "admission_retries": {},
+          "overlap_sample_intervals": 5
+        },
+        {
+          "phase": "recovery",
+          "requested_seconds": 25,
+          "actual_seconds": 25.10124274698319,
+          "operations": {
+            "lookup_20": {
+              "calls": 2501,
+              "calls_per_second": 100.027,
+              "p50_ms": 0.405,
+              "p95_ms": 0.811,
+              "p99_ms": 1.242,
+              "errors": {}
+            },
+            "get": {
+              "calls": 5000,
+              "calls_per_second": 199.971,
+              "p50_ms": 0.306,
+              "p95_ms": 0.662,
+              "p99_ms": 0.976,
+              "errors": {}
+            },
+            "light_writer": {
+              "calls": 500,
+              "calls_per_second": 19.997,
+              "p50_ms": 5.177,
+              "p95_ms": 9.276,
+              "p99_ms": 15.647,
+              "errors": {}
+            },
+            "index_query_20": {
+              "calls": 1251,
+              "calls_per_second": 50.03,
+              "p50_ms": 0.416,
+              "p95_ms": 0.787,
+              "p99_ms": 1.275,
+              "errors": {}
+            },
+            "heavy_writer": {
+              "calls": 1000,
+              "calls_per_second": 39.988,
+              "p50_ms": 6.599,
+              "p95_ms": 10.144,
+              "p99_ms": 14.8,
+              "errors": {}
+            }
+          },
+          "completed_verified_backups": 1,
+          "admission_retries": {
+            "BUSY": 216
+          },
+          "overlap_sample_intervals": 3
+        }
+      ],
+      "timing_caveat": "Other probes shared this VM during phases; timing is descriptive, not an isolated before/after benchmark."
+    },
+    "faults": {
+      "result": "passed",
+      "cases": [
+        {
+          "case": "enospc",
+          "result": "passed",
+          "tenant": "a3cea3e7-24e7-49ad-954e-ca16fdc05681",
+          "before": {
+            "node": 0,
+            "tenant": "a3cea3e7-24e7-49ad-954e-ca16fdc05681",
+            "documents": 2000,
+            "sha256": "982e513df21fb5971d7ab40a97768152f222e52bf1b9acb919aa0e32c4adf612",
+            "acknowledged_mismatches": 0
+          },
+          "disk_full": {
+            "available_before": 220516352,
+            "available_after": 0,
+            "filler_bytes": 220512256,
+            "mount": "TARGET                                              SOURCE     FSTYPE OPTIONS\n/var/tmp/idkv-extreme-faults-20261108/enospc/volume /dev/loop1 ext4   rw,relatime\n"
+          },
+          "fault_response": {
+            "status": 500,
+            "body": {
+              "error": {
+                "code": "COMMIT_UNKNOWN",
+                "message": "IO_ERROR: No space left on device (os error 28)"
+              }
+            }
+          },
+          "poisoned_response": {
+            "status": 429,
+            "body": {
+              "error": {
+                "code": "RESOURCE_EXHAUSTED",
+                "message": "WAL recovery needs free disk space; read-only until closed and reopened"
+              }
+            }
+          },
+          "uncertain_batch_visible_before_retry": 0,
+          "restart_to_safe_retry_ms": 42.251903971191496,
+          "after": {
+            "node": 0,
+            "tenant": "a3cea3e7-24e7-49ad-954e-ca16fdc05681",
+            "documents": 2008,
+            "sha256": "1aaa210c39c8e38123dcf85fa7fa56209fb46f224665b75cbecb6c405006eed1",
+            "acknowledged_mismatches": 0
+          },
+          "failure_through_validation_ms": 115.06167997140437,
+          "confirmed_documents_preserved": 2000,
+          "confirmed_documents_missing": 0
+        },
+        {
+          "case": "wal-write-eio",
+          "result": "passed",
+          "tenant": "a5cf6f63-f231-49f4-a637-9403e1845b31",
+          "before": {
+            "node": 0,
+            "tenant": "a5cf6f63-f231-49f4-a637-9403e1845b31",
+            "documents": 2000,
+            "sha256": "982e513df21fb5971d7ab40a97768152f222e52bf1b9acb919aa0e32c4adf612",
+            "acknowledged_mismatches": 0
+          },
+          "fault_response": {
+            "status": 500,
+            "body": {
+              "error": {
+                "code": "COMMIT_UNKNOWN",
+                "message": "IO_ERROR: Input/output error (os error 5)"
+              }
+            }
+          },
+          "poisoned_response": {
+            "status": 500,
+            "body": {
+              "error": {
+                "code": "IO_ERROR",
+                "message": "Input/output error (os error 5)"
+              }
+            }
+          },
+          "uncertain_batch_visible_before_retry": 0,
+          "restart_to_safe_retry_ms": 34.59467500215396,
+          "after": {
+            "node": 0,
+            "tenant": "a5cf6f63-f231-49f4-a637-9403e1845b31",
+            "documents": 2008,
+            "sha256": "1aaa210c39c8e38123dcf85fa7fa56209fb46f224665b75cbecb6c405006eed1",
+            "acknowledged_mismatches": 0
+          },
+          "failure_through_validation_ms": 106.01969703566283,
+          "confirmed_documents_preserved": 2000,
+          "confirmed_documents_missing": 0
+        },
+        {
+          "case": "wal-sync-eio",
+          "result": "passed",
+          "tenant": "c2f22219-79db-43ac-84b6-d9f52ace4560",
+          "before": {
+            "node": 0,
+            "tenant": "c2f22219-79db-43ac-84b6-d9f52ace4560",
+            "documents": 2000,
+            "sha256": "982e513df21fb5971d7ab40a97768152f222e52bf1b9acb919aa0e32c4adf612",
+            "acknowledged_mismatches": 0
+          },
+          "fault_response": {
+            "status": 500,
+            "body": {
+              "error": {
+                "code": "COMMIT_UNKNOWN",
+                "message": "IO_ERROR: Input/output error (os error 5)"
+              }
+            }
+          },
+          "poisoned_response": {
+            "status": 500,
+            "body": {
+              "error": {
+                "code": "IO_ERROR",
+                "message": "Input/output error (os error 5)"
+              }
+            }
+          },
+          "uncertain_batch_visible_before_retry": 8,
+          "restart_to_safe_retry_ms": 31.406667025294155,
+          "after": {
+            "node": 0,
+            "tenant": "c2f22219-79db-43ac-84b6-d9f52ace4560",
+            "documents": 2008,
+            "sha256": "1aaa210c39c8e38123dcf85fa7fa56209fb46f224665b75cbecb6c405006eed1",
+            "acknowledged_mismatches": 0
+          },
+          "failure_through_validation_ms": 102.6838130201213,
+          "confirmed_documents_preserved": 2000,
+          "confirmed_documents_missing": 0
+        }
+      ]
+    },
+    "full-open": {
+      "result": "passed",
+      "binary_sha256": "3ae4a3d1b6fec42bc37b4045efe79c65b358d2584f77a04fe0e560f9c1f4b451",
+      "options": {
+        "global_memory_bytes": 536870912,
+        "tenant_memory_bytes": 134217728,
+        "memtable_bytes": 16777216,
+        "cache_bytes": 8388608,
+        "target_sst_bytes": 4194304,
+        "level_base_bytes": 16777216,
+        "l0_stop": 24,
+        "tenant_disk_bytes": 4294967296
+      },
+      "full_disk": true,
+      "wal_bytes": 5611769,
+      "disk_full": {
+        "available_before": 217690112,
+        "available_after": 0,
+        "filler_bytes": 217686016,
+        "mount": "TARGET                                          SOURCE     FSTYPE OPTIONS\n/var/tmp/idkv-extreme-full-open-20261108/volume /dev/loop0 ext4   rw,relatime\n"
+      },
+      "clean_full_verified": {
+        "node": 0,
+        "tenant": "62303ef3-6c05-4bd3-aedd-fbcd5a97760d",
+        "documents": 1200,
+        "sha256": "66ffdb825f34b47c7008cdf4e16958d6c8fe4c801290d0e686f8c91378d3a848",
+        "acknowledged_mismatches": 0
+      },
+      "unclean_full_verified": {
+        "node": 0,
+        "tenant": "01ada95e-9999-4e68-a0db-6b717bf6749b",
+        "documents": 1208,
+        "sha256": "065c6a0b8b3c01732708c4cb4002f4c1321c48a8d80861455d15109213380df9",
+        "acknowledged_mismatches": 0
+      },
+      "read_only_status": {
+        "failure": null,
+        "installing": false,
+        "lifecycle": {
+          "state": "active"
+        },
+        "open": true,
+        "stats": {
+          "commit_seq": 23,
+          "disk_bytes": 5650025,
+          "dsl_cache": {
+            "entries": 0,
+            "hits": 0,
+            "misses": 0,
+            "reserved_bytes": 0
+          },
+          "io": {
+            "commits": 0,
+            "compaction_read_bytes": 0,
+            "compaction_write_bytes": 0,
+            "document_bytes": 0,
+            "flush_bytes": 0,
+            "fsyncs": 0,
+            "scheduler": {
+              "cancelled_jobs": 0,
+              "completed_jobs": 0,
+              "queue_wait_ns": 0,
+              "queued_jobs": 0
+            },
+            "wal_bytes": 0,
+            "write_lock_wait_ns": 0
+          },
+          "levels": {},
+          "maintenance_error": null,
+          "memory_bytes": 11866578,
+          "recovery_read_only": true,
+          "snapshots": 0
+        },
+        "tenant": {
+          "disk_bytes": 4294967296,
+          "generation": "355e3eae-0ee6-4027-a132-5fde20f98a68",
+          "history": "7226812b-13a6-42b0-ba55-d0603921dc79",
+          "id": "01ada95e-9999-4e68-a0db-6b717bf6749b",
+          "memory_bytes": 134217728,
+          "name": "unclean-open"
+        }
+      },
+      "write_rejected": "RESOURCE_EXHAUSTED",
+      "fence_rejected": "RESOURCE_EXHAUSTED",
+      "read_only_repeated_write_bytes": 0,
+      "after_space_freed": {
+        "node": 0,
+        "tenant": "01ada95e-9999-4e68-a0db-6b717bf6749b",
+        "documents": 1208,
+        "sha256": "065c6a0b8b3c01732708c4cb4002f4c1321c48a8d80861455d15109213380df9",
+        "acknowledged_mismatches": 0
+      },
+      "after_retry": {
+        "node": 0,
+        "tenant": "01ada95e-9999-4e68-a0db-6b717bf6749b",
+        "documents": 1216,
+        "sha256": "01755d8d21a348e549457c1419faa1b6b2de6946a3924784c8d01b835a4089ed",
+        "acknowledged_mismatches": 0
+      }
+    },
+    "replica-churn": {
+      "binary_sha256": "3ae4a3d1b6fec42bc37b4045efe79c65b358d2584f77a04fe0e560f9c1f4b451",
+      "rounds": [
+        {
+          "round": 1,
+          "old_position": 12,
+          "missing_wal_confirmed": true,
+          "restart_to_caught_up_s": 0.13550670898985118,
+          "reinitializations": 1,
+          "verified": [
+            {
+              "node": 0,
+              "tenant": "a76df1b9-a47e-45b7-b296-407a0f8d139c",
+              "documents": 500,
+              "sha256": "33738d4538c13e5fd5ef00679f3c9edd54c1ff4b4dcee8ff8421b433890f994e",
+              "acknowledged_mismatches": 0
+            },
+            {
+              "node": 0,
+              "tenant": "db05f02c-66da-4428-859b-9c6e2524c03f",
+              "documents": 20,
+              "sha256": "e2c8097766ae0775be2a700192847d7b1c07d65ac9abd89e8305029d166aa6dc",
+              "acknowledged_mismatches": 0
+            },
+            {
+              "node": 1,
+              "tenant": "a76df1b9-a47e-45b7-b296-407a0f8d139c",
+              "documents": 500,
+              "sha256": "33738d4538c13e5fd5ef00679f3c9edd54c1ff4b4dcee8ff8421b433890f994e",
+              "acknowledged_mismatches": 0
+            },
+            {
+              "node": 1,
+              "tenant": "db05f02c-66da-4428-859b-9c6e2524c03f",
+              "documents": 20,
+              "sha256": "e2c8097766ae0775be2a700192847d7b1c07d65ac9abd89e8305029d166aa6dc",
+              "acknowledged_mismatches": 0
+            }
+          ]
+        },
+        {
+          "round": 2,
+          "old_position": 37,
+          "missing_wal_confirmed": true,
+          "restart_to_caught_up_s": 0.15006537397857755,
+          "reinitializations": 1,
+          "verified": [
+            {
+              "node": 0,
+              "tenant": "a76df1b9-a47e-45b7-b296-407a0f8d139c",
+              "documents": 500,
+              "sha256": "c33f529e66d5f2bb7f1a13978ee2d2b8f893eb1231e93d676934d752a2432840",
+              "acknowledged_mismatches": 0
+            },
+            {
+              "node": 0,
+              "tenant": "db05f02c-66da-4428-859b-9c6e2524c03f",
+              "documents": 20,
+              "sha256": "7379c1e4e2c8b4142f9cb6f347100194091715a47ab206f1e014d85b774fffaa",
+              "acknowledged_mismatches": 0
+            },
+            {
+              "node": 1,
+              "tenant": "a76df1b9-a47e-45b7-b296-407a0f8d139c",
+              "documents": 500,
+              "sha256": "c33f529e66d5f2bb7f1a13978ee2d2b8f893eb1231e93d676934d752a2432840",
+              "acknowledged_mismatches": 0
+            },
+            {
+              "node": 1,
+              "tenant": "db05f02c-66da-4428-859b-9c6e2524c03f",
+              "documents": 20,
+              "sha256": "7379c1e4e2c8b4142f9cb6f347100194091715a47ab206f1e014d85b774fffaa",
+              "acknowledged_mismatches": 0
+            }
+          ]
+        },
+        {
+          "round": 3,
+          "old_position": 62,
+          "missing_wal_confirmed": true,
+          "restart_to_caught_up_s": 0.18586868100101128,
+          "reinitializations": 1,
+          "verified": [
+            {
+              "node": 0,
+              "tenant": "a76df1b9-a47e-45b7-b296-407a0f8d139c",
+              "documents": 500,
+              "sha256": "8ee06209def294a878d5a8dd7fcf508aea8ecf149a64a3d108e9b5aef785fef5",
+              "acknowledged_mismatches": 0
+            },
+            {
+              "node": 0,
+              "tenant": "db05f02c-66da-4428-859b-9c6e2524c03f",
+              "documents": 20,
+              "sha256": "53ea974251ec996cae8b5f8b4eb84e043d8a17930fed0576d5d906722df15527",
+              "acknowledged_mismatches": 0
+            },
+            {
+              "node": 1,
+              "tenant": "a76df1b9-a47e-45b7-b296-407a0f8d139c",
+              "documents": 500,
+              "sha256": "8ee06209def294a878d5a8dd7fcf508aea8ecf149a64a3d108e9b5aef785fef5",
+              "acknowledged_mismatches": 0
+            },
+            {
+              "node": 1,
+              "tenant": "db05f02c-66da-4428-859b-9c6e2524c03f",
+              "documents": 20,
+              "sha256": "53ea974251ec996cae8b5f8b4eb84e043d8a17930fed0576d5d906722df15527",
+              "acknowledged_mismatches": 0
+            }
+          ]
+        }
+      ],
+      "after_switchover": [
+        {
+          "node": 0,
+          "tenant": "a76df1b9-a47e-45b7-b296-407a0f8d139c",
+          "documents": 500,
+          "sha256": "8ee06209def294a878d5a8dd7fcf508aea8ecf149a64a3d108e9b5aef785fef5",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 0,
+          "tenant": "db05f02c-66da-4428-859b-9c6e2524c03f",
+          "documents": 20,
+          "sha256": "53ea974251ec996cae8b5f8b4eb84e043d8a17930fed0576d5d906722df15527",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 1,
+          "tenant": "a76df1b9-a47e-45b7-b296-407a0f8d139c",
+          "documents": 500,
+          "sha256": "8ee06209def294a878d5a8dd7fcf508aea8ecf149a64a3d108e9b5aef785fef5",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 1,
+          "tenant": "db05f02c-66da-4428-859b-9c6e2524c03f",
+          "documents": 20,
+          "sha256": "53ea974251ec996cae8b5f8b4eb84e043d8a17930fed0576d5d906722df15527",
+          "acknowledged_mismatches": 0
+        }
+      ],
+      "after_final_restart": [
+        {
+          "node": 0,
+          "tenant": "a76df1b9-a47e-45b7-b296-407a0f8d139c",
+          "documents": 500,
+          "sha256": "8ee06209def294a878d5a8dd7fcf508aea8ecf149a64a3d108e9b5aef785fef5",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 0,
+          "tenant": "db05f02c-66da-4428-859b-9c6e2524c03f",
+          "documents": 20,
+          "sha256": "53ea974251ec996cae8b5f8b4eb84e043d8a17930fed0576d5d906722df15527",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 1,
+          "tenant": "a76df1b9-a47e-45b7-b296-407a0f8d139c",
+          "documents": 500,
+          "sha256": "8ee06209def294a878d5a8dd7fcf508aea8ecf149a64a3d108e9b5aef785fef5",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 1,
+          "tenant": "db05f02c-66da-4428-859b-9c6e2524c03f",
+          "documents": 20,
+          "sha256": "53ea974251ec996cae8b5f8b4eb84e043d8a17930fed0576d5d906722df15527",
+          "acknowledged_mismatches": 0
+        }
+      ],
+      "result": "passed"
+    },
+    "connections-sampled": {
+      "binary_sha256": "3ae4a3d1b6fec42bc37b4045efe79c65b358d2584f77a04fe0e560f9c1f4b451",
+      "cases": [
+        {
+          "case": "idle",
+          "connections": 16,
+          "overflow_close_ms": 0.0024170149117708206,
+          "health_after_expiry": true
+        },
+        {
+          "case": "partial-header",
+          "connections": 16,
+          "overflow_close_ms": 0.010957999620586634,
+          "health_after_expiry": true
+        },
+        {
+          "case": "keep-alive",
+          "connections": 16,
+          "overflow_close_ms": 0.1455420278944075,
+          "health_after_expiry": true
+        },
+        {
+          "case": "stalled-response-readers",
+          "connections": 2,
+          "statuses": [
+            "HTTP/1.1 200 OK",
+            "HTTP/1.1 200 OK"
+          ],
+          "memory_before": 8068286,
+          "memory_peak": 113213349,
+          "memory_after_timeout": 8068286
+        }
+      ],
+      "before": {
+        "node": 0,
+        "tenant": "5cc3323f-4647-427f-bdce-1b69c2e32a7c",
+        "documents": 400,
+        "sha256": "3d164d56ddb0e0089be8e86528bce98e1ae40c84a87f24741b504c1094bdefb2",
+        "acknowledged_mismatches": 0
+      },
+      "response_probe": {
+        "statuses": [
+          "HTTP/1.1 200 OK",
+          "HTTP/1.1 200 OK"
+        ],
+        "memory_before": 8068286,
+        "memory_peak": 113213349,
+        "memory_after_timeout": 8068286,
+        "samples": 169
+      },
+      "after": {
+        "node": 0,
+        "tenant": "5cc3323f-4647-427f-bdce-1b69c2e32a7c",
+        "documents": 400,
+        "sha256": "3d164d56ddb0e0089be8e86528bce98e1ae40c84a87f24741b504c1094bdefb2",
+        "acknowledged_mismatches": 0
+      },
+      "after_restart": {
+        "node": 0,
+        "tenant": "5cc3323f-4647-427f-bdce-1b69c2e32a7c",
+        "documents": 400,
+        "sha256": "3d164d56ddb0e0089be8e86528bce98e1ae40c84a87f24741b504c1094bdefb2",
+        "acknowledged_mismatches": 0
+      },
+      "result": "passed"
+    }
+  },
+  "native_artifacts": [
+    {
+      "path": "/var/tmp/idkv-extreme-memory-20261108/acknowledgements.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/var/tmp/idkv-extreme-memory-20261108/confirmed.jsonl",
+      "bytes": 141493,
+      "sha256": "96cf50e1ba75a63e176bc74d7a63adf152b82d32a054cf618440d49346c27b28"
+    },
+    {
+      "path": "/var/tmp/idkv-extreme-memory-20261108/result.json",
+      "bytes": 29235,
+      "sha256": "b65e19ecf1f509c63f1bb5001024b69ec2eeab23ed6409abd311a265384111f1"
+    },
+    {
+      "path": "/var/tmp/idkv-extreme-memory-repeat-20261108/acknowledgements.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/var/tmp/idkv-extreme-memory-repeat-20261108/confirmed.jsonl",
+      "bytes": 141493,
+      "sha256": "bc2e1752b4fc939294806f66c830f4f3b55769eb87e72ae79e36f9657b4d0a25"
+    },
+    {
+      "path": "/var/tmp/idkv-extreme-memory-repeat-20261108/result.json",
+      "bytes": 59655,
+      "sha256": "bac4edf4cf125078d5fee32853cd55030a7229f1fa46b470424c7809640fdd6b"
+    },
+    {
+      "path": "/var/tmp/idkv-extreme-memory-control-20261108/acknowledgements.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/var/tmp/idkv-extreme-memory-control-20261108/confirmed.jsonl",
+      "bytes": 240636,
+      "sha256": "15c68035e66867e51d3284b35a36886073b9afb2371a51d60fd383b7597c1863"
+    },
+    {
+      "path": "/var/tmp/idkv-extreme-memory-control-20261108/result.json",
+      "bytes": 13428,
+      "sha256": "c5e75679001a675acc0afd2567289cfe5b7d21182bb6a2e418806cd6b6671453"
+    },
+    {
+      "path": "/var/tmp/idkv-extreme-mixed-20261108/acknowledgements.jsonl",
+      "bytes": 3223353,
+      "sha256": "56109e39bea21598270eff8189dc2cdfb88b679a0f6a12a0bed837946510ee3f"
+    },
+    {
+      "path": "/var/tmp/idkv-extreme-mixed-20261108/result.json",
+      "bytes": 63857,
+      "sha256": "c8c66e4fad06c5075f42ec9ed15dc408876a33c8f4ebde825a913add4490be0d"
+    },
+    {
+      "path": "/var/tmp/idkv-extreme-faults-20261108/enospc/acknowledgements.jsonl",
+      "bytes": 18625,
+      "sha256": "cdc915ed629823c9dd293366806de1744760a5a3e65eb3e8dfb261973bca09d1"
+    },
+    {
+      "path": "/var/tmp/idkv-extreme-faults-20261108/enospc/result.json",
+      "bytes": 1486,
+      "sha256": "d566fa6afbfd81672cd60ee021c304ab59b95aad720b3ab8eae3fecdc8ae752f"
+    },
+    {
+      "path": "/var/tmp/idkv-extreme-faults-20261108/result.json",
+      "bytes": 4346,
+      "sha256": "f6c25bb8d237751d5480e0ab734055fc5722b4751d470ada253c3e320434a360"
+    },
+    {
+      "path": "/var/tmp/idkv-extreme-faults-20261108/wal-sync-eio/acknowledgements.jsonl",
+      "bytes": 18622,
+      "sha256": "65e56daade38cce9b9e1ab841488a1a10b5aab7012328404e90bf7b00ab8f7f1"
+    },
+    {
+      "path": "/var/tmp/idkv-extreme-faults-20261108/wal-sync-eio/result.json",
+      "bytes": 1143,
+      "sha256": "cdd7707f7123b55d169288590997c6ed79fb6b4f9bd4d2aec116abe32fe1d132"
+    },
+    {
+      "path": "/var/tmp/idkv-extreme-faults-20261108/wal-write-eio/acknowledgements.jsonl",
+      "bytes": 18621,
+      "sha256": "ac74c7037191579fb0438b6b3727e5894a4a30852c14db850c0519dfba6bb4cb"
+    },
+    {
+      "path": "/var/tmp/idkv-extreme-faults-20261108/wal-write-eio/result.json",
+      "bytes": 1144,
+      "sha256": "0a6d1abf97945db708903800fa4edb89c46bee3314b15338c7d4861286136038"
+    },
+    {
+      "path": "/var/tmp/idkv-extreme-full-open-20261108/acknowledgements.jsonl",
+      "bytes": 21780,
+      "sha256": "b226026a74efa38a921e06206717cd41559ae353b4cdccee1727a1c8dcd5bf02"
+    },
+    {
+      "path": "/var/tmp/idkv-extreme-full-open-20261108/result.json",
+      "bytes": 2956,
+      "sha256": "23ed9f8377d48f72016f6ee17304ed72941b650e08f212d0e77811051468c066"
+    },
+    {
+      "path": "/var/tmp/idkv-extreme-replica-churn-20261108/acknowledgements.jsonl",
+      "bytes": 41126,
+      "sha256": "bfac73faceaf31975f6eb3565a8bb76a42221f3fcf9382ff64bf7f51f081f98a"
+    },
+    {
+      "path": "/var/tmp/idkv-extreme-replica-churn-20261108/result.json",
+      "bytes": 5707,
+      "sha256": "73083bcb679de61f78e42d1ddb22bf9e4e4bc2cefe47c43f4f732b7987accb44"
+    },
+    {
+      "path": "/var/tmp/idkv-extreme-connections-sampled-20261108/acknowledgements.jsonl",
+      "bytes": 3350,
+      "sha256": "3b70d28da9df4cde10e3492e423c39f93234fa209d6682680ab35ffce3542288"
+    },
+    {
+      "path": "/var/tmp/idkv-extreme-connections-sampled-20261108/result.json",
+      "bytes": 1734,
+      "sha256": "517f180b751e74e98e4c4246f4243e3cf466f9abcacb33f042d29f5099b7dc7f"
+    }
+  ],
+  "restore_binary": {
+    "path": "/var/tmp/idkv-p01-target-20261108/release/tenant-kv-restore",
+    "sha256": "ca747a9907a5c71aa39e4a953d97e8784975ccc5ab0156ece7eb4bb0e524a627"
+  },
+  "recovery_suite": {
+    "passed": 15,
+    "failed": 0,
+    "seconds": 16.9,
+    "log": "recovery-tests.log"
+  },
+  "connection_fixture_iterations": {
+    "connections-inconclusive.log": "Initial one-shot sampling did not observe a pressure interval.",
+    "connections.log": "Larger responses still sampled only after waiting for all headers; peak not observed.",
+    "connections-sampled.log": "Concurrent 10 ms sampling captured peak and reclamation; two successful large responses, all checks passed."
+  }
+}

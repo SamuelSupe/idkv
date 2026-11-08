@@ -1,0 +1,44 @@
+{
+  "binary_sha256": "ee24b0491cde15c3c339715a73842314e1a802c99dbf5fa0ac5500d6a4ae826a",
+  "options": {
+    "global_memory_bytes": 67108864,
+    "tenant_memory_bytes": 67108864,
+    "memtable_bytes": 16777216,
+    "cache_bytes": 0,
+    "target_sst_bytes": 4194304,
+    "level_base_bytes": 16777216,
+    "l0_stop": 24,
+    "tenant_disk_bytes": 4294967296
+  },
+  "elapsed_s": 31.27413673500996,
+  "operations": {
+    "heavy": {
+      "calls": 2500,
+      "calls_per_second": 79.938,
+      "p50_ms": 5.651,
+      "p95_ms": 8.884,
+      "p99_ms": 28.097,
+      "errors": {}
+    },
+    "light": {
+      "calls": 2500,
+      "calls_per_second": 79.938,
+      "p50_ms": 4.844,
+      "p95_ms": 7.637,
+      "p99_ms": 29.326,
+      "errors": {}
+    }
+  },
+  "retry_errors": {
+    "RESOURCE_EXHAUSTED": 141,
+    "RESPONSE_UNAVAILABLE": 7
+  },
+  "maximum_write_ms": {
+    "heavy": 185.60803099535406,
+    "light": 612.0856649940833
+  },
+  "verified_online": 2501,
+  "verified_after_restart": 2501,
+  "acknowledged_mismatches": 0,
+  "result": "passed"
+}

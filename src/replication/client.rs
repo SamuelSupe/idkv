@@ -332,7 +332,7 @@ impl Service {
             return Err(Error::limit("peer response too large"));
         }
         let check_memory = |bytes: usize| -> Result<()> {
-            if bytes > self.inner.store.options().global_memory_bytes {
+            if bytes > self.inner.store.foreground_memory_limit() {
                 return Err(if success && path == "/v1/replication/log" {
                     Error::new(
                         "REPLICA_SNAPSHOT_REQUIRED",

@@ -182,7 +182,10 @@ impl Store {
             _lock: Arc::new(lock),
             registry: RwLock::new(registry),
             slots: Mutex::new(HashMap::new()),
-            memory: Counter::new(options.global_memory_bytes),
+            memory: Counter::with_headroom(
+                options.global_memory_bytes,
+                (options.max_document_bytes + options.block_bytes) * 4 + (2 << 20),
+            ),
             io: IoScheduler::new(options.io_workers),
         });
         let stop = Arc::new(AtomicBool::new(false));
@@ -272,6 +275,9 @@ impl Store {
     }
     pub fn memory_bytes(&self) -> usize {
         self.owner.inner.memory.used()
+    }
+    pub(crate) fn foreground_memory_limit(&self) -> usize {
+        self.owner.inner.memory.foreground_limit()
     }
     pub(crate) fn reserve_http(&self, bytes: usize) -> Result<crate::resources::Reservation> {
         Budget {

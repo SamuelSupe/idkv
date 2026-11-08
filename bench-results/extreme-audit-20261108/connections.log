@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/Users/livesite/Documents/ChatGPT/idkv/bench-results/extreme-audit-20261108/connections.py", line 80, in <module>
+    assert peak - after > 1 << 20, (before, peak, after)
+           ^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: (8569311, 8569311, 8569311)

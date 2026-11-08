@@ -4,6 +4,7 @@ impl Engine {
         let view = self.view.read();
         !view.frozen.is_empty()
             || view.mem.bytes.load(Ordering::Acquire) >= self.options.memtable_bytes
+            || (view.mem.bytes.load(Ordering::Acquire) != 0 && self.budget.global.under_pressure())
     }
     pub(crate) fn write_buffer_full(&self) -> bool {
         self.view.read().mem.bytes.load(Ordering::Acquire) >= self.options.memtable_bytes * 3
@@ -79,6 +80,11 @@ impl Engine {
         }
         let result = self.flush_locked();
         if let Err(error) = &result {
+            // Admission/rotation retries have not produced SST output. Scanning
+            // every file here would amplify cross-tenant memory contention.
+            if error.code == "BUSY" {
+                return result;
+            }
             *self.maintenance_error.lock() = Some(error.to_string());
             let writer = self.writer.lock();
             if writer.poison.is_none() {
@@ -93,6 +99,7 @@ impl Engine {
         result
     }
     fn flush_locked(&self) -> Result<()> {
+        let (budget, _reclaim) = self.budget.for_flush()?;
         let rotate = {
             let view = self.view.read();
             view.frozen.is_empty() && view.mem.bytes.load(Ordering::Acquire) != 0
@@ -223,7 +230,7 @@ impl Engine {
                             0,
                             self.options.block_bytes,
                             self.io.clone(),
-                            self.budget.clone(),
+                            budget.clone(),
                         )?
                         .with_io_class(crate::resources::IoClass::Durable)
                         .with_disk_reservation(&reserve_output)?,
@@ -247,13 +254,13 @@ impl Engine {
                     self.info.id,
                     self.info.generation,
                     self.io.clone(),
-                    self.budget.clone(),
+                    budget.clone(),
                     self.cache.clone(),
                 )?);
             }
             let mut all = self.view.read().tables.files.clone();
             all.extend(tables);
-            let versions = VersionSet::new(all, &self.budget)?;
+            let versions = VersionSet::new(all, &budget)?;
             let mut manifest = self.writer.lock().manifest.clone();
             manifest.checkpoint = checkpoint;
             self.metrics
@@ -531,11 +538,17 @@ impl Engine {
             let mut processed = 0usize;
             while let Some(item) = heap.pop() {
                 processed += 1;
-                if processed.is_multiple_of(256) && self.write_buffer_full() {
+                if processed.is_multiple_of(256)
+                    && (self.write_buffer_full()
+                        || (self.budget.global.under_pressure() && self.needs_flush()))
+                {
                     // Flush under the maintenance ownership already held by this
                     // merge. The merge's selected SSTs remain immutable and pinned.
-                    self.flush_locked()?;
-                    self.reserve_disk(METADATA_RESERVE, true)?;
+                    match self.flush_locked() {
+                        Ok(()) => self.reserve_disk(METADATA_RESERVE, true)?,
+                        Err(error) if error.code == "BUSY" => {}
+                        Err(error) => return Err(error),
+                    }
                 }
                 let record = item.record;
                 if let Some(next) = cursors[item.source].next(&mut stats)? {
@@ -784,6 +797,74 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn pressure_flush_progresses_without_lending_headroom_to_reads() {
+        use crate::resources::Counter;
+        let dir = tempfile::tempdir().unwrap();
+        let options = Options {
+            global_memory_bytes: 64 << 20,
+            tenant_memory_bytes: 64 << 20,
+            memtable_bytes: 16 << 20,
+            cache_bytes: 0,
+            ..Options::default()
+        };
+        let info = TenantInfo {
+            id: Uuid::new_v4(),
+            name: "pressure".into(),
+            generation: Uuid::new_v4(),
+            history: Uuid::new_v4(),
+            memory_bytes: options.tenant_memory_bytes,
+            disk_bytes: options.tenant_disk_bytes,
+        };
+        let budget = Budget {
+            global: Counter::with_headroom(options.global_memory_bytes, 8 << 20),
+            tenant: Counter::new(options.tenant_memory_bytes),
+        };
+        let path = dir.path().join("database");
+        Engine::create(&path, &info).unwrap();
+        let engine =
+            Engine::open(path, info, options, budget.clone(), IoScheduler::new(1)).unwrap();
+        let value = vec![7; 128 << 10];
+        engine
+            .transact(|tx| tx.put(b"confirmed".to_vec(), value.clone()))
+            .unwrap();
+        let seq = engine.seq();
+        assert!(!engine.needs_flush());
+        let other = Budget {
+            global: budget.global.clone(),
+            tenant: Counter::new(64 << 20),
+        };
+        let pressure = other
+            .reserve(budget.global.foreground_limit() - budget.global.used())
+            .unwrap();
+        assert!(engine.needs_flush());
+        engine.flush_if_needed().unwrap();
+        assert_eq!(engine.seq(), seq);
+        assert!(engine.metrics()["flush_bytes"].as_u64().unwrap() > 0);
+        assert!(budget.global.used() <= budget.global.limit());
+        let snapshot = engine.snapshot().unwrap();
+        let padding = other
+            .reserve(budget.global.foreground_limit() - budget.global.used())
+            .unwrap();
+        assert_eq!(
+            snapshot
+                .get(b"confirmed", &mut ReadStats::default())
+                .unwrap_err()
+                .code,
+            "RESOURCE_EXHAUSTED"
+        );
+        drop(padding);
+        drop(pressure);
+        assert_eq!(
+            snapshot
+                .get(b"confirmed", &mut ReadStats::default())
+                .unwrap()
+                .unwrap()
+                .as_slice(),
+            value
+        );
+        engine.verify().unwrap();
+    }
     #[test]
     fn checkpoint_copy_stops_at_a_chunk_boundary_after_wal_failure() {
         let dir = tempfile::tempdir().unwrap();

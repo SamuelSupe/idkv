@@ -1,5 +1,5 @@
 use crate::{Error, Result};
-use parking_lot::{Condvar, Mutex, RwLock};
+use parking_lot::{Condvar, Mutex, MutexGuard, RwLock};
 use std::{
     collections::{HashMap, VecDeque},
     sync::{
@@ -36,39 +36,69 @@ impl std::ops::Deref for Bytes {
 
 #[derive(Debug)]
 pub struct Counter {
+    state: Arc<CounterState>,
+    use_headroom: bool,
+}
+#[derive(Debug)]
+struct CounterState {
     used: AtomicUsize,
     limit: AtomicUsize,
     quota: RwLock<()>,
+    headroom: usize,
+    reclaim: Mutex<()>,
 }
 impl Counter {
     pub fn new(limit: usize) -> Arc<Self> {
+        Self::with_headroom(limit, 0)
+    }
+    pub(crate) fn with_headroom(limit: usize, headroom: usize) -> Arc<Self> {
         Arc::new(Self {
-            used: AtomicUsize::new(0),
-            limit: AtomicUsize::new(limit),
-            quota: RwLock::new(()),
+            state: Arc::new(CounterState {
+                used: AtomicUsize::new(0),
+                limit: AtomicUsize::new(limit),
+                quota: RwLock::new(()),
+                headroom: headroom.min(limit / 8),
+                reclaim: Mutex::new(()),
+            }),
+            use_headroom: false,
         })
     }
     fn take(&self, size: usize) -> bool {
-        let _quota = self.quota.read();
-        self.used
+        if size == 0 {
+            return true;
+        }
+        let _quota = self.state.quota.read();
+        let limit = if self.use_headroom {
+            self.limit()
+        } else {
+            self.foreground_limit()
+        };
+        self.state
+            .used
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
-                n.checked_add(size)
-                    .filter(|next| *next <= self.limit.load(Ordering::Acquire))
+                n.checked_add(size).filter(|next| *next <= limit)
             })
             .is_ok()
     }
+    pub(crate) fn foreground_limit(&self) -> usize {
+        self.limit().saturating_sub(self.state.headroom)
+    }
+    pub(crate) fn under_pressure(&self) -> bool {
+        let limit = self.foreground_limit();
+        self.state.headroom != 0 && self.used() >= limit - limit / 8
+    }
     pub fn used(&self) -> usize {
-        self.used.load(Ordering::Acquire)
+        self.state.used.load(Ordering::Acquire)
     }
     pub fn limit(&self) -> usize {
-        self.limit.load(Ordering::Acquire)
+        self.state.limit.load(Ordering::Acquire)
     }
     pub fn set_limit(&self, limit: usize) -> Result<()> {
-        let _quota = self.quota.write();
+        let _quota = self.state.quota.write();
         if limit < self.used() {
             return Err(Error::limit("new quota is below current reservations"));
         }
-        self.limit.store(limit, Ordering::Release);
+        self.state.limit.store(limit, Ordering::Release);
         Ok(())
     }
 }
@@ -79,12 +109,48 @@ pub struct Budget {
     pub tenant: Arc<Counter>,
 }
 impl Budget {
+    // Only the pressure flush holding this guard may spend the protected part
+    // of the global budget. Normal flushes remain concurrent. Both views charge
+    // the same counters; neither global nor tenant hard limits are bypassed.
+    pub(crate) fn for_flush(&self) -> Result<(Self, Option<MutexGuard<'_, ()>>)> {
+        if !self.global.under_pressure() {
+            return Ok((self.clone(), None));
+        }
+        let guard = self
+            .global
+            .state
+            .reclaim
+            .try_lock()
+            .ok_or_else(|| Error::new("BUSY", "another tenant is reclaiming global memory"))?;
+        Ok((
+            Self {
+                global: Arc::new(Counter {
+                    state: self.global.state.clone(),
+                    use_headroom: true,
+                }),
+                tenant: self.tenant.clone(),
+            },
+            Some(guard),
+        ))
+    }
+    pub(crate) fn foreground(&self) -> Self {
+        if !self.global.use_headroom {
+            return self.clone();
+        }
+        Self {
+            global: Arc::new(Counter {
+                state: self.global.state.clone(),
+                use_headroom: false,
+            }),
+            tenant: self.tenant.clone(),
+        }
+    }
     pub fn reserve(&self, size: usize) -> Result<Reservation> {
         if !self.global.take(size) {
             return Err(Error::limit("global memory budget exhausted"));
         }
         if !self.tenant.take(size) {
-            self.global.used.fetch_sub(size, Ordering::AcqRel);
+            self.global.state.used.fetch_sub(size, Ordering::AcqRel);
             return Err(Error::limit("tenant memory budget exhausted"));
         }
         Ok(Reservation {
@@ -107,10 +173,12 @@ impl Reservation {
             let released = self.size - size;
             self.budget
                 .global
+                .state
                 .used
                 .fetch_sub(released, Ordering::AcqRel);
             self.budget
                 .tenant
+                .state
                 .used
                 .fetch_sub(released, Ordering::AcqRel);
             self.size = size;
@@ -121,10 +189,12 @@ impl Drop for Reservation {
     fn drop(&mut self) {
         self.budget
             .global
+            .state
             .used
             .fetch_sub(self.size, Ordering::AcqRel);
         self.budget
             .tenant
+            .state
             .used
             .fetch_sub(self.size, Ordering::AcqRel);
     }
@@ -454,6 +524,34 @@ struct TenantIo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn reclamation_headroom_is_exclusive_and_respects_hard_limits() {
+        let budget = Budget {
+            global: Counter::with_headroom(128, 16),
+            tenant: Counter::new(128),
+        };
+        let normal = budget.reserve(112).unwrap();
+        assert!(budget.reserve(1).is_err());
+        {
+            let (flush, _guard) = budget.for_flush().unwrap();
+            assert_eq!(budget.for_flush().unwrap_err().code, "BUSY");
+            assert!(flush.foreground().reserve(1).is_err());
+            let mut work = flush.reserve(16).unwrap();
+            assert_eq!(budget.global.used(), 128);
+            assert!(flush.reserve(1).is_err());
+            assert!(budget.global.set_limit(127).is_err());
+            work.shrink(8);
+            assert_eq!(budget.global.used(), 120);
+            assert_eq!(budget.tenant.used(), 120);
+        }
+        let (flush, _guard) = budget.for_flush().unwrap();
+        budget.tenant.set_limit(112).unwrap();
+        assert!(flush.reserve(1).is_err());
+        assert_eq!(budget.global.used(), 112);
+        drop(normal);
+        assert_eq!(budget.global.used(), 0);
+        assert_eq!(budget.tenant.used(), 0);
+    }
     #[test]
     fn reads_overtake_bulk_output_while_background_io_still_progresses() {
         let io = IoScheduler::new(1);

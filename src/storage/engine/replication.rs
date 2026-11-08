@@ -10,7 +10,8 @@ impl Engine {
         wire_memory: usize,
     ) -> Result<Reservation> {
         if held.saturating_add(bytes) > self.budget.tenant.limit()
-            || held.saturating_add(bytes).saturating_add(wire_memory) > self.budget.global.limit()
+            || held.saturating_add(bytes).saturating_add(wire_memory)
+                > self.budget.global.foreground_limit()
         {
             return Err(Error::new(
                 "REPLICA_SNAPSHOT_REQUIRED",

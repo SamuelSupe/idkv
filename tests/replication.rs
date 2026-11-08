@@ -2484,7 +2484,12 @@ async fn checkpoint_validation_uses_the_tenant_quota_instead_of_the_node_default
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn indexed_pages_fit_global_budget_or_rebuild_without_infinite_retry() {
-    for (tenant_mib, payload_kib, checkpoint) in [(40, 512, false), (60, 768, true)] {
+    // 512 KiB used to fit the total budget, but not the foreground capacity
+    // after protecting flush headroom. It must fall back instead of retrying
+    // the same permanently oversized decode; 448 KiB still streams normally.
+    for (tenant_mib, payload_kib, checkpoint) in
+        [(40, 448, false), (40, 512, true), (60, 768, true)]
+    {
         let pair = Pair::with_options(Options {
             global_memory_bytes: 64 << 20,
             tenant_memory_bytes: tenant_mib << 20,

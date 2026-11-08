@@ -1,0 +1,17 @@
+Traceback (most recent call last):
+  File "/Users/livesite/Documents/ChatGPT/idkv/bench-results/extreme-audit-20261108/memory-pressure.py", line 58, in <module>
+    put(tenant, f"ack-{n}", 32 << 10)
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/livesite/Documents/ChatGPT/idkv/bench-results/extreme-audit-20261108/memory-pressure.py", line 27, in put
+    receipt = lab.call(0, f"/v1/tenants/{tenant}/collections/docs/documents", {"document": doc}, method="PUT")
+  File "/Users/livesite/Documents/ChatGPT/idkv/scripts/qualification.py", line 85, in call
+    raise RequestError(response.status, value)
+qualification.RequestError: HTTP 503: {'error': {'code': 'RESPONSE_UNAVAILABLE', 'message': 'operation completed but response could not be delivered (RESOURCE_EXHAUSTED); retry only with the original operation ID'}}
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/livesite/Documents/ChatGPT/idkv/bench-results/extreme-audit-20261108/memory-pressure.py", line 61, in <module>
+    assert error.code == "RESOURCE_EXHAUSTED", error
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: HTTP 503: {'error': {'code': 'RESPONSE_UNAVAILABLE', 'message': 'operation completed but response could not be delivered (RESOURCE_EXHAUSTED); retry only with the original operation ID'}}

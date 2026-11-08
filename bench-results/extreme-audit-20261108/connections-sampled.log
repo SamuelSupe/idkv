@@ -1,0 +1,66 @@
+{
+  "binary_sha256": "3ae4a3d1b6fec42bc37b4045efe79c65b358d2584f77a04fe0e560f9c1f4b451",
+  "cases": [
+    {
+      "case": "idle",
+      "connections": 16,
+      "overflow_close_ms": 0.0024170149117708206,
+      "health_after_expiry": true
+    },
+    {
+      "case": "partial-header",
+      "connections": 16,
+      "overflow_close_ms": 0.010957999620586634,
+      "health_after_expiry": true
+    },
+    {
+      "case": "keep-alive",
+      "connections": 16,
+      "overflow_close_ms": 0.1455420278944075,
+      "health_after_expiry": true
+    },
+    {
+      "case": "stalled-response-readers",
+      "connections": 2,
+      "statuses": [
+        "HTTP/1.1 200 OK",
+        "HTTP/1.1 200 OK"
+      ],
+      "memory_before": 8068286,
+      "memory_peak": 113213349,
+      "memory_after_timeout": 8068286
+    }
+  ],
+  "before": {
+    "node": 0,
+    "tenant": "5cc3323f-4647-427f-bdce-1b69c2e32a7c",
+    "documents": 400,
+    "sha256": "3d164d56ddb0e0089be8e86528bce98e1ae40c84a87f24741b504c1094bdefb2",
+    "acknowledged_mismatches": 0
+  },
+  "response_probe": {
+    "statuses": [
+      "HTTP/1.1 200 OK",
+      "HTTP/1.1 200 OK"
+    ],
+    "memory_before": 8068286,
+    "memory_peak": 113213349,
+    "memory_after_timeout": 8068286,
+    "samples": 169
+  },
+  "after": {
+    "node": 0,
+    "tenant": "5cc3323f-4647-427f-bdce-1b69c2e32a7c",
+    "documents": 400,
+    "sha256": "3d164d56ddb0e0089be8e86528bce98e1ae40c84a87f24741b504c1094bdefb2",
+    "acknowledged_mismatches": 0
+  },
+  "after_restart": {
+    "node": 0,
+    "tenant": "5cc3323f-4647-427f-bdce-1b69c2e32a7c",
+    "documents": 400,
+    "sha256": "3d164d56ddb0e0089be8e86528bce98e1ae40c84a87f24741b504c1094bdefb2",
+    "acknowledged_mismatches": 0
+  },
+  "result": "passed"
+}

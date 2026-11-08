@@ -1,0 +1,8 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.61s
+     Running tests/replication.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/replication-6f3b3c02e26346c8)
+
+running 1 test
+test indexed_pages_fit_global_budget_or_rebuild_without_infinite_retry ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 30 filtered out; finished in 4.05s

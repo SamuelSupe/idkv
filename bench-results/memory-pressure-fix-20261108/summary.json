@@ -1,0 +1,1526 @@
+{
+  "base_commit": "2969a142de632936219bd0bd96984fe1a724ad52",
+  "status": "fixed and validated",
+  "cases": {
+    "baseline_http": {
+      "binary_sha256": "3ae4a3d1b6fec42bc37b4045efe79c65b358d2584f77a04fe0e560f9c1f4b451",
+      "options": {
+        "global_memory_bytes": 67108864,
+        "tenant_memory_bytes": 67108864,
+        "memtable_bytes": 16777216,
+        "cache_bytes": 0,
+        "target_sst_bytes": 4194304,
+        "level_base_bytes": 16777216,
+        "l0_stop": 24,
+        "tenant_disk_bytes": 4294967296
+      },
+      "confirmed_after_load": 1012,
+      "sentinel_write_error": {
+        "error": {
+          "code": "RESOURCE_EXHAUSTED",
+          "message": "global memory budget exhausted"
+        }
+      },
+      "retry_observation_s": 20.004103467974346,
+      "health": {
+        "status": "ok"
+      },
+      "manual_flush": [
+        {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "global memory budget exhausted"
+          }
+        },
+        {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "global memory budget exhausted"
+          }
+        },
+        {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "global memory budget exhausted"
+          }
+        },
+        {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "global memory budget exhausted"
+          }
+        },
+        {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "global memory budget exhausted"
+          }
+        },
+        {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "global memory budget exhausted"
+          }
+        },
+        {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "global memory budget exhausted"
+          }
+        },
+        {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "global memory budget exhausted"
+          }
+        }
+      ],
+      "close_results": [
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok"
+      ],
+      "verified_after_close": 1486,
+      "verified_after_restart": 1486,
+      "acknowledged_mismatches": 0,
+      "load_errors": [
+        {
+          "attempt": 1011,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1012,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1013,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1014,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1015,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1016,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1017,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1018,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        }
+      ],
+      "retry_error_counts": {
+        "RESOURCE_EXHAUSTED": 1692
+      },
+      "retry_successes": 0,
+      "memory_after_load": 66748584,
+      "tenants_after_load": [
+        {
+          "name": "memory-5",
+          "memory_bytes": 8318620,
+          "flush_bytes": 0,
+          "maintenance_error": null
+        },
+        {
+          "name": "memory-0",
+          "memory_bytes": 8384632,
+          "flush_bytes": 0,
+          "maintenance_error": null
+        },
+        {
+          "name": "memory-3",
+          "memory_bytes": 8318616,
+          "flush_bytes": 0,
+          "maintenance_error": null
+        },
+        {
+          "name": "memory-7",
+          "memory_bytes": 8318620,
+          "flush_bytes": 0,
+          "maintenance_error": null
+        },
+        {
+          "name": "memory-4",
+          "memory_bytes": 8318620,
+          "flush_bytes": 0,
+          "maintenance_error": null
+        },
+        {
+          "name": "memory-2",
+          "memory_bytes": 8384636,
+          "flush_bytes": 0,
+          "maintenance_error": null
+        },
+        {
+          "name": "memory-1",
+          "memory_bytes": 8384632,
+          "flush_bytes": 0,
+          "maintenance_error": null
+        },
+        {
+          "name": "memory-6",
+          "memory_bytes": 8318620,
+          "flush_bytes": 0,
+          "maintenance_error": null
+        },
+        {
+          "name": "memory-8",
+          "memory_bytes": 1396,
+          "flush_bytes": 0,
+          "maintenance_error": null
+        }
+      ]
+    },
+    "fixed_original_http": {
+      "binary_sha256": "ee24b0491cde15c3c339715a73842314e1a802c99dbf5fa0ac5500d6a4ae826a",
+      "options": {
+        "global_memory_bytes": 67108864,
+        "tenant_memory_bytes": 67108864,
+        "memtable_bytes": 16777216,
+        "cache_bytes": 0,
+        "target_sst_bytes": 4194304,
+        "level_base_bytes": 16777216,
+        "l0_stop": 24,
+        "tenant_disk_bytes": 4294967296
+      },
+      "confirmed_after_load": 1190,
+      "retry_successes": 1170,
+      "retry_observation_s": 20.128715409024153,
+      "health": {
+        "status": "ok"
+      },
+      "manual_flush": [
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok"
+      ],
+      "close_results": [
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok",
+        "ok"
+      ],
+      "verified_after_close": 2199,
+      "verified_after_restart": 2199,
+      "acknowledged_mismatches": 0,
+      "load_errors": [
+        {
+          "attempt": 1189,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1190,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1191,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1192,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1193,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1194,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1195,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        },
+        {
+          "attempt": 1196,
+          "error": {
+            "error": {
+              "code": "RESOURCE_EXHAUSTED",
+              "message": "global memory budget exhausted"
+            }
+          }
+        }
+      ],
+      "retry_error_counts": {},
+      "memory_after_load": 59359839,
+      "tenants_after_load": [
+        {
+          "name": "memory-8",
+          "memory_bytes": 1206,
+          "flush_bytes": 642,
+          "maintenance_error": null
+        },
+        {
+          "name": "memory-7",
+          "memory_bytes": 9771060,
+          "flush_bytes": 0,
+          "maintenance_error": "BUSY: another tenant is reclaiming global memory"
+        },
+        {
+          "name": "memory-0",
+          "memory_bytes": 9837072,
+          "flush_bytes": 0,
+          "maintenance_error": "BUSY: another tenant is reclaiming global memory"
+        },
+        {
+          "name": "memory-1",
+          "memory_bytes": 9837072,
+          "flush_bytes": 0,
+          "maintenance_error": "BUSY: another tenant is reclaiming global memory"
+        },
+        {
+          "name": "memory-6",
+          "memory_bytes": 9771060,
+          "flush_bytes": 0,
+          "maintenance_error": "BUSY: another tenant is reclaiming global memory"
+        },
+        {
+          "name": "memory-3",
+          "memory_bytes": 332444,
+          "flush_bytes": 45073,
+          "maintenance_error": "BUSY: another tenant is reclaiming global memory"
+        },
+        {
+          "name": "memory-4",
+          "memory_bytes": 9837080,
+          "flush_bytes": 0,
+          "maintenance_error": "BUSY: another tenant is reclaiming global memory"
+        },
+        {
+          "name": "memory-2",
+          "memory_bytes": 9837076,
+          "flush_bytes": 0,
+          "maintenance_error": "BUSY: another tenant is reclaiming global memory"
+        },
+        {
+          "name": "memory-5",
+          "memory_bytes": 135577,
+          "flush_bytes": 47152,
+          "maintenance_error": null
+        }
+      ]
+    },
+    "receipt_trial": {
+      "binary_sha256": "ee24b0491cde15c3c339715a73842314e1a802c99dbf5fa0ac5500d6a4ae826a",
+      "options": {
+        "global_memory_bytes": 67108864,
+        "tenant_memory_bytes": 67108864,
+        "memtable_bytes": 16777216,
+        "cache_bytes": 0,
+        "target_sst_bytes": 4194304,
+        "level_base_bytes": 16777216,
+        "l0_stop": 24,
+        "tenant_disk_bytes": 4294967296
+      },
+      "result": "incomplete",
+      "reason": "Original probe asserted only RESOURCE_EXHAUSTED, but received RESPONSE_UNAVAILABLE; confirmed writes verified separately."
+    },
+    "receipt_trial_recovery": {
+      "source_trial": "/var/tmp/idkv-memory-fixed-http-repeat-20261108",
+      "binary_sha256": "ee24b0491cde15c3c339715a73842314e1a802c99dbf5fa0ac5500d6a4ae826a",
+      "result": "passed",
+      "confirmed_documents_checked": 1603,
+      "acknowledged_mismatches": 0
+    },
+    "http_progress": {
+      "binary_sha256": "ee24b0491cde15c3c339715a73842314e1a802c99dbf5fa0ac5500d6a4ae826a",
+      "options": {
+        "global_memory_bytes": 67108864,
+        "tenant_memory_bytes": 67108864,
+        "memtable_bytes": 16777216,
+        "cache_bytes": 0,
+        "target_sst_bytes": 4194304,
+        "level_base_bytes": 16777216,
+        "l0_stop": 24,
+        "tenant_disk_bytes": 4294967296
+      },
+      "elapsed_s": 31.27413673500996,
+      "operations": {
+        "heavy": {
+          "calls": 2500,
+          "calls_per_second": 79.938,
+          "p50_ms": 5.651,
+          "p95_ms": 8.884,
+          "p99_ms": 28.097,
+          "errors": {}
+        },
+        "light": {
+          "calls": 2500,
+          "calls_per_second": 79.938,
+          "p50_ms": 4.844,
+          "p95_ms": 7.637,
+          "p99_ms": 29.326,
+          "errors": {}
+        }
+      },
+      "retry_errors": {
+        "RESOURCE_EXHAUSTED": 141,
+        "RESPONSE_UNAVAILABLE": 7
+      },
+      "maximum_write_ms": {
+        "heavy": 185.60803099535406,
+        "light": 612.0856649940833
+      },
+      "metrics_after_load": {
+        "memory_bytes": 30294630,
+        "tenants": [
+          {
+            "failure": null,
+            "installing": false,
+            "lifecycle": {
+              "state": "active"
+            },
+            "open": true,
+            "stats": {
+              "commit_seq": 314,
+              "disk_bytes": 1995592,
+              "dsl_cache": {
+                "entries": 0,
+                "hits": 0,
+                "misses": 0,
+                "reserved_bytes": 0
+              },
+              "io": {
+                "commits": 314,
+                "compaction_read_bytes": 3487153,
+                "compaction_write_bytes": 3452695,
+                "document_bytes": 10282224,
+                "flush_bytes": 139832,
+                "fsyncs": 314,
+                "scheduler": {
+                  "cancelled_jobs": 0,
+                  "completed_jobs": 4766,
+                  "queue_wait_ns": 45166077,
+                  "queued_jobs": 0
+                },
+                "wal_bytes": 10400121,
+                "write_lock_wait_ns": 12780
+              },
+              "levels": {
+                "0": 6,
+                "1": 3
+              },
+              "maintenance_error": null,
+              "memory_bytes": 3749760,
+              "recovery_read_only": false,
+              "snapshots": 0
+            },
+            "tenant": {
+              "disk_bytes": 4294967296,
+              "generation": "c5d4a28b-2204-4d43-988d-c014b3098d30",
+              "history": "4cbb3ad4-b8da-4fe2-b425-a16485d7998a",
+              "id": "0b81e731-0b7d-482c-b08e-32f5e9c91112",
+              "memory_bytes": 67108864,
+              "name": "pressure-3"
+            }
+          },
+          {
+            "failure": null,
+            "installing": false,
+            "lifecycle": {
+              "state": "active"
+            },
+            "open": true,
+            "stats": {
+              "commit_seq": 314,
+              "disk_bytes": 1932906,
+              "dsl_cache": {
+                "entries": 0,
+                "hits": 0,
+                "misses": 0,
+                "reserved_bytes": 0
+              },
+              "io": {
+                "commits": 314,
+                "compaction_read_bytes": 0,
+                "compaction_write_bytes": 0,
+                "document_bytes": 10282223,
+                "flush_bytes": 103908,
+                "fsyncs": 314,
+                "scheduler": {
+                  "cancelled_jobs": 0,
+                  "completed_jobs": 855,
+                  "queue_wait_ns": 7343884,
+                  "queued_jobs": 0
+                },
+                "wal_bytes": 10400117,
+                "write_lock_wait_ns": 15917
+              },
+              "levels": {
+                "0": 3
+              },
+              "maintenance_error": null,
+              "memory_bytes": 3679981,
+              "recovery_read_only": false,
+              "snapshots": 0
+            },
+            "tenant": {
+              "disk_bytes": 4294967296,
+              "generation": "2b70efef-f371-4ffd-a9cc-6fe69fd3d808",
+              "history": "77d2063b-c502-4d38-a775-d50bbd977ff8",
+              "id": "0ffc70d5-3294-460e-b7fe-54712a2038f1",
+              "memory_bytes": 67108864,
+              "name": "pressure-1"
+            }
+          },
+          {
+            "failure": null,
+            "installing": false,
+            "lifecycle": {
+              "state": "active"
+            },
+            "open": true,
+            "stats": {
+              "commit_seq": 313,
+              "disk_bytes": 1932533,
+              "dsl_cache": {
+                "entries": 0,
+                "hits": 0,
+                "misses": 0,
+                "reserved_bytes": 0
+              },
+              "io": {
+                "commits": 313,
+                "compaction_read_bytes": 0,
+                "compaction_write_bytes": 0,
+                "document_bytes": 10249374,
+                "flush_bytes": 103505,
+                "fsyncs": 313,
+                "scheduler": {
+                  "cancelled_jobs": 0,
+                  "completed_jobs": 853,
+                  "queue_wait_ns": 8788629,
+                  "queued_jobs": 0
+                },
+                "wal_bytes": 10366896,
+                "write_lock_wait_ns": 11931
+              },
+              "levels": {
+                "0": 3
+              },
+              "maintenance_error": null,
+              "memory_bytes": 3679987,
+              "recovery_read_only": false,
+              "snapshots": 0
+            },
+            "tenant": {
+              "disk_bytes": 4294967296,
+              "generation": "9c74b8b5-ed2a-4de0-a56a-77de674cd5ce",
+              "history": "048f5789-34cd-4b07-bf92-2bb4043cfad9",
+              "id": "14547b20-9a89-41c8-9dc5-51630887d427",
+              "memory_bytes": 67108864,
+              "name": "pressure-6"
+            }
+          },
+          {
+            "failure": null,
+            "installing": false,
+            "lifecycle": {
+              "state": "active"
+            },
+            "open": true,
+            "stats": {
+              "commit_seq": 314,
+              "disk_bytes": 1968136,
+              "dsl_cache": {
+                "entries": 0,
+                "hits": 0,
+                "misses": 0,
+                "reserved_bytes": 0
+              },
+              "io": {
+                "commits": 314,
+                "compaction_read_bytes": 0,
+                "compaction_write_bytes": 0,
+                "document_bytes": 10282224,
+                "flush_bytes": 104442,
+                "fsyncs": 314,
+                "scheduler": {
+                  "cancelled_jobs": 0,
+                  "completed_jobs": 1190,
+                  "queue_wait_ns": 9554221,
+                  "queued_jobs": 0
+                },
+                "wal_bytes": 10400121,
+                "write_lock_wait_ns": 11168
+              },
+              "levels": {
+                "0": 7
+              },
+              "maintenance_error": null,
+              "memory_bytes": 3748567,
+              "recovery_read_only": false,
+              "snapshots": 0
+            },
+            "tenant": {
+              "disk_bytes": 4294967296,
+              "generation": "6766fdfa-d381-44e2-b63b-9e6c58a572c6",
+              "history": "12ce0dc1-184e-41ab-b0a6-f7acf84065da",
+              "id": "44c77936-5c54-4949-882d-c4d54b823047",
+              "memory_bytes": 67108864,
+              "name": "pressure-2"
+            }
+          },
+          {
+            "failure": null,
+            "installing": false,
+            "lifecycle": {
+              "state": "active"
+            },
+            "open": true,
+            "stats": {
+              "commit_seq": 313,
+              "disk_bytes": 1932483,
+              "dsl_cache": {
+                "entries": 0,
+                "hits": 0,
+                "misses": 0,
+                "reserved_bytes": 0
+              },
+              "io": {
+                "commits": 313,
+                "compaction_read_bytes": 0,
+                "compaction_write_bytes": 0,
+                "document_bytes": 10249374,
+                "flush_bytes": 103453,
+                "fsyncs": 313,
+                "scheduler": {
+                  "cancelled_jobs": 0,
+                  "completed_jobs": 849,
+                  "queue_wait_ns": 7372771,
+                  "queued_jobs": 0
+                },
+                "wal_bytes": 10366896,
+                "write_lock_wait_ns": 10252
+              },
+              "levels": {
+                "0": 3
+              },
+              "maintenance_error": null,
+              "memory_bytes": 3679985,
+              "recovery_read_only": false,
+              "snapshots": 0
+            },
+            "tenant": {
+              "disk_bytes": 4294967296,
+              "generation": "eb329a49-417e-4cb3-85de-42a4be3b3236",
+              "history": "581583bc-f4e7-408c-a43d-3fab57116d6f",
+              "id": "5d47e38d-2796-48b6-8bea-49ce79946bcb",
+              "memory_bytes": 67108864,
+              "name": "pressure-4"
+            }
+          },
+          {
+            "failure": null,
+            "installing": false,
+            "lifecycle": {
+              "state": "active"
+            },
+            "open": true,
+            "stats": {
+              "commit_seq": 313,
+              "disk_bytes": 1933789,
+              "dsl_cache": {
+                "entries": 0,
+                "hits": 0,
+                "misses": 0,
+                "reserved_bytes": 0
+              },
+              "io": {
+                "commits": 313,
+                "compaction_read_bytes": 0,
+                "compaction_write_bytes": 0,
+                "document_bytes": 10249374,
+                "flush_bytes": 104046,
+                "fsyncs": 313,
+                "scheduler": {
+                  "cancelled_jobs": 0,
+                  "completed_jobs": 1069,
+                  "queue_wait_ns": 10220063,
+                  "queued_jobs": 0
+                },
+                "wal_bytes": 10366896,
+                "write_lock_wait_ns": 10910
+              },
+              "levels": {
+                "0": 5
+              },
+              "maintenance_error": null,
+              "memory_bytes": 3680848,
+              "recovery_read_only": false,
+              "snapshots": 0
+            },
+            "tenant": {
+              "disk_bytes": 4294967296,
+              "generation": "1e272a32-5d4c-4deb-8023-3f8d0dd20926",
+              "history": "ddef49c4-94d4-4213-8fd5-0244b2a27b0c",
+              "id": "6ee33e86-6470-4e81-ab4b-c3906d4f5091",
+              "memory_bytes": 67108864,
+              "name": "pressure-7"
+            }
+          },
+          {
+            "failure": null,
+            "installing": false,
+            "lifecycle": {
+              "state": "active"
+            },
+            "open": true,
+            "stats": {
+              "commit_seq": 313,
+              "disk_bytes": 1936617,
+              "dsl_cache": {
+                "entries": 0,
+                "hits": 0,
+                "misses": 0,
+                "reserved_bytes": 0
+              },
+              "io": {
+                "commits": 313,
+                "compaction_read_bytes": 1030303,
+                "compaction_write_bytes": 1019669,
+                "document_bytes": 10249374,
+                "flush_bytes": 116123,
+                "fsyncs": 313,
+                "scheduler": {
+                  "cancelled_jobs": 0,
+                  "completed_jobs": 2451,
+                  "queue_wait_ns": 21754418,
+                  "queued_jobs": 0
+                },
+                "wal_bytes": 10366896,
+                "write_lock_wait_ns": 14515
+              },
+              "levels": {
+                "0": 6,
+                "1": 3
+              },
+              "maintenance_error": null,
+              "memory_bytes": 3682894,
+              "recovery_read_only": false,
+              "snapshots": 0
+            },
+            "tenant": {
+              "disk_bytes": 4294967296,
+              "generation": "b7d98e7d-d011-4147-aba0-d0b6e912028b",
+              "history": "9335a8b4-d9b2-467d-bf32-c01a99997f20",
+              "id": "adf0ae57-2d66-45ea-a9b2-64e4d6e0a481",
+              "memory_bytes": 67108864,
+              "name": "pressure-5"
+            }
+          },
+          {
+            "failure": null,
+            "installing": false,
+            "lifecycle": {
+              "state": "active"
+            },
+            "open": true,
+            "stats": {
+              "commit_seq": 2501,
+              "disk_bytes": 640278,
+              "dsl_cache": {
+                "entries": 0,
+                "hits": 0,
+                "misses": 0,
+                "reserved_bytes": 0
+              },
+              "io": {
+                "commits": 2501,
+                "compaction_read_bytes": 10880889,
+                "compaction_write_bytes": 10780234,
+                "document_bytes": 532500,
+                "flush_bytes": 288456,
+                "fsyncs": 2501,
+                "scheduler": {
+                  "cancelled_jobs": 0,
+                  "completed_jobs": 12106,
+                  "queue_wait_ns": 111694039,
+                  "queued_jobs": 0
+                },
+                "wal_bytes": 1487892,
+                "write_lock_wait_ns": 154716
+              },
+              "levels": {
+                "0": 3,
+                "1": 3
+              },
+              "maintenance_error": null,
+              "memory_bytes": 710548,
+              "recovery_read_only": false,
+              "snapshots": 0
+            },
+            "tenant": {
+              "disk_bytes": 4294967296,
+              "generation": "96b63f7b-a390-4bed-97a5-5d93b08705ae",
+              "history": "6e73cbe7-c08a-41bd-808f-27cfee0f71cf",
+              "id": "c265d8d0-d7d5-4e12-a14e-65168776706b",
+              "memory_bytes": 67108864,
+              "name": "pressure-8"
+            }
+          },
+          {
+            "failure": null,
+            "installing": false,
+            "lifecycle": {
+              "state": "active"
+            },
+            "open": true,
+            "stats": {
+              "commit_seq": 314,
+              "disk_bytes": 1935410,
+              "dsl_cache": {
+                "entries": 0,
+                "hits": 0,
+                "misses": 0,
+                "reserved_bytes": 0
+              },
+              "io": {
+                "commits": 314,
+                "compaction_read_bytes": 84349,
+                "compaction_write_bytes": 82897,
+                "document_bytes": 10282223,
+                "flush_bytes": 106415,
+                "fsyncs": 314,
+                "scheduler": {
+                  "cancelled_jobs": 0,
+                  "completed_jobs": 1385,
+                  "queue_wait_ns": 10565804,
+                  "queued_jobs": 0
+                },
+                "wal_bytes": 10400117,
+                "write_lock_wait_ns": 10456
+              },
+              "levels": {
+                "0": 4,
+                "1": 3
+              },
+              "maintenance_error": null,
+              "memory_bytes": 3681868,
+              "recovery_read_only": false,
+              "snapshots": 0
+            },
+            "tenant": {
+              "disk_bytes": 4294967296,
+              "generation": "99049f39-2542-4b42-8b40-e85058a6556e",
+              "history": "ab5d1e8f-536c-4478-8271-9e5af91a5a10",
+              "id": "d5d942bb-3a28-4f98-8caf-6f1cb4743a73",
+              "memory_bytes": 67108864,
+              "name": "pressure-0"
+            }
+          }
+        ]
+      },
+      "verified_online": 2501,
+      "verified_after_restart": 2501,
+      "acknowledged_mismatches": 0,
+      "result": "passed"
+    },
+    "mixed": {
+      "result": "passed",
+      "tenants": [
+        "140467cd-9091-4379-8e1b-3863416fe204",
+        "8ba9a4a7-b8c0-4985-9703-6cc0560a2773"
+      ],
+      "before_restart": [
+        {
+          "node": 0,
+          "tenant": "140467cd-9091-4379-8e1b-3863416fe204",
+          "documents": 5000,
+          "sha256": "388e6fcb961f991824f28fc43c90178daa6d1cc7f21ff7c2e92ceacdc5c1d123",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 0,
+          "tenant": "8ba9a4a7-b8c0-4985-9703-6cc0560a2773",
+          "documents": 200,
+          "sha256": "ffe119b9eba8aeef246ded882ab2182fd644ebfaf764f2dd7e1c077e32848efc",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 1,
+          "tenant": "140467cd-9091-4379-8e1b-3863416fe204",
+          "documents": 5000,
+          "sha256": "388e6fcb961f991824f28fc43c90178daa6d1cc7f21ff7c2e92ceacdc5c1d123",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 1,
+          "tenant": "8ba9a4a7-b8c0-4985-9703-6cc0560a2773",
+          "documents": 200,
+          "sha256": "ffe119b9eba8aeef246ded882ab2182fd644ebfaf764f2dd7e1c077e32848efc",
+          "acknowledged_mismatches": 0
+        }
+      ],
+      "interrupted_backup": {
+        "backup": "18931937-4e2f-452b-9555-c04c7646ecb9",
+        "checkpoint_seq": null,
+        "created_ms": 1794112497774,
+        "error": null,
+        "id": "bf40c8be-6940-40bd-8e50-ae2e4b68343f",
+        "operation": {
+          "operation": "create"
+        },
+        "processed_files": 0,
+        "result": null,
+        "reused_bytes": 0,
+        "state": "queued",
+        "tenant": "140467cd-9091-4379-8e1b-3863416fe204",
+        "updated_ms": 1794112497774,
+        "uploaded_bytes": 0
+      },
+      "restart_to_write_and_replica_caught_up_ms": 69.47778898756951,
+      "after_restart": [
+        {
+          "node": 0,
+          "tenant": "140467cd-9091-4379-8e1b-3863416fe204",
+          "documents": 5000,
+          "sha256": "388e6fcb961f991824f28fc43c90178daa6d1cc7f21ff7c2e92ceacdc5c1d123",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 0,
+          "tenant": "8ba9a4a7-b8c0-4985-9703-6cc0560a2773",
+          "documents": 200,
+          "sha256": "ffe119b9eba8aeef246ded882ab2182fd644ebfaf764f2dd7e1c077e32848efc",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 1,
+          "tenant": "140467cd-9091-4379-8e1b-3863416fe204",
+          "documents": 5000,
+          "sha256": "388e6fcb961f991824f28fc43c90178daa6d1cc7f21ff7c2e92ceacdc5c1d123",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 1,
+          "tenant": "8ba9a4a7-b8c0-4985-9703-6cc0560a2773",
+          "documents": 200,
+          "sha256": "ffe119b9eba8aeef246ded882ab2182fd644ebfaf764f2dd7e1c077e32848efc",
+          "acknowledged_mismatches": 0
+        }
+      ],
+      "final_validation": [
+        {
+          "node": 0,
+          "tenant": "140467cd-9091-4379-8e1b-3863416fe204",
+          "documents": 5000,
+          "sha256": "d02c1f4f40431acf9765b22d44f3a249ff1a95ea7657bd3ce930a3110bb3f0cd",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 0,
+          "tenant": "8ba9a4a7-b8c0-4985-9703-6cc0560a2773",
+          "documents": 200,
+          "sha256": "ef1b07a9549d38084cf48e62e3046ba8fb100b228e10975e582ec013bf1c66c6",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 1,
+          "tenant": "140467cd-9091-4379-8e1b-3863416fe204",
+          "documents": 5000,
+          "sha256": "d02c1f4f40431acf9765b22d44f3a249ff1a95ea7657bd3ce930a3110bb3f0cd",
+          "acknowledged_mismatches": 0
+        },
+        {
+          "node": 1,
+          "tenant": "8ba9a4a7-b8c0-4985-9703-6cc0560a2773",
+          "documents": 200,
+          "sha256": "ef1b07a9549d38084cf48e62e3046ba8fb100b228e10975e582ec013bf1c66c6",
+          "acknowledged_mismatches": 0
+        }
+      ],
+      "gc_drained": {
+        "expiration_lag_ms": 0,
+        "gc": {
+          "completed_rounds": 677,
+          "history_sweep_active": false,
+          "knowledge_floor": 0,
+          "migration_complete": true,
+          "reclaimed_records": 4696,
+          "watermark_ms": 1794112543498
+        },
+        "next_expiration_ms": null,
+        "physical_reclamation": "as snapshots release and compaction completes",
+        "policy": {
+          "activated_seq": 874,
+          "legacy_expires_at_ms": 1794112447173,
+          "retention_seconds": 20
+        }
+      },
+      "publication_gc": {
+        "published_versions": 19,
+        "current_readable": true,
+        "expired_version_rejected": true,
+        "remaining_collections": [
+          {
+            "id": "00469183-bfc2-4ef5-8bb7-6b325adede10",
+            "name": "assets"
+          },
+          {
+            "id": "d92018c8-29f9-4e02-86c7-dc7c7e6d5c58",
+            "name": "probes"
+          },
+          {
+            "id": "800d1ca9-033c-48c6-a7a5-ce633c0a8d37",
+            "name": "reference_recovery_4"
+          }
+        ]
+      },
+      "restored_backup": {
+        "node": 2,
+        "tenant": "140467cd-9091-4379-8e1b-3863416fe204",
+        "documents": 5000,
+        "sha256": "d02c1f4f40431acf9765b22d44f3a249ff1a95ea7657bd3ce930a3110bb3f0cd",
+        "acknowledged_mismatches": 0
+      },
+      "backup_checkpoint": {
+        "backup": "f00a7455-6266-4e02-950f-3b96a74775c2",
+        "checkpoint_seq": 5438,
+        "created_ms": 1794112544122,
+        "error": null,
+        "id": "07432892-92ba-438d-a2aa-524cc32df204",
+        "operation": {
+          "operation": "create"
+        },
+        "processed_files": 90,
+        "result": {
+          "backup": "f00a7455-6266-4e02-950f-3b96a74775c2",
+          "checkpoint_ms": 1794112544346,
+          "checkpoint_seq": 5438,
+          "files": 90,
+          "generation": "872b5ad3-0e76-479e-99e2-488fef802f9f",
+          "tenant": "140467cd-9091-4379-8e1b-3863416fe204",
+          "total_bytes": 41711352
+        },
+        "reused_bytes": 31923621,
+        "state": "completed",
+        "tenant": "140467cd-9091-4379-8e1b-3863416fe204",
+        "updated_ms": 1794112550389,
+        "uploaded_bytes": 9787731
+      },
+      "admission_retries_total": {
+        "BUSY": 214
+      },
+      "phases": [
+        {
+          "phase": "baseline",
+          "requested_seconds": 20,
+          "actual_seconds": 20.016686098009814,
+          "operations": {
+            "index_query_20": {
+              "calls": 1000,
+              "calls_per_second": 49.996,
+              "p50_ms": 0.458,
+              "p95_ms": 1.03,
+              "p99_ms": 1.739,
+              "errors": {}
+            },
+            "get": {
+              "calls": 3999,
+              "calls_per_second": 199.93,
+              "p50_ms": 0.336,
+              "p95_ms": 0.861,
+              "p99_ms": 1.357,
+              "errors": {}
+            },
+            "heavy_writer": {
+              "calls": 798,
+              "calls_per_second": 39.893,
+              "p50_ms": 6.453,
+              "p95_ms": 9.85,
+              "p99_ms": 17.675,
+              "errors": {}
+            },
+            "lookup_20": {
+              "calls": 2001,
+              "calls_per_second": 100.024,
+              "p50_ms": 0.44,
+              "p95_ms": 1.063,
+              "p99_ms": 1.553,
+              "errors": {}
+            },
+            "light_writer": {
+              "calls": 401,
+              "calls_per_second": 20.042,
+              "p50_ms": 4.674,
+              "p95_ms": 8.066,
+              "p99_ms": 12.326,
+              "errors": {}
+            }
+          },
+          "completed_verified_backups": 0,
+          "admission_retries": {},
+          "overlap_sample_intervals": 0
+        },
+        {
+          "phase": "combined",
+          "requested_seconds": 70,
+          "actual_seconds": 70.0529601580347,
+          "operations": {
+            "index_query_20": {
+              "calls": 3500,
+              "calls_per_second": 50.0,
+              "p50_ms": 0.418,
+              "p95_ms": 1.094,
+              "p99_ms": 1.809,
+              "errors": {}
+            },
+            "heavy_writer": {
+              "calls": 2785,
+              "calls_per_second": 39.785,
+              "p50_ms": 6.346,
+              "p95_ms": 10.113,
+              "p99_ms": 19.375,
+              "errors": {}
+            },
+            "lookup_20": {
+              "calls": 6998,
+              "calls_per_second": 99.969,
+              "p50_ms": 0.417,
+              "p95_ms": 1.069,
+              "p99_ms": 1.763,
+              "errors": {}
+            },
+            "light_writer": {
+              "calls": 1400,
+              "calls_per_second": 19.999,
+              "p50_ms": 4.956,
+              "p95_ms": 8.572,
+              "p99_ms": 15.998,
+              "errors": {}
+            },
+            "get": {
+              "calls": 13964,
+              "calls_per_second": 199.468,
+              "p50_ms": 0.333,
+              "p95_ms": 0.899,
+              "p99_ms": 1.65,
+              "errors": {}
+            }
+          },
+          "completed_verified_backups": 4,
+          "admission_retries": {},
+          "overlap_sample_intervals": 5
+        },
+        {
+          "phase": "recovery",
+          "requested_seconds": 25,
+          "actual_seconds": 25.036750159983058,
+          "operations": {
+            "lookup_20": {
+              "calls": 2477,
+              "calls_per_second": 99.079,
+              "p50_ms": 0.411,
+              "p95_ms": 0.98,
+              "p99_ms": 2.09,
+              "errors": {}
+            },
+            "get": {
+              "calls": 4951,
+              "calls_per_second": 198.036,
+              "p50_ms": 0.322,
+              "p95_ms": 0.847,
+              "p99_ms": 1.909,
+              "errors": {}
+            },
+            "index_query_20": {
+              "calls": 1244,
+              "calls_per_second": 49.758,
+              "p50_ms": 0.424,
+              "p95_ms": 1.063,
+              "p99_ms": 1.75,
+              "errors": {}
+            },
+            "light_writer": {
+              "calls": 500,
+              "calls_per_second": 19.972,
+              "p50_ms": 4.881,
+              "p95_ms": 12.642,
+              "p99_ms": 30.55,
+              "errors": {}
+            },
+            "heavy_writer": {
+              "calls": 988,
+              "calls_per_second": 39.464,
+              "p50_ms": 6.292,
+              "p95_ms": 12.569,
+              "p99_ms": 28.624,
+              "errors": {}
+            }
+          },
+          "completed_verified_backups": 1,
+          "admission_retries": {
+            "BUSY": 214
+          },
+          "overlap_sample_intervals": 3
+        }
+      ]
+    },
+    "faults": {
+      "result": "passed",
+      "cases": [
+        {
+          "case": "enospc",
+          "result": "passed",
+          "tenant": "8ff1f1da-15fa-4aa2-bb57-f8fc1ee68ce2",
+          "before": {
+            "node": 0,
+            "tenant": "8ff1f1da-15fa-4aa2-bb57-f8fc1ee68ce2",
+            "documents": 2000,
+            "sha256": "982e513df21fb5971d7ab40a97768152f222e52bf1b9acb919aa0e32c4adf612",
+            "acknowledged_mismatches": 0
+          },
+          "disk_full": {
+            "available_before": 220516352,
+            "available_after": 0,
+            "filler_bytes": 220512256,
+            "mount": "TARGET                                                   SOURCE     FSTYPE OPTIONS\n/var/tmp/idkv-memory-fixed-faults-20261108/enospc/volume /dev/loop0 ext4   rw,relatime\n"
+          },
+          "fault_response": {
+            "status": 500,
+            "body": {
+              "error": {
+                "code": "COMMIT_UNKNOWN",
+                "message": "IO_ERROR: No space left on device (os error 28)"
+              }
+            }
+          },
+          "poisoned_response": {
+            "status": 429,
+            "body": {
+              "error": {
+                "code": "RESOURCE_EXHAUSTED",
+                "message": "WAL recovery needs free disk space; read-only until closed and reopened"
+              }
+            }
+          },
+          "uncertain_batch_visible_before_retry": 0,
+          "restart_to_safe_retry_ms": 40.76807195087895,
+          "after": {
+            "node": 0,
+            "tenant": "8ff1f1da-15fa-4aa2-bb57-f8fc1ee68ce2",
+            "documents": 2008,
+            "sha256": "1aaa210c39c8e38123dcf85fa7fa56209fb46f224665b75cbecb6c405006eed1",
+            "acknowledged_mismatches": 0
+          },
+          "failure_through_validation_ms": 111.06582096545026,
+          "confirmed_documents_preserved": 2000,
+          "confirmed_documents_missing": 0
+        },
+        {
+          "case": "wal-write-eio",
+          "result": "passed",
+          "tenant": "f06c2df7-9e16-411b-ade3-48adbc225bda",
+          "before": {
+            "node": 0,
+            "tenant": "f06c2df7-9e16-411b-ade3-48adbc225bda",
+            "documents": 2000,
+            "sha256": "982e513df21fb5971d7ab40a97768152f222e52bf1b9acb919aa0e32c4adf612",
+            "acknowledged_mismatches": 0
+          },
+          "fault_response": {
+            "status": 500,
+            "body": {
+              "error": {
+                "code": "COMMIT_UNKNOWN",
+                "message": "IO_ERROR: Input/output error (os error 5)"
+              }
+            }
+          },
+          "poisoned_response": {
+            "status": 500,
+            "body": {
+              "error": {
+                "code": "IO_ERROR",
+                "message": "Input/output error (os error 5)"
+              }
+            }
+          },
+          "uncertain_batch_visible_before_retry": 0,
+          "restart_to_safe_retry_ms": 36.798815010115504,
+          "after": {
+            "node": 0,
+            "tenant": "f06c2df7-9e16-411b-ade3-48adbc225bda",
+            "documents": 2008,
+            "sha256": "1aaa210c39c8e38123dcf85fa7fa56209fb46f224665b75cbecb6c405006eed1",
+            "acknowledged_mismatches": 0
+          },
+          "failure_through_validation_ms": 112.64099000254646,
+          "confirmed_documents_preserved": 2000,
+          "confirmed_documents_missing": 0
+        },
+        {
+          "case": "wal-sync-eio",
+          "result": "passed",
+          "tenant": "3f125e37-ebd9-49ad-aff9-bd2be8ca2b72",
+          "before": {
+            "node": 0,
+            "tenant": "3f125e37-ebd9-49ad-aff9-bd2be8ca2b72",
+            "documents": 2000,
+            "sha256": "982e513df21fb5971d7ab40a97768152f222e52bf1b9acb919aa0e32c4adf612",
+            "acknowledged_mismatches": 0
+          },
+          "fault_response": {
+            "status": 500,
+            "body": {
+              "error": {
+                "code": "COMMIT_UNKNOWN",
+                "message": "IO_ERROR: Input/output error (os error 5)"
+              }
+            }
+          },
+          "poisoned_response": {
+            "status": 500,
+            "body": {
+              "error": {
+                "code": "IO_ERROR",
+                "message": "Input/output error (os error 5)"
+              }
+            }
+          },
+          "uncertain_batch_visible_before_retry": 8,
+          "restart_to_safe_retry_ms": 32.443473988678306,
+          "after": {
+            "node": 0,
+            "tenant": "3f125e37-ebd9-49ad-aff9-bd2be8ca2b72",
+            "documents": 2008,
+            "sha256": "1aaa210c39c8e38123dcf85fa7fa56209fb46f224665b75cbecb6c405006eed1",
+            "acknowledged_mismatches": 0
+          },
+          "failure_through_validation_ms": 104.043226048816,
+          "confirmed_documents_preserved": 2000,
+          "confirmed_documents_missing": 0
+        }
+      ]
+    }
+  },
+  "native_artifacts": [
+    {
+      "path": "/var/tmp/idkv-extreme-memory-repeat-20261108/acknowledgements.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/var/tmp/idkv-extreme-memory-repeat-20261108/confirmed.jsonl",
+      "bytes": 141493,
+      "sha256": "bc2e1752b4fc939294806f66c830f4f3b55769eb87e72ae79e36f9657b4d0a25"
+    },
+    {
+      "path": "/var/tmp/idkv-extreme-memory-repeat-20261108/result.json",
+      "bytes": 59655,
+      "sha256": "bac4edf4cf125078d5fee32853cd55030a7229f1fa46b470424c7809640fdd6b"
+    },
+    {
+      "path": "/var/tmp/idkv-memory-fixed-http-20261108/acknowledgements.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/var/tmp/idkv-memory-fixed-http-20261108/confirmed.jsonl",
+      "bytes": 327558,
+      "sha256": "1b73193d414214a013b8a3bc155802a71b9e17185f90d308f8ebd42f08cc66b3"
+    },
+    {
+      "path": "/var/tmp/idkv-memory-fixed-http-20261108/result.json",
+      "bytes": 15053,
+      "sha256": "f5edc0ecbae31dad67f83444f85db405c4e04488e9d509b6a6cef2b7ddff9fba"
+    },
+    {
+      "path": "/var/tmp/idkv-memory-fixed-http-repeat-20261108/acknowledgements.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/var/tmp/idkv-memory-fixed-http-repeat-20261108/confirmed.jsonl",
+      "bytes": 153530,
+      "sha256": "5c74cacb6ffdada2b8034c17d76796481a24a256a9c34136793695113df4a90d"
+    },
+    {
+      "path": "/var/tmp/idkv-memory-fixed-http-repeat-20261108/result.json",
+      "bytes": 360,
+      "sha256": "bfa5c20a1c3ab88b1ad78c03257f30b42f199e661fa086bbf0832d51098e116a"
+    },
+    {
+      "path": "/var/tmp/idkv-memory-fixed-receipt-recovery2-20261108/acknowledgements.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/var/tmp/idkv-memory-fixed-receipt-recovery2-20261108/result.json",
+      "bytes": 252,
+      "sha256": "dfdfcc7aae5af2940bdbff5f28ec3e2ab52e3bf386621286e353bdf2f7055cf4"
+    },
+    {
+      "path": "/var/tmp/idkv-memory-fixed-progress-20261108/acknowledgements.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/var/tmp/idkv-memory-fixed-progress-20261108/confirmed.jsonl",
+      "bytes": 778046,
+      "sha256": "12c607ddb5582d98942d0417a945348e560ead98e3c92d78c0f0d47cc48c6bdb"
+    },
+    {
+      "path": "/var/tmp/idkv-memory-fixed-progress-20261108/result.json",
+      "bytes": 13836,
+      "sha256": "13102e6b511c24812e60750b9ea3e5fd1c17cc31bb8468250bbcd617a265827a"
+    },
+    {
+      "path": "/var/tmp/idkv-memory-fixed-mixed-20261108/acknowledgements.jsonl",
+      "bytes": 3217177,
+      "sha256": "20b8f7e2305ab9567751509c17e710bb3cc2738ebf95df989c5fc79c27c8816b"
+    },
+    {
+      "path": "/var/tmp/idkv-memory-fixed-mixed-20261108/result.json",
+      "bytes": 63853,
+      "sha256": "30686926bc6768c7d4020f6528ba3610b1756c735853c5a888968e1b750d652a"
+    },
+    {
+      "path": "/var/tmp/idkv-memory-fixed-faults-20261108/enospc/acknowledgements.jsonl",
+      "bytes": 18620,
+      "sha256": "fa7b1ccf56854891a6e04a87510eded308aae156a8abba905465676c544f1804"
+    },
+    {
+      "path": "/var/tmp/idkv-memory-fixed-faults-20261108/enospc/result.json",
+      "bytes": 1495,
+      "sha256": "a6ae7d5bc8c00e2af9d890e146f18d6c00dd77d78a15f07d0b23d755f8a6405e"
+    },
+    {
+      "path": "/var/tmp/idkv-memory-fixed-faults-20261108/result.json",
+      "bytes": 4355,
+      "sha256": "c5ac1b725368fe87b738c240d1704161dac36510dfacd7694b0874db3313e620"
+    },
+    {
+      "path": "/var/tmp/idkv-memory-fixed-faults-20261108/wal-sync-eio/acknowledgements.jsonl",
+      "bytes": 18624,
+      "sha256": "4c2103dbb816b36d9a837a4727a9b5f027d8f6e1f822f11d2193c381b4db1c16"
+    },
+    {
+      "path": "/var/tmp/idkv-memory-fixed-faults-20261108/wal-sync-eio/result.json",
+      "bytes": 1142,
+      "sha256": "e4a11094220274211275006e4ef0865faa7a235d15ede13db2a55827275ceb9f"
+    },
+    {
+      "path": "/var/tmp/idkv-memory-fixed-faults-20261108/wal-write-eio/acknowledgements.jsonl",
+      "bytes": 18620,
+      "sha256": "a409a3f8319a4788c8efd490c744919051f0a4d86e96b851c278bd77e4d10e4e"
+    },
+    {
+      "path": "/var/tmp/idkv-memory-fixed-faults-20261108/wal-write-eio/result.json",
+      "bytes": 1145,
+      "sha256": "31c07fb8cab40907a13e8342cded1131d36aa4f21bd8b6f43c492eaa2485c00c"
+    }
+  ],
+  "tests": {
+    "passed": 219,
+    "failed": 0,
+    "log": "final-tests.log"
+  },
+  "probe_hashes": {
+    "bench-results/extreme-audit-20261108/memory-pressure.py": "d9ba3ff92279878ebe95f786abbda9c277ff890841bb8b441a125d433b7d5add",
+    "bench-results/memory-pressure-fix-20261108/http-progress.py": "367bb5ce89debda0da09210c729535a7a31fc8a1c62b54774fb078ac74c0fc45",
+    "scripts/qualification.py": "95b06478ffbec39d71c880daf3aaf488c23d8caedb90a570c28a6b39c609e786",
+    "scripts/qualification_faults.py": "cda72fcda67d1a459993419abc4bf04197077bd72a1bdc1b7e33adefbf7ad17c"
+  }
+}

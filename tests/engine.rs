@@ -296,6 +296,70 @@ fn compaction_output_over_quota_preserves_published_files_and_pinned_reads() {
 }
 
 #[test]
+fn shared_memory_pressure_flushes_small_tenants_and_preserves_confirmed_data() {
+    let dir = tempfile::tempdir().unwrap();
+    let options = Options {
+        global_memory_bytes: 64 << 20,
+        tenant_memory_bytes: 64 << 20,
+        memtable_bytes: 16 << 20,
+        cache_bytes: 0,
+        ..Options::default()
+    };
+    let store = Store::open(dir.path(), options.clone()).unwrap();
+    // Keep all handles alive: progress must not depend on idle eviction.
+    let tenants: Vec<_> = (0..9)
+        .map(|n| {
+            let id = store.create_tenant(&format!("pressure-{n}")).unwrap().id;
+            let tenant = store.tenant(id).unwrap();
+            tenant.create_collection("docs").unwrap();
+            tenant
+        })
+        .collect();
+    let mut confirmed = vec![BTreeMap::new(); tenants.len()];
+    for n in 0..1500 {
+        for (index, key, size) in [(n % 8, n.to_string(), 32 << 10), (8, "light".into(), 128)] {
+            let mut document = json!({"_key":key,"payload":"x".repeat(size)});
+            let deadline = std::time::Instant::now() + Duration::from_secs(3);
+            let receipt = loop {
+                match tenants[index].put("docs", document.clone(), None) {
+                    Ok(receipt) => break receipt,
+                    Err(error)
+                        if error.code == "RESOURCE_EXHAUSTED"
+                            && std::time::Instant::now() < deadline =>
+                    {
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(error) => panic!("tenant {index}, write {n} did not progress: {error}"),
+                }
+            };
+            document["_rev"] = json!(receipt.rev);
+            confirmed[index].insert(key, document);
+            assert!(store.memory_bytes() <= options.global_memory_bytes);
+        }
+    }
+    assert!(
+        tenants
+            .iter()
+            .any(|t| t.engine().metrics()["flush_bytes"].as_u64().unwrap() > 0)
+    );
+    for (tenant, records) in tenants.iter().zip(&confirmed) {
+        for (key, expected) in records {
+            assert_eq!(tenant.get("docs", key).unwrap().as_ref(), Some(expected));
+        }
+    }
+    let ids: Vec<_> = tenants.iter().map(TenantHandle::id).collect();
+    drop(tenants);
+    drop(store);
+    let store = Store::open(dir.path(), options).unwrap();
+    for (id, records) in ids.into_iter().zip(confirmed) {
+        let tenant = store.tenant(id).unwrap();
+        for (key, expected) in records {
+            assert_eq!(tenant.get("docs", &key).unwrap(), Some(expected));
+        }
+    }
+}
+
+#[test]
 fn confirmed_large_document_remains_readable_after_flush_compaction_and_reopen() {
     let dir = tempfile::tempdir().unwrap();
     let options = Options {

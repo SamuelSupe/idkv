@@ -1,0 +1,28 @@
+{
+  "binary_sha256": "3ae4a3d1b6fec42bc37b4045efe79c65b358d2584f77a04fe0e560f9c1f4b451",
+  "options": {
+    "global_memory_bytes": 67108864,
+    "tenant_memory_bytes": 67108864,
+    "memtable_bytes": 1048576,
+    "cache_bytes": 0,
+    "target_sst_bytes": 4194304,
+    "level_base_bytes": 16777216,
+    "l0_stop": 24,
+    "tenant_disk_bytes": 4294967296
+  },
+  "confirmed_after_load": 2501,
+  "close_results": [
+    "ok",
+    "ok",
+    "ok",
+    "ok",
+    "ok",
+    "ok",
+    "ok",
+    "ok",
+    "ok"
+  ],
+  "verified_after_close": 2501,
+  "verified_after_restart": 2501,
+  "acknowledged_mismatches": 0
+}

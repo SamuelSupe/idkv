@@ -88,9 +88,14 @@ mod tests {
         let store = Store::open(dir.path(), crate::Options::default()).unwrap();
         let committed = store.create_tenant("completed").unwrap();
         let response = serde_json::to_value(&committed).unwrap();
-        let _pressure = store
-            .reserve_http(store.options().global_memory_bytes - store.memory_bytes())
-            .unwrap();
+        let mut pressure = Vec::new();
+        let mut chunk = store.options().global_memory_bytes / 2;
+        while chunk >= 1024 {
+            match store.reserve_http(chunk) {
+                Ok(memory) => pressure.push(memory),
+                Err(_) => chunk /= 2,
+            }
+        }
         let write_error = encode(&store, None, response.clone(), false).err().unwrap();
         assert_eq!(write_error.code, "RESPONSE_UNAVAILABLE");
         assert_eq!(

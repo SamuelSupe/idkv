@@ -386,7 +386,9 @@ impl Table {
             top,
             tenant,
             io,
-            budget,
+            // Opening flush output can use reclamation headroom; subsequent
+            // reads and cache allocations must use ordinary admission again.
+            budget: budget.foreground(),
             cache,
             _memory: memory,
         }))

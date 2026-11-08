@@ -1,0 +1,19 @@
+   Compiling tenant-kv v0.10.1 (/var/tmp/idkv-memory-baseline-20261108)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.31s
+     Running tests/engine.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/engine-0631b00fd70793a0)
+
+running 1 test
+
+thread 'shared_memory_pressure_flushes_small_tenants_and_preserves_confirmed_data' panicked at tests/engine.rs:332:35:
+tenant 2, write 1002 did not progress: RESOURCE_EXHAUSTED: global memory budget exhausted
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test shared_memory_pressure_flushes_small_tenants_and_preserves_confirmed_data ... FAILED
+
+failures:
+
+failures:
+    shared_memory_pressure_flushes_small_tenants_and_preserves_confirmed_data
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 28 filtered out; finished in 15.34s
+
+error: test failed, to rerun pass `--test engine`
