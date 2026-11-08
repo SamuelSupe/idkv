@@ -1,0 +1,19 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.14s
+     Running unittests src/lib.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv-da4845942d3e9983)
+
+running 1 test
+
+thread 'storage::wal::tests::recovery_discards_bad_frames_only_in_the_unsealed_tail' panicked at src/storage/wal.rs:468:67:
+magic, None: CORRUPTION: WAL batch header checksum
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test storage::wal::tests::recovery_discards_bad_frames_only_in_the_unsealed_tail ... FAILED
+
+failures:
+
+failures:
+    storage::wal::tests::recovery_discards_bad_frames_only_in_the_unsealed_tail
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 103 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `--lib`

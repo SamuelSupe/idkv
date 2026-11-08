@@ -1,0 +1,57 @@
+   Compiling tenant-kv v0.10.1 (/var/tmp/idkv-edge-baseline-20261108)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.59s
+     Running tests/engine.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/engine-981d405c4bf85dae)
+
+running 3 tests
+
+thread 'edge_review_receipts_survive_collection_recreation_and_restart' panicked at tests/engine.rs:1731:5:
+assertion `left == right` failed
+  left: Array [Object {"deleted": Bool(false), "history": String("340b84e6-fa87-45ef-818c-a3d931f76a1c:69ae0b58-6294-4a34-9571-58400bb28a4c:00000000-0000-0000-0000-000000000000"), "key": String("8a415491-0c07-4043-a55d-fac686dbf0b5"), "rev": Number(2)}]
+ right: Array [Object {"deleted": Bool(false), "history": String("340b84e6-fa87-45ef-818c-a3d931f76a1c:69ae0b58-6294-4a34-9571-58400bb28a4c:00000000-0000-0000-0000-000000000000"), "key": String("b97eecc0-3ac6-4ced-afd5-7b4bb0d00ab7"), "rev": Number(5)}]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'edge_review_unique_swaps_validate_final_batch_and_preserve_conflict_atomicity' panicked at tests/engine.rs:1694:61:
+called `Result::unwrap()` on an `Err` value: Error { code: "UNIQUE_CONFLICT", message: "duplicate value in unique-ip", location: None }
+test edge_review_unique_swaps_validate_final_batch_and_preserve_conflict_atomicity ... FAILED
+
+thread 'edge_review_disk_quota_shrink_cannot_remove_delete_headroom' panicked at tests/engine.rs:1765:14:
+called `Result::unwrap_err()` on an `Ok` value: TenantInfo { id: b06e88ae-278a-406f-be04-46a3e8fc34ba, name: "quota-headroom", generation: 83d68b49-60dc-444a-8b44-db2320279f42, history: 14de828c-f7b6-4c96-901d-5a98f2458b60, memory_bytes: 536870912, disk_bytes: 1048576 }
+test edge_review_disk_quota_shrink_cannot_remove_delete_headroom ... FAILED
+test edge_review_receipts_survive_collection_recreation_and_restart ... FAILED
+
+failures:
+
+failures:
+    edge_review_disk_quota_shrink_cannot_remove_delete_headroom
+    edge_review_receipts_survive_collection_recreation_and_restart
+    edge_review_unique_swaps_validate_final_batch_and_preserve_conflict_atomicity
+
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 30 filtered out; finished in 0.23s
+
+error: test failed, to rerun pass `--test engine`
+   Compiling tenant-kv v0.10.1 (/var/tmp/idkv-edge-baseline-20261108)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.97s
+     Running tests/backup.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/backup-aac84cda2a61954c)
+
+running 2 tests
+
+thread 'edge_review_backup_order_survives_clock_rollback_and_restart' panicked at tests/backup.rs:1037:5:
+assertion `left == right` failed
+  left: Number(1794129122985)
+ right: 9223372036854775808
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test edge_review_backup_order_survives_clock_rollback_and_restart ... FAILED
+
+thread 'edge_review_lower_job_limit_preserves_startup_and_old_jobs' panicked at tests/backup.rs:995:59:
+called `Result::unwrap()` on an `Err` value: Error { code: "RESOURCE_EXHAUSTED", message: "persisted backup jobs exceed max_jobs", location: None }
+test edge_review_lower_job_limit_preserves_startup_and_old_jobs ... FAILED
+
+failures:
+
+failures:
+    edge_review_backup_order_survives_clock_rollback_and_restart
+    edge_review_lower_job_limit_preserves_startup_and_old_jobs
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.84s
+
+error: test failed, to rerun pass `--test backup`

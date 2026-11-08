@@ -20,6 +20,7 @@ serde_json = { version = "=1.0.154", features = ["arbitrary_precision"] }
 uuid = { version = "=1.28.0", features = ["v4", "serde"] }
 parking_lot = "=0.12.5"
 fs2 = "0.4.3"
+libc = "0.2"
 crc32fast = "=1.5.0"
 lz4_flex = "0.11.5"
 sha2 = "=0.10.9"

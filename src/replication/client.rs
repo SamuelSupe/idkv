@@ -69,7 +69,6 @@ struct Progress {
 struct Inner {
     store: Store,
     config: Config,
-    token: String,
     client: reqwest::Client,
     cycle: AsyncMutex<()>,
     progress: Mutex<Progress>,
@@ -146,15 +145,11 @@ impl Service {
                 "remote replication requires HTTPS; HTTP is limited to loopback",
             ));
         }
-        let token = fs::read_to_string(&config.token_file)?.trim().to_string();
-        if !(16..=512).contains(&token.len()) {
-            return Err(Error::invalid("replication token length"));
-        }
+        read_token(&config.token_file)?;
         let client = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(Duration::from_secs(3))
             .pool_idle_timeout(Duration::from_secs(4))
-            .timeout(Duration::from_secs(30))
             .build()
             .map_err(|_| Error::new("UNAVAILABLE", "replication HTTP client"))?;
         let lock = OpenOptions::new()
@@ -181,7 +176,6 @@ impl Service {
             inner: Arc::new(Inner {
                 store,
                 config,
-                token,
                 client,
                 _lock: lock,
                 cycle: AsyncMutex::new(()),
@@ -323,21 +317,22 @@ impl Service {
             Some(body) => self.inner.client.post(url).json(&body),
             None => self.inner.client.get(url),
         };
-        let request = if path == "/v1/replication/promote" {
-            request.timeout(Duration::from_secs(150))
-        } else {
-            request
-        };
-        let mut response = request
-            .bearer_auth(&self.inner.token)
-            .send()
+        let token_path = self.inner.config.token_file.clone();
+        let token = tokio::task::spawn_blocking(move || read_token(&token_path))
             .await
-            .map_err(|_| {
-                Error::new(
-                    "REPLICATION_UNAVAILABLE",
-                    "peer request failed or timed out",
-                )
-            })?;
+            .map_err(|_| Error::new("INTERNAL", "token reader failed"))??;
+        let header_timeout = if path == "/v1/replication/promote" {
+            150
+        } else {
+            30
+        };
+        let mut response = tokio::time::timeout(
+            Duration::from_secs(header_timeout),
+            request.bearer_auth(token).send(),
+        )
+        .await
+        .map_err(|_| Error::new("REPLICATION_UNAVAILABLE", "peer headers timed out"))?
+        .map_err(|_| Error::new("REPLICATION_UNAVAILABLE", "peer request failed"))?;
         let success = response.status().is_success();
         if response
             .content_length()
@@ -362,9 +357,9 @@ impl Service {
         check_memory(capacity)?;
         let mut input_memory = self.inner.store.reserve_http(capacity)?;
         let mut bytes = Vec::with_capacity(capacity);
-        while let Some(chunk) = response
-            .chunk()
+        while let Some(chunk) = tokio::time::timeout(Duration::from_secs(30), response.chunk())
             .await
+            .map_err(|_| Error::new("REPLICATION_UNAVAILABLE", "peer response stalled"))?
             .map_err(|_| Error::new("REPLICATION_UNAVAILABLE", "peer response interrupted"))?
         {
             if bytes.len() + chunk.len() > MAX_WIRE_BYTES {
@@ -385,14 +380,26 @@ impl Service {
         check_memory(input_memory.size().saturating_add(decoded))?;
         let memory = self.inner.store.reserve_http(decoded)?;
         if !success {
-            let value: Value = serde_json::from_slice(&bytes)?;
+            let value: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+            let code = value["error"]["code"].as_str().unwrap_or("");
+            let code = match code {
+                "BUSY"
+                | "REPLICA_LAG"
+                | "LOG_GONE"
+                | "SNAPSHOT_EXPIRED"
+                | "REPLICATION_CONFLICT"
+                | "INCOMPATIBLE_VERSION"
+                | "RESOURCE_EXHAUSTED"
+                | "DEADLINE_EXCEEDED"
+                | "REPLICA_SNAPSHOT_REQUIRED"
+                | "CORRUPTION"
+                | "COMMIT_UNKNOWN"
+                | "REPLICATION_UNAVAILABLE" => code,
+                _ => "REPLICATION_UNAVAILABLE",
+            };
             return Err(Error::new(
-                value["error"]["code"]
-                    .as_str()
-                    .unwrap_or("REPLICATION_UNAVAILABLE"),
-                value["error"]["message"]
-                    .as_str()
-                    .unwrap_or("peer rejected request"),
+                code,
+                format!("peer rejected replication request ({})", response.status()),
             ));
         }
         let value = serde_json::from_slice(&bytes)?;
@@ -812,6 +819,13 @@ impl Service {
             }
         }
     }
+    pub(super) fn reader_drain_timed_out(&self, tenant: Uuid) {
+        self.inner.progress.lock().initialization_errors.insert(
+            tenant,
+            "tenant reader drain deadline; verified checkpoint retained, retrying in 30 seconds"
+                .into(),
+        );
+    }
     pub(super) fn waiting_for_readers(&self, tenant: Uuid, waiting: bool) {
         let mut progress = self.inner.progress.lock();
         if waiting {
@@ -849,27 +863,39 @@ impl Service {
         }
         let deadline = Instant::now() + Duration::from_secs(120);
         loop {
-            let upstream: Received<Status> = self.request("/v1/replication/status", None).await?;
-            super::compatible(upstream.node.protocol)?;
-            let fence = upstream
-                .node
-                .fence
-                .as_ref()
-                .filter(|f| f.id == fence_id && upstream.node.role == Role::Fenced)
-                .ok_or_else(|| {
-                    Error::new("CONFLICT", "source does not confirm this durable fence")
-                })?;
-            self.sync_inner(true).await?;
-            let store = self.inner.store.clone();
-            let fence = fence.clone();
-            let result = tokio::task::spawn_blocking(move || store.promote_verified(&fence))
-                .await
-                .map_err(|_| Error::new("INTERNAL", "promotion worker failed"))?;
+            let result = self.promote_once(fence_id).await;
             match result {
-                Err(error) if error.code == "REPLICA_LAG" && Instant::now() < deadline => {}
+                Err(error)
+                    if matches!(
+                        error.code.as_str(),
+                        "REPLICA_LAG"
+                            | "BUSY"
+                            | "REPLICATION_UNAVAILABLE"
+                            | "RESOURCE_EXHAUSTED"
+                            | "DEADLINE_EXCEEDED"
+                    ) && Instant::now() < deadline =>
+                {
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                }
                 result => return result,
             }
         }
+    }
+    async fn promote_once(&self, fence_id: Uuid) -> Result<NodeState> {
+        let upstream: Received<Status> = self.request("/v1/replication/status", None).await?;
+        super::compatible(upstream.node.protocol)?;
+        let fence = upstream
+            .node
+            .fence
+            .as_ref()
+            .filter(|f| f.id == fence_id && upstream.node.role == Role::Fenced)
+            .ok_or_else(|| Error::new("CONFLICT", "source does not confirm this durable fence"))?;
+        self.sync_inner(true).await?;
+        let store = self.inner.store.clone();
+        let fence = fence.clone();
+        tokio::task::spawn_blocking(move || store.promote_verified(&fence))
+            .await
+            .map_err(|_| Error::new("INTERNAL", "promotion worker failed"))?
     }
     pub async fn follow(&self) -> Result<NodeState> {
         let _cycle = self.inner.cycle.lock().await;
@@ -904,7 +930,20 @@ impl Service {
                 .as_ref()
                 .is_some_and(|s| s.node == peer.node.node && s.epoch == peer.node.epoch)
         {
-            return Ok(state);
+            if peer.node.role == Role::Primary
+                && peer.node.parent.as_ref().is_some_and(|fence| {
+                    fence.source.node == state.node
+                        && fence.target == peer.node.node
+                        && fence.cluster == state.cluster
+                        && state.cluster == peer.node.cluster
+                })
+            {
+                return Ok(state);
+            }
+            return Err(Error::new(
+                "CONFLICT",
+                "switchover must start on the primary",
+            ));
         }
         if state.cluster != peer.node.cluster {
             return Err(Error::new(
@@ -974,4 +1013,28 @@ impl Service {
         .await
         .map_err(|_| Error::new("INTERNAL", "force promotion worker failed"))?
     }
+}
+
+fn read_token(path: &std::path::Path) -> Result<String> {
+    use std::{
+        io::Read,
+        os::unix::fs::{OpenOptionsExt, PermissionsExt},
+    };
+    // Open without following a link and validate the opened inode, not a prior stat.
+    let file = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(path)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_file() || metadata.permissions().mode() & 0o077 != 0 {
+        return Err(Error::invalid(
+            "replication token must be a private regular file (0600)",
+        ));
+    }
+    let mut token = String::new();
+    file.take(514).read_to_string(&mut token)?;
+    if token.len() > 513 || !(16..=512).contains(&token.trim().len()) {
+        return Err(Error::invalid("replication token length"));
+    }
+    Ok(token.trim().to_owned())
 }

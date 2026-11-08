@@ -1,0 +1,52 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.75s
+     Running tests/backup.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/backup-aac84cda2a61954c)
+
+running 2 tests
+test subsystem_review_failed_restore_releases_downloaded_workspace ... FAILED
+test subsystem_review_one_tenant_cannot_fill_the_backup_job_table ... FAILED
+
+failures:
+
+---- subsystem_review_failed_restore_releases_downloaded_workspace stdout ----
+
+thread 'subsystem_review_failed_restore_releases_downloaded_workspace' panicked at tests/backup.rs:794:5:
+assertion failed: !dir.path().join("data/backup-work").join(failed.id.to_string()).exists()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- subsystem_review_one_tenant_cannot_fill_the_backup_job_table stdout ----
+
+thread 'subsystem_review_one_tenant_cannot_fill_the_backup_job_table' panicked at tests/backup.rs:807:59:
+called `Result::unwrap_err()` on an `Ok` value: BackupJob { id: fc5a50f4-d5d4-4cfc-8f14-3656708ac4e2, tenant: e67fd01a-5b63-43ce-8653-1432ead276b7, backup: 122619ed-f4ab-4604-811c-a73afaba091c, operation: Create, state: Queued, created_ms: 1794127087908, updated_ms: 1794127087908, uploaded_bytes: 0, reused_bytes: 0, processed_files: 0, checkpoint_seq: None, result: None, error: None }
+
+
+failures:
+    subsystem_review_failed_restore_releases_downloaded_workspace
+    subsystem_review_one_tenant_cannot_fill_the_backup_job_table
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 11 filtered out; finished in 2.38s
+
+error: test failed, to rerun pass `--test backup`
+     Running tests/engine.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/engine-981d405c4bf85dae)
+
+running 1 test
+test subsystem_review_tenant_deletion_reclaims_local_backups_and_legacy_residue ... FAILED
+
+failures:
+
+---- subsystem_review_tenant_deletion_reclaims_local_backups_and_legacy_residue stdout ----
+
+thread 'subsystem_review_tenant_deletion_reclaims_local_backups_and_legacy_residue' panicked at tests/engine.rs:1654:5:
+assertion failed: !deleted.exists()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    subsystem_review_tenant_deletion_reclaims_local_backups_and_legacy_residue
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 29 filtered out; finished in 0.21s
+
+error: test failed, to rerun pass `--test engine`
+error: 2 targets failed:
+    `--test backup`
+    `--test engine`

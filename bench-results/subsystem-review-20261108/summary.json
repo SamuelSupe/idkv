@@ -1,0 +1,18 @@
+{
+  "tests_passed": 243,
+  "tests_failed": 0,
+  "library_tests": 105,
+  "integration_tests": 138,
+  "backup_tests": 16,
+  "recovery_tests": 16,
+  "replication_tests": 32,
+  "middleware_tests": 15,
+  "new_targeted_regressions": 9,
+  "baseline_failures_reproduced": 8,
+  "clippy": "passed",
+  "format": "passed",
+  "git_diff_check": "passed",
+  "previous_wal_fix_preserved": true,
+  "real_s3_tested": false,
+  "physical_power_loss_tested": false
+}

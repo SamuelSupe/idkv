@@ -172,7 +172,65 @@ fn recovery_rewrite_survives_abort_before_and_after_publication() {
 }
 
 #[test]
-fn incomplete_tail_is_discarded_but_complete_corruption_is_rejected() {
+fn unsealed_tail_garbage_preserves_confirmed_wal_data_and_future_writes() {
+    for sealed in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let id = seed(dir.path());
+        let expected = {
+            let store = Store::open(dir.path(), Options::default()).unwrap();
+            let tenant = store.tenant(id).unwrap();
+            tenant
+                .put(
+                    "assets",
+                    json!({"_key":"confirmed","ip":"confirmed-ip"}),
+                    None,
+                )
+                .unwrap();
+            tenant.get("assets", "confirmed").unwrap().unwrap()
+        };
+        let path = dir.path().join("tenants").join(id.to_string());
+        if !sealed {
+            fs::remove_file(path.join("WAL-SYNC")).unwrap();
+        }
+        let wal = fs::read_dir(path.join("wal"))
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        let confirmed_length = wal.metadata().unwrap().len();
+        let mut file = OpenOptions::new().append(true).open(&wal).unwrap();
+        file.write_all(&[0; 8192]).unwrap();
+        file.sync_all().unwrap();
+        drop(file);
+        let later = {
+            let store = Store::open(dir.path(), Options::default()).unwrap();
+            let tenant = store.tenant(id).unwrap();
+            assert_eq!(
+                tenant.get("assets", "confirmed").unwrap().unwrap(),
+                expected
+            );
+            assert!(tenant.get("assets", "old").unwrap().is_some());
+            assert_eq!(wal.metadata().unwrap().len(), confirmed_length);
+            tenant.engine().verify().unwrap();
+            tenant
+                .put("assets", json!({"_key":"later","ip":"later-ip"}), None)
+                .unwrap();
+            tenant.get("assets", "later").unwrap().unwrap()
+        };
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        let tenant = store.tenant(id).unwrap();
+        assert_eq!(
+            tenant.get("assets", "confirmed").unwrap().unwrap(),
+            expected
+        );
+        assert_eq!(tenant.get("assets", "later").unwrap().unwrap(), later);
+        tenant.engine().verify().unwrap();
+    }
+}
+
+#[test]
+fn incomplete_tail_is_discarded_but_synced_corruption_is_rejected() {
     let dir = tempfile::tempdir().unwrap();
     let id = seed(dir.path());
     let wal = fs::read_dir(dir.path().join("tenants").join(id.to_string()).join("wal"))
@@ -192,12 +250,36 @@ fn incomplete_tail_is_discarded_but_complete_corruption_is_rejected() {
         t.put("assets", json!({"_key":"new","ip":"two"}), None)
             .unwrap();
     }
-    let mut bytes = fs::read(&wal).unwrap();
-    assert!(bytes.len() > 100);
-    *bytes.last_mut().unwrap() ^= 1;
-    fs::write(&wal, bytes).unwrap();
+    let synced = fs::read(&wal).unwrap();
+    assert!(synced.len() > 100);
+    for damage in [
+        "header_crc",
+        "payload_crc",
+        "short_header",
+        "short_payload",
+        "missing_frame",
+    ] {
+        let mut bytes = synced.clone();
+        match damage {
+            "header_crc" => bytes[64 + 16] ^= 1,
+            "payload_crc" => *bytes.last_mut().unwrap() ^= 1,
+            "short_header" => bytes.truncate(64 + 10),
+            "short_payload" => {
+                bytes.pop();
+            }
+            "missing_frame" => bytes.truncate(64),
+            _ => unreachable!(),
+        }
+        fs::write(&wal, &bytes).unwrap();
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        assert_eq!(
+            store.tenant(id).err().unwrap().code,
+            "CORRUPTION",
+            "{damage}"
+        );
+        assert_eq!(fs::read(&wal).unwrap(), bytes);
+    }
     let store = Store::open(dir.path(), Options::default()).unwrap();
-    assert_eq!(store.tenant(id).err().unwrap().code, "CORRUPTION");
     let other = store.create_tenant("healthy").unwrap();
     assert!(
         store
@@ -259,6 +341,9 @@ fn process_crashes_preserve_atomic_documents_and_indexes() {
     for point in [
         "wal_torn_header",
         "wal_torn_payload",
+        "wal_torn_zero_header",
+        "wal_torn_header_crc",
+        "wal_torn_payload_crc",
         "wal_appended",
         "wal_synced",
         "manifest_published",
@@ -416,6 +501,9 @@ fn temporal_corrections_history_heads_and_receipts_recover_atomically() {
     for point in [
         "wal_torn_header",
         "wal_torn_payload",
+        "wal_torn_zero_header",
+        "wal_torn_header_crc",
+        "wal_torn_payload_crc",
         "wal_appended",
         "wal_synced",
         "sst_synced",
@@ -759,4 +847,80 @@ fn startup_reclaims_legacy_unregistered_databases_but_preserves_a_live_engine() 
     let reopened = Store::open(dir.path(), options).unwrap();
     assert!(retained.exists());
     assert_eq!(reopened.tenants().len(), 1);
+}
+
+#[cfg(feature = "failpoints")]
+#[test]
+fn edge_review_readonly_enospc_exposes_only_durable_prefix_and_preserves_recovery_bytes() {
+    let dir = tempfile::tempdir().unwrap();
+    let id = seed(dir.path());
+    let crash = std::process::Command::new(env!("CARGO_BIN_EXE_crash-probe"))
+        .arg(dir.path())
+        .arg(id.to_string())
+        .arg("write")
+        .env("TKV_FAILPOINT", "wal_appended")
+        .status()
+        .unwrap();
+    assert!(!crash.success());
+    let wal_dir = dir.path().join("tenants").join(id.to_string()).join("wal");
+    let before: Vec<_> = fs::read_dir(&wal_dir)
+        .unwrap()
+        .map(|e| {
+            let path = e.unwrap().path();
+            let bytes = fs::read(&path).unwrap();
+            (path, bytes)
+        })
+        .collect();
+    let status = std::process::Command::new(env!("CARGO_BIN_EXE_crash-probe"))
+        .arg(dir.path())
+        .arg(id.to_string())
+        .arg("readonly-recovery")
+        .env("TKV_ERRORPOINT", "wal_recovery_enospc")
+        .status()
+        .unwrap();
+    assert!(status.success());
+    for (path, bytes) in before {
+        assert_eq!(fs::read(path).unwrap(), bytes);
+    }
+    let store = Store::open(dir.path(), Options::default()).unwrap();
+    let t = store.tenant(id).unwrap();
+    assert!(t.get("assets", "old").unwrap().is_some());
+    assert!(t.get("assets", "new").unwrap().is_some());
+    t.engine().verify().unwrap();
+}
+
+#[cfg(feature = "failpoints")]
+#[test]
+fn edge_review_crashed_local_checkpoint_is_reclaimed_before_backup_count_limit() {
+    let dir = tempfile::tempdir().unwrap();
+    let id = seed(dir.path());
+    let status = std::process::Command::new(env!("CARGO_BIN_EXE_crash-probe"))
+        .arg(dir.path())
+        .arg(id.to_string())
+        .arg("local-backup")
+        .env("TKV_FAILPOINT", "checkpoint_files_synced")
+        .status()
+        .unwrap();
+    assert!(!status.success());
+    let parent = dir.path().join("backups").join(id.to_string());
+    let partial = fs::read_dir(&parent)
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    assert!(!partial.join("CURRENT").exists());
+    assert!(partial.join("sst").is_dir());
+    let store = Store::open(dir.path(), Options::default()).unwrap();
+    assert_eq!(fs::read_dir(&parent).unwrap().count(), 0);
+    let backup = store.backup(id).unwrap();
+    store.restore(id, backup).unwrap();
+    assert!(
+        store
+            .tenant(id)
+            .unwrap()
+            .get("assets", "old")
+            .unwrap()
+            .is_some()
+    );
 }

@@ -70,7 +70,7 @@ HTTP 所有数据接口以 `/v1/tenants/{tenant_uuid}` 开头。`GET /openapi.js
 | `POST /v1/replication/follow` | `{}`；全局管理员将已停写的旧主切为其指定接任者的从库 |
 | `POST /v1/replication/force-promote` | 明确源身份、外部隔离及接受数据损失；见复制文档 |
 
-`read` 可读取、查询、执行 Lookup；`write` 额外可修改文档；租户 `admin` 可管理集合、索引、Lookup 和该租户备份恢复。创建/删除租户和修改租户配额需全局管理员。缩小内存配额会预检新预算下能否重新打开和校验存储（副本配额同步会先用旧预算刷盘）；验证拒绝不会更改原配额。创建或配额发布的 I/O 错误可能表示持久结果不确定，应重开 Store 并检查名称、生命周期和配额后再操作。库 API 的 `Store` 是可信管理入口，`TenantHandle` 是已绑定租户的数据入口。
+`read` 可读取、查询、执行 Lookup；`write` 额外可修改文档；租户 `admin` 可管理集合、索引、Lookup 和该租户备份恢复。创建/删除租户和修改租户配额需全局管理员。缩小磁盘配额会先排空并统计当前占用，必须保留前台写入空间，拒绝把租户缩到无法继续删除数据的状态。缩小内存配额会预检新预算下能否重新打开和校验存储（副本配额同步会先用旧预算刷盘）；验证拒绝不会更改原配额。创建或配额发布的 I/O 错误可能表示持久结果不确定，应重开 Store 并检查名称、生命周期和配额后再操作。库 API 的 `Store` 是可信管理入口，`TenantHandle` 是已绑定租户的数据入口。
 
 `replication` 是绑定全局的专用凭证，只允许复制状态、日志、检查点和经验证的计划升主。它不能调用普通业务 API，也不能停写、发起切换或强制升主。复制内部传输接口见 OpenAPI；配置、切换顺序及重试约束见 [replication.md](replication.md)。启用复制后普通 restore/import 被拒绝；备份仍可使用。
 
@@ -189,3 +189,5 @@ v0.9.1 的查询定位规则：
 新增 `/v1/tenants/{tenant}/identity/*` 和 Rust `TenantHandle::identity_*`。HTTP 写入允许 admin、identity_write 或 identity_correct；手动纠错要求 admin 或 identity_correct，初始化要求 admin，读取沿用租户 read 权限。完整请求、区间/知识语义、幂等性与示例见 [identity.md](identity.md)。保留集合 `identity_temporal` 拒绝普通 CRUD、DSL 写入及集合/索引/Lookup 管理修改，返回 `MANAGED_COLLECTION`；读取仍授权开放。新错误包括 `INTERVAL_CONFLICT`、`OPERATION_CONFLICT`、`KNOWLEDGE_UNAVAILABLE`（HTTP 409）和 `CLOCK_SKEW`（HTTP 503）。
 
 租户级统一过期时间、最新状态保护、历史查询到期和 v0.8 发布版本兼容性见 [retention.md](retention.md)。IDEMPOTENCY_EXPIRED/VERSION_UNAVAILABLE 返回 410，RETRY_TOKEN_REQUIRED 返回 428；KNOWLEDGE_UNAVAILABLE 保持 409。
+
+`POST T/retry-context` 是会写入 retry token 的操作：read 角色仍被拒绝，响应按写入路径处理，不附加只读响应语义或接受一致性读控制。`GET /openapi.json` 的配置专属文档在创建 HTTP router 时生成并编码一次，各请求复用同一份内容。

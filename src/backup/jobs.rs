@@ -29,11 +29,20 @@ impl Inner {
             }
         });
         let published = persisted.is_ok();
-        if published && completed {
+        if (published && completed)
+            || matches!(
+                job.operation,
+                BackupOperation::Restore { .. } | BackupOperation::Import { .. }
+            )
+        {
             let _staging = self.staging.lock();
             let work = self.work_path.join(id.to_string());
-            if work.exists() {
-                let _ = fs::remove_dir_all(work);
+            if work.exists()
+                && let Err(error) = reject_symlink(&work)
+                    .and_then(|_| fs::remove_dir_all(work).map_err(Error::from))
+                    .and_then(|_| sync_dir(&self.work_path))
+            {
+                eprintln!("backup workspace cleanup {id}: {error}");
             }
         }
         let mut state = self.state.lock();
@@ -127,8 +136,12 @@ impl Context<'_> {
             Err(e) if e.code == "NOT_FOUND" => {}
             Err(e) => return Err(e),
         }
-        let _staging =
-            Staging::reserve(self.inner, self.inner.config.max_backup_bytes, self.job.id)?;
+        let _staging = Staging::reserve(
+            self.inner,
+            self.inner.config.max_backup_bytes,
+            self.job.id,
+            self.job.tenant,
+        )?;
         let work = self.work();
         fs::create_dir_all(&work)?;
         reject_symlink(&work)?;
@@ -156,7 +169,9 @@ impl Context<'_> {
                 self.inner.config.max_backup_bytes,
                 self.inner.config.reserve_free_bytes,
             )?;
-            let checkpoint_ms = now_ms();
+            let checkpoint_ms = self
+                .inner
+                .checkpoint_time(self.job.tenant, || self.check())?;
             drop(tenant);
             self.checkpoint_verify(&checkpoint, info.clone(), seq)?;
             let mut paths = vec!["TENANT.meta".to_string(), "CURRENT".to_string()];
@@ -244,7 +259,7 @@ impl Context<'_> {
             .total_bytes
             .saturating_mul(2)
             .saturating_add(1 << 20);
-        let _staging = Staging::reserve(self.inner, reserve, self.job.id)?;
+        let _staging = Staging::reserve(self.inner, reserve, self.job.id, self.job.tenant)?;
         if fs2::available_space(&self.inner.work_path)?
             < reserve.saturating_add(self.inner.config.reserve_free_bytes)
         {

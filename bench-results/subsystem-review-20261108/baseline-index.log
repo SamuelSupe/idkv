@@ -1,0 +1,22 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.58s
+     Running unittests src/lib.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv-da4845942d3e9983)
+
+running 1 test
+test tenant::indexes::tests::subsystem_review_dropped_collection_stops_snapshot_index_batches ... FAILED
+
+failures:
+
+---- tenant::indexes::tests::subsystem_review_dropped_collection_stops_snapshot_index_batches stdout ----
+
+thread 'tenant::indexes::tests::subsystem_review_dropped_collection_stops_snapshot_index_batches' panicked at src/tenant/indexes.rs:455:93:
+called `Result::unwrap_err()` on an `Ok` value: ()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tenant::indexes::tests::subsystem_review_dropped_collection_stops_snapshot_index_batches
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 104 filtered out; finished in 0.15s
+
+error: test failed, to rerun pass `--lib`

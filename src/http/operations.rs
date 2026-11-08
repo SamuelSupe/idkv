@@ -164,11 +164,11 @@ pub(super) fn dispatch(
         return value(tenant.read_context());
     }
     if route.ends_with("/read_batch") {
-        return value(
-            context
-                .reader(&tenant)?
-                .read_batch(&decode::<ReadBatchBody>(body)?.operations)?,
-        );
+        let result = context
+            .reader(&tenant)?
+            .read_batch(&decode::<ReadBatchBody>(body)?.operations)?;
+        state.runtime.telemetry.record_read(&result.stats);
+        return value(result);
     }
     if route.ends_with("/resources/{resource}") {
         return if *method == Method::GET {
@@ -183,27 +183,31 @@ pub(super) fn dispatch(
     }
     if route.ends_with("/resources/{resource}/read") {
         let b: PublishedReads = decode(body)?;
-        return value(context.reader(&tenant)?.read_published(
+        let result = context.reader(&tenant)?.read_published(
             &params["resource"],
             b.version,
             &b.operations,
-        )?);
+        )?;
+        state.runtime.telemetry.record_read(&result.result.stats);
+        return value(result);
     }
     if route.ends_with("/resources/{resource}/query") {
         let b: PublishedQueryBody = decode(body)?;
-        return value(context.reader(&tenant)?.query_published(
-            &params["resource"],
-            b.version,
-            b.query,
-        )?);
+        let result =
+            context
+                .reader(&tenant)?
+                .query_published(&params["resource"], b.version, b.query)?;
+        state.runtime.telemetry.record_read(&result.result.stats);
+        return value(result);
     }
     if route.ends_with("/resources/{resource}/execute") {
         let b: PublishedInputs = decode(body)?;
-        return value(context.reader(&tenant)?.lookup_published(
-            &params["resource"],
-            b.version,
-            &b.inputs,
-        )?);
+        let result =
+            context
+                .reader(&tenant)?
+                .lookup_published(&params["resource"], b.version, &b.inputs)?;
+        state.runtime.telemetry.record_read(&result.result.stats);
+        return value(result);
     }
     match route {
         "/v1/tenants/{tenant}/replication/wait" => {
@@ -336,14 +340,18 @@ pub(super) fn dispatch(
         return ok();
     }
     if route.ends_with("/execute") {
-        return value(context.reader(&tenant)?.lookup_many(
+        let result = context.reader(&tenant)?.lookup_many(
             collection,
             &params["lookup"],
             &decode::<InputsBody>(body)?.inputs,
-        )?);
+        )?;
+        state.runtime.telemetry.record_read(&result.stats);
+        return value(result);
     }
     if route.ends_with("/query") {
-        return value(context.reader(&tenant)?.query(collection, decode(body)?)?);
+        let result = context.reader(&tenant)?.query(collection, decode(body)?)?;
+        state.runtime.telemetry.record_read(&result.stats);
+        return value(result);
     }
     if route.ends_with("/explain") {
         return value(

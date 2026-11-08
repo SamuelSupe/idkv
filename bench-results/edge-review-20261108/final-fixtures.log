@@ -1,0 +1,17 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.95s
+     Running unittests src/lib.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv-2393aa090e8f705f)
+
+running 1 test
+test replication::client::tests::edge_review_progressing_response_body_can_take_more_than_thirty_seconds ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 112 filtered out; finished in 32.23s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running tests/recovery.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/recovery-f151d9dc457b27b2)
+
+running 2 tests
+test edge_review_crashed_local_checkpoint_is_reclaimed_before_backup_count_limit ... ok
+test edge_review_readonly_enospc_exposes_only_durable_prefix_and_preserves_recovery_bytes ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.34s

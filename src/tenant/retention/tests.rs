@@ -256,8 +256,8 @@ fn retention_migration_pages_physical_records_instead_of_stalling_at_tombstones(
     let t = store
         .tenant(store.create_tenant("migration-tombstones").unwrap().id)
         .unwrap();
-    t.set_retention(60).unwrap();
     drop(store);
+    t.set_retention(60).unwrap();
     t.engine()
         .transact(|tx| {
             for n in 0..128 {
@@ -850,4 +850,39 @@ fn receipt_metadata_does_not_reduce_the_public_document_batch_limit() {
             .unwrap()["value"],
         count - 1
     );
+}
+
+#[test]
+fn edge_review_publication_gc_keeps_long_lived_write_receipts_after_policy_shrink() {
+    let (_dir, store, t) = setup();
+    drop(store);
+    collection(&t, "old");
+    collection(&t, "new");
+    t.set_retention(60).unwrap();
+    let opts = options(&t, "before-publication");
+    let first = t
+        .write_batch_with("old", put_op(), &opts, "worker")
+        .unwrap();
+    t.set_retention(1).unwrap();
+    let short = t.retry_context("worker").unwrap();
+    let old = publish(&t, "resource", "old", None, Some(short.retry_token));
+    publish(
+        &t,
+        "resource",
+        "new",
+        Some(old.version),
+        Some(short.retry_token),
+    );
+    pause();
+    clean(&t);
+    assert!(!t.collections().unwrap().iter().any(|c| c.name == "old"));
+    t.create_collection("old").unwrap();
+    let seq = t.engine().seq();
+    let retry = t
+        .write_batch_with("old", put_op(), &opts, "worker")
+        .unwrap();
+    assert_eq!(retry[0].key, first[0].key);
+    assert_eq!(retry[0].rev, first[0].rev);
+    assert_eq!(t.engine().seq(), seq);
+    assert!(t.get("old", &first[0].key).unwrap().is_none());
 }

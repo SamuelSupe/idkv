@@ -78,9 +78,6 @@ impl Snapshot {
         if self.0.revoked.load(Ordering::Acquire) || Instant::now() >= self.0.expires {
             return Err(Error::new("CURSOR_EXPIRED", "snapshot lease expired"));
         }
-        if self.0.engine.closed.load(Ordering::Acquire) {
-            return Err(Error::new("UNAVAILABLE", "tenant closed"));
-        }
         Ok(())
     }
     pub fn get(&self, key: &[u8], stats: &mut ReadStats) -> Result<Option<Arc<Bytes>>> {

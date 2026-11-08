@@ -77,7 +77,13 @@ fn main() {
         }
     }
     let tenant = store.tenant(args[2].parse().unwrap()).unwrap();
-    if args[3] == "retention" {
+    if args[3] == "readonly-recovery" {
+        assert!(!tenant.engine().writable());
+        assert!(tenant.get("assets", "old").unwrap().is_some());
+        assert!(tenant.get("assets", "new").unwrap().is_none());
+    } else if args[3] == "local-backup" {
+        store.backup(tenant.id()).unwrap();
+    } else if args[3] == "retention" {
         std::thread::sleep(std::time::Duration::from_secs(10));
         panic!("retention failpoint did not trigger");
     } else if args[3] == "receipt" {
@@ -110,6 +116,11 @@ fn main() {
     } else if args[3] == "delete-error" {
         let token_file = store.root().join("test-peer-token");
         std::fs::write(&token_file, "test-only-delete-failure-peer-token").unwrap();
+        std::fs::set_permissions(
+            &token_file,
+            std::os::unix::fs::PermissionsExt::from_mode(0o600),
+        )
+        .unwrap();
         let service = tenant_kv::replication::Service::open(
             store.clone(),
             tenant_kv::replication::Config {
@@ -182,6 +193,9 @@ fn main() {
                     assert!(result.is_err());
                     assert_eq!(store.tenant(id).err().unwrap().code, "UNAVAILABLE");
                     assert_eq!(store.close_tenant(id).unwrap_err().code, "UNAVAILABLE");
+                    store
+                        .create_tenant("publication-after-restore-error")
+                        .unwrap();
                     break;
                 }
                 result => {

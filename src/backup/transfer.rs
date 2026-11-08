@@ -110,27 +110,40 @@ impl Context<'_> {
             user_metadata: metadata,
             ..Default::default()
         };
-        let mut writer = self
-            .inner
-            .op
-            .writer_options(&key, options)
-            .map_err(remote_error)?;
-        let mut digest = Sha256::new();
-        let mut offset = 0;
-        while offset < file.size {
-            let bytes = self.chunk(
-                input.clone(),
-                offset,
-                (file.size - offset).min(CHUNK as u64) as usize,
-            )?;
-            offset += bytes.len() as u64;
-            digest.update(&bytes);
-            writer.write(bytes).map_err(remote_error)?;
-        }
-        if format!("{:x}", digest.finalize()) != file.sha256 {
-            return Err(Error::corrupt("checkpoint digest changed"));
-        }
-        writer.close().map_err(remote_error)?;
+        self.inner.network.block_on(async {
+            let mut writer = self
+                .inner
+                .upload_op
+                .writer_options(&key, options)
+                .await
+                .map_err(remote_error)?;
+            let result = async {
+                let mut digest = Sha256::new();
+                let mut offset = 0;
+                while offset < file.size {
+                    let bytes = self.chunk(
+                        input.clone(),
+                        offset,
+                        (file.size - offset).min(CHUNK as u64) as usize,
+                    )?;
+                    offset += bytes.len() as u64;
+                    digest.update(&bytes);
+                    writer.write(bytes).await.map_err(remote_error)?;
+                }
+                if format!("{:x}", digest.finalize()) != file.sha256 {
+                    return Err(Error::corrupt("checkpoint digest changed"));
+                }
+                writer.close().await.map_err(remote_error)?;
+                Ok(())
+            }
+            .await;
+            if result.is_err()
+                && let Err(error) = writer.abort().await
+            {
+                eprintln!("backup upload abort failed for {}: {error}", self.job.id);
+            }
+            result
+        })?;
         let meta = self.inner.op.stat(&key).map_err(remote_error)?;
         if meta.content_length() != file.size {
             return Err(Error::corrupt("uploaded backup object length mismatch"));
@@ -204,12 +217,20 @@ pub(super) struct Staging<'a> {
     job: Uuid,
 }
 impl<'a> Staging<'a> {
-    pub fn reserve(inner: &'a Inner, bytes: u64, own: Uuid) -> Result<Self> {
+    pub fn reserve(inner: &'a Inner, bytes: u64, own: Uuid, tenant: Uuid) -> Result<Self> {
         let mut reserved = inner.staging.lock();
         if reserved.contains_key(&own) {
             return Err(Error::new("BUSY", "backup staging already reserved"));
         }
         let mut retained = 0;
+        let mut tenant_retained = 0;
+        let owners: HashMap<_, _> = inner
+            .state
+            .lock()
+            .jobs
+            .values()
+            .map(|job| (job.id, job.tenant))
+            .collect();
         for entry in fs::read_dir(&inner.work_path)? {
             let path = entry?.path();
             let job = path
@@ -219,12 +240,33 @@ impl<'a> Staging<'a> {
             let covered = if job == Some(own) {
                 bytes
             } else {
-                job.and_then(|id| reserved.get(&id)).copied().unwrap_or(0)
+                job.and_then(|id| reserved.get(&id))
+                    .map_or(0, |(_, bytes)| *bytes)
             };
-            retained += tree_size(&path)?.saturating_sub(covered);
+            let uncovered = tree_size(&path)?.saturating_sub(covered);
+            retained += uncovered;
+            if job == Some(own) || job.and_then(|id| owners.get(&id)).copied() == Some(tenant) {
+                tenant_retained += uncovered;
+            }
+        }
+        let tenant_limit = (inner.config.max_staging_bytes / 2).max(inner.config.max_backup_bytes);
+        if tenant_retained
+            .saturating_add(
+                reserved
+                    .values()
+                    .filter(|(owner, _)| *owner == tenant)
+                    .map(|(_, bytes)| *bytes)
+                    .sum::<u64>(),
+            )
+            .saturating_add(bytes)
+            > tenant_limit
+        {
+            return Err(Error::limit(
+                "tenant backup staging budget; retry or forget retained creates",
+            ));
         }
         if retained
-            .saturating_add(reserved.values().sum::<u64>())
+            .saturating_add(reserved.values().map(|(_, bytes)| *bytes).sum::<u64>())
             .saturating_add(bytes)
             > inner.config.max_staging_bytes
         {
@@ -232,7 +274,7 @@ impl<'a> Staging<'a> {
                 "backup staging budget; forget failed jobs or increase max_staging_bytes",
             ));
         }
-        reserved.insert(own, bytes);
+        reserved.insert(own, (tenant, bytes));
         Ok(Self { inner, job: own })
     }
 }
@@ -242,13 +284,29 @@ impl Drop for Staging<'_> {
     }
 }
 pub(super) fn tree_size(path: &Path) -> Result<u64> {
-    reject_symlink(path)?;
-    if path.is_file() {
-        return Ok(fs::metadata(path)?.len());
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(error) => return Err(error.into()),
+    };
+    if metadata.file_type().is_symlink() {
+        return Err(Error::invalid("backup workspace symlink"));
     }
+    if metadata.is_file() {
+        return Ok(metadata.len());
+    }
+    let entries = match fs::read_dir(path) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(error) => return Err(error.into()),
+    };
     let mut size = 0u64;
-    for entry in fs::read_dir(path)? {
-        size = size.saturating_add(tree_size(&entry?.path())?);
+    for entry in entries {
+        match entry {
+            Ok(entry) => size = size.saturating_add(tree_size(&entry.path())?),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
     }
     Ok(size)
 }
@@ -279,24 +337,102 @@ mod tests {
         let first = Uuid::new_v4();
         let second = Uuid::new_v4();
         let third = Uuid::new_v4();
-        let held = Staging::reserve(inner, 1 << 20, first).unwrap();
+        let held = Staging::reserve(inner, 1 << 20, first, first).unwrap();
         let work = inner.work_path.join(first.to_string());
         fs::create_dir(&work).unwrap();
         fs::write(work.join("extra"), vec![0; 1536 << 10]).unwrap();
         assert_eq!(
-            Staging::reserve(inner, 1 << 20, second).err().unwrap().code,
+            Staging::reserve(inner, 1 << 20, second, second)
+                .err()
+                .unwrap()
+                .code,
             "RESOURCE_EXHAUSTED"
         );
         fs::write(work.join("extra"), vec![0; 512 << 10]).unwrap();
-        let other = Staging::reserve(inner, 1 << 20, second).unwrap();
+        let other = Staging::reserve(inner, 1 << 20, second, second).unwrap();
         drop(held);
         assert_eq!(
-            Staging::reserve(inner, 1 << 20, third).err().unwrap().code,
+            Staging::reserve(inner, 1 << 20, third, third)
+                .err()
+                .unwrap()
+                .code,
             "RESOURCE_EXHAUSTED"
         );
         fs::remove_dir_all(work).unwrap();
-        let last = Staging::reserve(inner, 1 << 20, third).unwrap();
+        let last = Staging::reserve(inner, 1 << 20, third, third).unwrap();
         drop(last);
         drop(other);
+    }
+    #[test]
+    fn edge_review_failed_stream_aborts_fs_upload_and_cleans_stale_workspace() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path().join("data"), crate::Options::default()).unwrap();
+        let tenant = store.create_tenant("abort-upload").unwrap();
+        let config = BackupConfig {
+            service: "fs".into(),
+            options: HashMap::from([(
+                "root".into(),
+                dir.path().join("remote").to_string_lossy().into(),
+            )]),
+            reserve_free_bytes: 0,
+            bytes_per_second: 100 << 20,
+            ..Default::default()
+        };
+        let service = BackupService::open(store.clone(), config.clone()).unwrap();
+        let inner = &service.owner.inner;
+        let (_, budget, io) = store.backup_context(tenant.id).unwrap();
+        let job = BackupJob {
+            id: Uuid::new_v4(),
+            tenant: tenant.id,
+            backup: Uuid::new_v4(),
+            operation: BackupOperation::Create,
+            state: JobState::Uploading,
+            created_ms: 0,
+            updated_ms: 0,
+            uploaded_bytes: 0,
+            reused_bytes: 0,
+            processed_files: 0,
+            checkpoint_seq: None,
+            result: None,
+            error: None,
+        };
+        let input = dir.path().join("input");
+        fs::write(&input, vec![1; 12 << 20]).unwrap();
+        let context = Context {
+            inner,
+            job,
+            budget,
+            io,
+            started: Instant::now(),
+        };
+        let file = BackupFile {
+            path: "sst/test.sst".into(),
+            size: 12 << 20,
+            sha256: "0".repeat(64),
+        };
+        assert_eq!(
+            context
+                .upload(&file, &input, tenant.generation)
+                .unwrap_err()
+                .code,
+            "CORRUPTION"
+        );
+        let temp = PathBuf::from(&inner.config.options["atomic_write_dir"]);
+        assert_eq!(
+            fs::read_dir(&temp).unwrap().count(),
+            0,
+            "aborted upload leaked a temporary file"
+        );
+        assert!(
+            !inner
+                .op
+                .exists(&object_key(tenant.id, tenant.generation, &file.sha256))
+                .unwrap()
+        );
+        fs::write(temp.join("interrupted-process"), b"partial").unwrap();
+        drop(service);
+        let _service = BackupService::open(store, config).unwrap();
+        assert_eq!(fs::read_dir(temp).unwrap().count(), 0);
+        assert_eq!(tree_size(&dir.path().join("already-removed")).unwrap(), 0);
     }
 }

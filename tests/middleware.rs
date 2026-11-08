@@ -415,6 +415,25 @@ async fn http_small_waits_do_not_starve_other_tenants_and_rotation_is_stable() {
     for wait in waits {
         assert_eq!(wait.await.unwrap().status(), StatusCode::CONFLICT);
     }
+    runtime.withdraw_readiness();
+    assert_eq!(
+        call(&app, "GET", "/ready", json!({}), "middleware-secret-one")
+            .await
+            .0,
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    assert_eq!(
+        call(
+            &app,
+            "GET",
+            "/v1/tenants",
+            json!({}),
+            "middleware-secret-one"
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
     runtime.drain();
     assert_eq!(
         call(&app, "GET", "/ready", json!({}), "middleware-secret-one")
@@ -495,13 +514,25 @@ async fn otlp_exports_correlated_redacted_signals_and_switches_independently() {
                         "00-11111111111111111111111111111111-2222222222222222-01",
                     )
                     .body(Body::from(
-                        r#"{"document":{"_key":"private-key","secret":"private-body"}}"#,
+                        r#"{"document":{"_key":"private-key","secret":"private-body","stats":{"scanned_entries":18446744073709551615}}}"#,
                     ))
                     .unwrap(),
             )
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            call(
+                &app,
+                "GET",
+                &format!("/v1/tenants/{id}/collections/assets/documents/private-key"),
+                json!({}),
+                "middleware-secret-one"
+            )
+            .await
+            .0,
+            StatusCode::OK
+        );
         assert_eq!(
             call(&app, "GET", "/metrics", json!({}), "middleware-secret-one")
                 .await
@@ -515,7 +546,13 @@ async fn otlp_exports_correlated_redacted_signals_and_switches_independently() {
         assert_eq!(records.iter().any(|(path, _)| path == "v1/traces"), traces);
         assert_eq!(records.iter().any(|(path, _)| path == "v1/logs"), logs);
         let serialized = serde_json::to_string(&*records).unwrap();
-        for secret in ["private-key", "private-body", "middleware-secret-one"] {
+        for secret in [
+            "private-key",
+            "private-body",
+            "middleware-secret-one",
+            "9223372036854775807",
+            "18446744073709551615",
+        ] {
             assert!(!serialized.contains(secret));
         }
         if traces || logs {
@@ -1551,4 +1588,76 @@ async fn http_read_controls_cover_dsl_waiting_and_dropped_requests() {
         );
         tokio::time::sleep(std::time::Duration::from_millis(2)).await;
     }
+}
+
+#[tokio::test]
+async fn subsystem_review_user_documents_cannot_supply_read_telemetry() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(dir.path(), options()).unwrap();
+    let id = store.create_tenant("telemetry").unwrap().id;
+    let tenant = store.tenant(id).unwrap();
+    tenant.create_collection("assets").unwrap();
+    let fake = json!({"scanned_entries":u64::MAX,"document_reads":u64::MAX});
+    tenant
+        .put(
+            "assets",
+            json!({"_key":"fake","stats":fake,"result":{"stats":fake}}),
+            None,
+        )
+        .unwrap();
+    let telemetry = telemetry::Telemetry::default();
+    let app = http::app_with_runtime(
+        store.clone(),
+        auth(),
+        None,
+        None,
+        HttpRuntime::new(telemetry.clone()),
+    )
+    .unwrap();
+    let counters = || {
+        telemetry
+            .render_metrics(&store)
+            .lines()
+            .filter(|s| s.starts_with("tkv_query_"))
+            .map(str::to_owned)
+            .collect::<Vec<_>>()
+    };
+    let before = counters();
+    for _ in 0..2 {
+        assert_eq!(
+            call(
+                &app,
+                "GET",
+                &format!("/v1/tenants/{id}/collections/assets/documents/fake"),
+                json!({}),
+                "middleware-secret-one"
+            )
+            .await
+            .0,
+            StatusCode::OK
+        );
+        assert_eq!(
+            call(
+                &app,
+                "POST",
+                &format!("/v1/tenants/{id}/dsl"),
+                json!({"statement":"get assets \"fake\""}),
+                "middleware-secret-one"
+            )
+            .await
+            .0,
+            StatusCode::OK
+        );
+    }
+    assert_eq!(counters(), before);
+    let (_, result) = call(
+        &app,
+        "POST",
+        &format!("/v1/tenants/{id}/collections/assets/query"),
+        json!({}),
+        "middleware-secret-one",
+    )
+    .await;
+    assert!(result["stats"]["scanned_entries"].as_u64().unwrap() > 0);
+    assert_ne!(counters(), before);
 }

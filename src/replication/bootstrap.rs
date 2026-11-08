@@ -175,10 +175,48 @@ impl Service {
                     )
                 };
                 probe().await?;
-                let mut installation = store.begin_replica_install(source, tenant)?;
+                let mut installation = Some(store.begin_replica_install(source, tenant)?);
+                let mut retry_at = std::time::Instant::now();
+                let mut drain_attempts = 1;
                 loop {
                     check_cancelled()?;
-                    installation.expire_readers()?;
+                    if probed.elapsed() >= std::time::Duration::from_secs(30) {
+                        probe().await?;
+                        probed = std::time::Instant::now();
+                    }
+                    if installation
+                        .as_mut()
+                        .is_some_and(|gate| gate.expire_readers().is_err())
+                    {
+                        // Reopen reads during backoff, retaining the durable copy and
+                        // renewing its WAL lease independently from the drain gate.
+                        installation.take();
+                        if drain_attempts >= 2 {
+                            return Err(Error::new(
+                                "DEADLINE_EXCEEDED",
+                                "tenant reader drain deadline after retained-checkpoint retry",
+                            ));
+                        }
+                        self.reader_drain_timed_out(tenant);
+                        retry_at = std::time::Instant::now() + std::time::Duration::from_secs(30);
+                    }
+                    if installation.is_none() {
+                        if std::time::Instant::now() < retry_at {
+                            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                            continue;
+                        }
+                        match store.begin_replica_install(source, tenant) {
+                            Ok(gate) => {
+                                installation = Some(gate);
+                                drain_attempts += 1;
+                            }
+                            Err(error) if error.code == "BUSY" => {
+                                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                                continue;
+                            }
+                            Err(error) => return Err(error),
+                        }
+                    }
                     let installed = store
                         .check_replica_install(source, tenant)
                         .and_then(|_| store.install_replica(source, &path, tenant_info.clone()));

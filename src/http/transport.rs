@@ -69,6 +69,7 @@ impl Listener {
                 }
             }
         }
+        drop(self);
         let _ = stop.send(true);
         while tasks.join_next().await.is_some() {}
         Ok(())
@@ -299,5 +300,55 @@ mod tests {
                 .kind(),
             io::ErrorKind::TimedOut
         );
+    }
+    #[tokio::test]
+    async fn edge_review_shutdown_closes_listener_before_waiting_for_responses() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let tcp = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = tcp.local_addr().unwrap();
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let release = Arc::new(tokio::sync::Notify::new());
+        let handler_entered = entered.clone();
+        let handler_release = release.clone();
+        let router = axum::Router::new().route(
+            "/work",
+            axum::routing::get(move || {
+                let entered = handler_entered.clone();
+                let release = handler_release.clone();
+                async move {
+                    entered.notify_one();
+                    release.notified().await;
+                    "confirmed"
+                }
+            }),
+        );
+        let (stop, stopped) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(Listener::new(tcp, &crate::Options::default()).serve(
+            router,
+            async move {
+                let _ = stopped.await;
+            },
+        ));
+        let mut client = TcpStream::connect(address).await.unwrap();
+        client
+            .write_all(b"GET /work HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+            .await
+            .unwrap();
+        entered.notified().await;
+        stop.send(()).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while TcpStream::connect(address).await.is_ok() {
+            assert!(
+                Instant::now() < deadline,
+                "listener remained open while a request drained"
+            );
+            tokio::task::yield_now().await;
+        }
+        assert!(!server.is_finished());
+        release.notify_one();
+        let mut response = String::new();
+        client.read_to_string(&mut response).await.unwrap();
+        assert!(response.ends_with("confirmed"));
+        server.await.unwrap().unwrap();
     }
 }

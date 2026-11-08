@@ -65,6 +65,16 @@ impl Store {
             return Err(Error::new("CONFLICT", "tenant changed during quota update"));
         }
         self.close_slot(&mut guard)?;
+        let used =
+            crate::storage::directory_size(&self.root().join("tenants").join(id.to_string()))?;
+        // Preserve ordinary write space for deletes and their WAL records.
+        if info.disk_bytes < current.info.disk_bytes
+            && used.saturating_add(4096) > info.disk_bytes - info.disk_bytes / 5
+        {
+            return Err(Error::limit(
+                "new disk quota leaves no foreground write headroom",
+            ));
+        }
         if info.memory_bytes >= guard.memory.limit() {
             return self.publish_quota(&mut guard, info);
         }

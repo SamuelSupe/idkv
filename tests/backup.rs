@@ -781,3 +781,282 @@ fn concurrent_backups_count_active_staging_only_once() {
     drop(store);
     drop(dir);
 }
+
+#[test]
+fn subsystem_review_failed_restore_releases_downloaded_workspace() {
+    let (dir, store, id, cfg) = setup();
+    let service = BackupService::open(store.clone(), cfg.clone()).unwrap();
+    let backup = complete(&service, id, BackupOperation::Create);
+    let handle = store.tenant(id).unwrap();
+    let failed = wait(
+        &service,
+        &start(
+            &service,
+            id,
+            BackupOperation::Restore {
+                backup: backup.backup,
+            },
+        ),
+    );
+    assert_eq!(failed.state, JobState::Failed);
+    assert!(failed.error.as_ref().unwrap().contains("BUSY"));
+    assert!(
+        !dir.path()
+            .join("data/backup-work")
+            .join(failed.id.to_string())
+            .exists()
+    );
+    assert_eq!(
+        handle.get("assets", "a").unwrap().unwrap()["owner"],
+        "before"
+    );
+    drop(handle);
+    drop(service);
+    drop(store);
+    let legacy = dir
+        .path()
+        .join("data/backup-work")
+        .join(failed.id.to_string());
+    fs::create_dir_all(&legacy).unwrap();
+    fs::write(legacy.join("checkpoint"), b"legacy failed download").unwrap();
+    let store = Store::open(dir.path().join("data"), Options::default()).unwrap();
+    let _service = BackupService::open(store, cfg).unwrap();
+    assert!(!legacy.exists());
+}
+
+#[test]
+fn subsystem_review_one_tenant_cannot_fill_the_backup_job_table() {
+    let (_dir, store, id, mut cfg) = setup();
+    cfg.max_jobs = 4;
+    let other = store.create_tenant("other").unwrap().id;
+    let service = BackupService::open(store, cfg).unwrap();
+    for _ in 0..2 {
+        assert_eq!(
+            wait(
+                &service,
+                &start(
+                    &service,
+                    id,
+                    BackupOperation::Verify {
+                        backup: Uuid::new_v4()
+                    }
+                )
+            )
+            .state,
+            JobState::Failed
+        );
+    }
+    assert_eq!(
+        service
+            .submit(id, BackupOperation::Create)
+            .unwrap_err()
+            .code,
+        "RESOURCE_EXHAUSTED"
+    );
+    complete(&service, other, BackupOperation::Create);
+}
+
+#[test]
+fn subsystem_review_retained_create_cannot_exhaust_other_tenants_staging() {
+    let (dir, store, id, mut cfg) = setup();
+    cfg.max_backup_bytes = 1 << 20;
+    cfg.max_staging_bytes = 2 << 20;
+    let other = store.create_tenant("other").unwrap().id;
+    let service = BackupService::open(store.clone(), cfg).unwrap();
+    let blocked = dir.path().join(format!("remote/tenants/{id}/objects"));
+    fs::create_dir_all(blocked.parent().unwrap()).unwrap();
+    fs::write(&blocked, b"blocked").unwrap();
+    let failed = wait(&service, &start(&service, id, BackupOperation::Create));
+    assert_eq!(failed.state, JobState::Failed);
+    assert!(
+        dir.path()
+            .join("data/backup-work")
+            .join(failed.id.to_string())
+            .exists()
+    );
+    let rejected = wait(&service, &start(&service, id, BackupOperation::Create));
+    assert_eq!(rejected.state, JobState::Failed);
+    assert!(
+        rejected
+            .error
+            .unwrap()
+            .contains("tenant backup staging budget")
+    );
+    complete(&service, other, BackupOperation::Create);
+    fs::remove_file(blocked).unwrap();
+    assert_eq!(
+        wait(&service, &service.retry(id, failed.id).unwrap()).state,
+        JobState::Completed
+    );
+    assert_eq!(
+        store
+            .tenant(id)
+            .unwrap()
+            .get("assets", "a")
+            .unwrap()
+            .unwrap()["owner"],
+        "before"
+    );
+}
+
+fn publish_manifest_fixture(root: &Path, manifest: &BackupManifest) {
+    let path = snapshot(root, manifest.tenant.id, manifest.backup);
+    fs::create_dir_all(&path).unwrap();
+    let bytes = serde_json::to_vec(manifest).unwrap();
+    fs::write(path.join("manifest.json"), &bytes).unwrap();
+    fs::write(
+        path.join("COMPLETED"),
+        serde_json::to_vec(
+            &json!({"version":1,"manifest_sha256":format!("{:x}",Sha256::digest(&bytes))}),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+}
+
+#[test]
+fn subsystem_review_prune_recovers_beyond_the_snapshot_listing_limit() {
+    let (dir, store, id, cfg) = setup();
+    let service = BackupService::open(store, cfg).unwrap();
+    let initial = complete(&service, id, BackupOperation::Create);
+    let mut manifest: BackupManifest = serde_json::from_slice(
+        &fs::read(snapshot(dir.path(), id, initial.backup).join("manifest.json")).unwrap(),
+    )
+    .unwrap();
+    for _ in 0..4096 {
+        manifest.backup = Uuid::new_v4();
+        manifest.checkpoint_ms += 1;
+        publish_manifest_fixture(dir.path(), &manifest);
+    }
+    let result = complete(&service, id, BackupOperation::Prune { keep_last: 1 });
+    assert_eq!(result.result.unwrap()["deleted_backups"], 4096);
+    let remaining = list(&service, id);
+    assert_eq!(remaining.len(), 1);
+    assert_eq!(remaining[0].backup, manifest.backup);
+    complete(
+        &service,
+        id,
+        BackupOperation::Verify {
+            backup: manifest.backup,
+        },
+    );
+}
+
+#[test]
+fn subsystem_review_prune_bounds_memory_without_a_reference_count_dead_end() {
+    let (dir, store, id, cfg) = setup();
+    let service = BackupService::open(store, cfg).unwrap();
+    let initial = complete(&service, id, BackupOperation::Create);
+    let original: BackupManifest = serde_json::from_slice(
+        &fs::read(snapshot(dir.path(), id, initial.backup).join("manifest.json")).unwrap(),
+    )
+    .unwrap();
+    for n in 0..6 {
+        let mut manifest = original.clone();
+        manifest.backup = Uuid::new_v4();
+        manifest.checkpoint_ms += n + 1;
+        for i in 0..17_000 {
+            manifest.files.push(BackupFile {
+                path: format!("sst/{}.sst", Uuid::new_v4()),
+                size: 1,
+                sha256: format!("{:064x}", 1_000_000 + n * 17_000 + i),
+            });
+            manifest.total_bytes += 1;
+        }
+        publish_manifest_fixture(dir.path(), &manifest);
+    }
+    let objects = dir.path().join(format!(
+        "remote/tenants/{id}/objects/{}",
+        original.tenant.generation
+    ));
+    let orphan = objects.join("f".repeat(64));
+    fs::write(&orphan, b"unreferenced").unwrap();
+    let kept = objects.join(&original.files[0].sha256);
+    assert!(kept.exists());
+    let result = complete(&service, id, BackupOperation::Prune { keep_last: 6 });
+    assert_eq!(result.result.unwrap()["deleted_backups"], 1);
+    assert!(!orphan.exists());
+    assert!(kept.exists());
+    assert_eq!(list(&service, id).len(), 6);
+}
+
+#[test]
+fn edge_review_lower_job_limit_preserves_startup_and_old_jobs() {
+    let (_dir, store, id, mut cfg) = setup();
+    let service = BackupService::open(store.clone(), cfg.clone()).unwrap();
+    let mut jobs = Vec::new();
+    for _ in 0..3 {
+        let job = start(&service, id, BackupOperation::Create);
+        assert_eq!(wait(&service, &job).state, JobState::Completed);
+        jobs.push(job.id);
+    }
+    drop(service);
+    cfg.max_jobs = 1;
+    let service = BackupService::open(store.clone(), cfg).unwrap();
+    assert_eq!(service.jobs(id).len(), 3);
+    assert_eq!(
+        service
+            .submit(id, BackupOperation::Create)
+            .unwrap_err()
+            .code,
+        "RESOURCE_EXHAUSTED"
+    );
+    for job in jobs {
+        service.forget(id, job).unwrap();
+    }
+    let job = start(&service, id, BackupOperation::Create);
+    assert_eq!(wait(&service, &job).state, JobState::Completed);
+    assert!(
+        store
+            .tenant(id)
+            .unwrap()
+            .get("assets", "a")
+            .unwrap()
+            .is_some()
+    );
+}
+
+#[test]
+fn edge_review_backup_order_survives_clock_rollback_and_restart() {
+    let (dir, store, id, cfg) = setup();
+    let service = BackupService::open(store.clone(), cfg.clone()).unwrap();
+    let older = start(&service, id, BackupOperation::Create);
+    assert_eq!(wait(&service, &older).state, JobState::Completed);
+    // A completed backup from before a wall-clock rollback must not outrank
+    // a subsequently created checkpoint, including after local clock state loss.
+    let future = u64::MAX / 2;
+    let path = snapshot(dir.path(), id, older.backup);
+    let mut manifest: BackupManifest =
+        serde_json::from_slice(&fs::read(path.join("manifest.json")).unwrap()).unwrap();
+    manifest.checkpoint_ms = future;
+    publish_manifest_fixture(dir.path(), &manifest);
+    let clock = store
+        .root()
+        .join("control/backup-jobs")
+        .join(format!("CLOCK-{id}"));
+    if clock.exists() {
+        fs::remove_file(clock).unwrap();
+    }
+    let newer = start(&service, id, BackupOperation::Create);
+    let completed = wait(&service, &newer);
+    assert_eq!(completed.state, JobState::Completed);
+    assert_eq!(completed.result.unwrap()["checkpoint_ms"], future + 1);
+    drop(service);
+    let service = BackupService::open(store, cfg).unwrap();
+    let newest = start(&service, id, BackupOperation::Create);
+    let completed = wait(&service, &newest);
+    assert_eq!(completed.result.unwrap()["checkpoint_ms"], future + 2);
+    let prune = start(&service, id, BackupOperation::Prune { keep_last: 1 });
+    assert_eq!(wait(&service, &prune).state, JobState::Completed);
+    let backups = service.list(id).unwrap();
+    assert_eq!(backups.len(), 1);
+    assert_eq!(backups[0].backup, newest.backup);
+    let verify = start(
+        &service,
+        id,
+        BackupOperation::Verify {
+            backup: newest.backup,
+        },
+    );
+    assert_eq!(wait(&service, &verify).state, JobState::Completed);
+}

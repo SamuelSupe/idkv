@@ -207,6 +207,13 @@ impl TenantHandle {
                 }
                 let key = named(&prefix(b'J', collection.id), &definition.spec.name);
                 let _ = self.engine().transact(|tx| {
+                    if let Err(error) = ensure_build(tx, &collection, &key, generation) {
+                        return if error.code == "CANCELLED" {
+                            Ok(())
+                        } else {
+                            Err(error)
+                        };
+                    }
                     if let Some(value) = tx.get(&key)? {
                         let mut current: IndexDefinition = parse(&value)?;
                         if current.generation == generation {
@@ -293,31 +300,48 @@ impl TenantHandle {
             let finished = self.engine().transact_waiting(
                 |tx| {
                     let key = named(&prefix(b'J', collection.id), &definition.spec.name);
-                    ensure_build(tx, &key, definition.generation)?;
-                    let pending = tx.prefix_first_after(&delta, delta_after.as_deref(), 64)?;
+                    ensure_build(tx, collection, &key, definition.generation)?;
+                    let pending = tx.prefix_first_after(&delta, delta_after.as_deref(), 1)?;
                     if pending.is_empty() {
                         definition.state = IndexState::Ready;
                         definition.ready_seq = tx.seq;
                         put(tx, key, definition)?;
                         return Ok(true);
                     }
-                    let mut bytes = 0;
+                    // A source transaction may swap unique values. Never split
+                    // its deltas across catch-up commits or validate intermediate owners.
+                    let group = &pending[0].0[..delta.len() + 8];
+                    let pending = tx.prefix(group, self.engine().options.max_batch_operations)?;
+                    let mut changes = std::collections::BTreeMap::new();
+                    let mut memory = Vec::new();
                     for (key, value) in pending {
                         check_stop()?;
-                        let _memory = self.engine().budget.reserve(value.len() * 2 + 512)?;
+                        memory.push(self.engine().budget.reserve(value.len() * 2 + 512)?);
                         let update = Delta::decode(&value)?;
-                        maintain_index(tx, definition, update.old.as_ref(), update.new.as_ref())?;
-                        if update.old.is_some() {
-                            definition.entries = definition.entries.saturating_sub(1);
-                        }
-                        if update.new.is_some() {
-                            definition.entries += 1;
+                        let owner = update
+                            .new
+                            .as_ref()
+                            .or(update.old.as_ref())
+                            .map(|entry| entry.document_key.clone());
+                        if let Some(owner) = owner {
+                            changes
+                                .entry(owner)
+                                .and_modify(|change: &mut Delta| change.new = update.new.clone())
+                                .or_insert(update);
                         }
                         delta_after = Some(key.clone());
                         tx.delete(key)?;
-                        bytes += value.len();
-                        if bytes >= 2 << 20 {
-                            break;
+                    }
+                    for change in changes.values() {
+                        maintain_index(tx, definition, change.old.as_ref(), None)?;
+                        if change.old.is_some() {
+                            definition.entries = definition.entries.saturating_sub(1);
+                        }
+                    }
+                    for change in changes.values() {
+                        maintain_index(tx, definition, None, change.new.as_ref())?;
+                        if change.new.is_some() {
+                            definition.entries += 1;
                         }
                     }
                     Ok(false)
@@ -350,6 +374,7 @@ impl TenantHandle {
             |tx| {
                 ensure_build(
                     tx,
+                    collection,
                     &named(&prefix(b'J', collection.id), &index.spec.name),
                     index.generation,
                 )?;
@@ -409,7 +434,22 @@ impl TenantHandle {
         Ok(())
     }
 }
-fn ensure_build(tx: &Transaction<'_>, key: &[u8], generation: Uuid) -> Result<()> {
+fn ensure_build(
+    tx: &Transaction<'_>,
+    collection: &Collection,
+    key: &[u8],
+    generation: Uuid,
+) -> Result<()> {
+    let current = tx
+        .get(&named(b"C", &collection.name))?
+        .map(|value| parse::<Collection>(&value))
+        .transpose()?;
+    if current.is_none_or(|current| current.id != collection.id) {
+        return Err(Error::new(
+            "CANCELLED",
+            "index collection dropped or replaced",
+        ));
+    }
     let def: IndexDefinition = parse(
         &tx.get(key)?
             .ok_or_else(|| Error::new("CANCELLED", "index dropped"))?,
@@ -418,4 +458,185 @@ fn ensure_build(tx: &Transaction<'_>, key: &[u8], generation: Uuid) -> Result<()
         return Err(Error::new("CANCELLED", "index build superseded"));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Options, Store};
+    use serde_json::json;
+
+    #[test]
+    fn subsystem_review_dropped_collection_stops_snapshot_index_batches() {
+        for recreate in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let store = Store::open(dir.path(), Options::default()).unwrap();
+            let id = store.create_tenant("index-drop").unwrap().id;
+            let tenant = store.tenant(id).unwrap();
+            // Pause the coordinator before its GC pass so the old index
+            // definition is still present when the delayed build resumes.
+            let _cursors = tenant.core.cursors.lock();
+            let collection = tenant.create_collection("docs").unwrap();
+            tenant
+                .put("docs", json!({"_key":"ack","value":1}), None)
+                .unwrap();
+            let (mut definition, snapshot) = tenant
+                .engine()
+                .transact_snapshot(|tx| {
+                    let definition = IndexDefinition {
+                        id: Uuid::new_v4(),
+                        generation: Uuid::new_v4(),
+                        spec: IndexSpec {
+                            name: "value".into(),
+                            fields: vec![IndexField {
+                                field: "/value".into(),
+                                order: Order::Asc,
+                            }],
+                            unique: false,
+                            include: vec![],
+                        },
+                        state: IndexState::Building,
+                        start_seq: tx.seq,
+                        ready_seq: 0,
+                        error: None,
+                        entries: 0,
+                    };
+                    put(
+                        tx,
+                        named(&prefix(b'J', collection.id), "value"),
+                        &definition,
+                    )?;
+                    Ok(definition)
+                })
+                .unwrap();
+            tenant.drop_collection("docs").unwrap();
+            if recreate {
+                assert_ne!(tenant.create_collection("docs").unwrap().id, collection.id);
+            }
+            let before = tenant.engine().seq();
+            assert_eq!(
+                tenant
+                    .populate_index(&collection, &mut definition, &snapshot, None)
+                    .unwrap_err()
+                    .code,
+                "CANCELLED"
+            );
+            assert_eq!(
+                tenant.engine().seq(),
+                before,
+                "cancelled builder published orphan records"
+            );
+            drop(snapshot);
+            for _ in 0..4 {
+                tenant.gc_step().unwrap();
+            }
+            let snapshot = tenant.engine().snapshot().unwrap();
+            let mut stats = ReadStats::default();
+            let start = prefix(b'I', collection.id);
+            assert!(
+                snapshot
+                    .scan(start.clone(), codec::prefix_end(&start), None, &mut stats)
+                    .unwrap()
+                    .next(&mut stats)
+                    .unwrap()
+                    .is_none()
+            );
+        }
+    }
+    #[test]
+    fn edge_review_online_unique_build_applies_complete_source_transactions() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        let t = store
+            .tenant(store.create_tenant("unique-deltas").unwrap().id)
+            .unwrap();
+        let _cursors = t.core.cursors.lock();
+        let collection = t.create_collection("docs").unwrap();
+        t.write_batch(
+            "docs",
+            (0..130)
+                .map(|n| WriteOp::Put {
+                    document: json!({"_key":format!("{n:03}"),"value":n}),
+                    if_rev: None,
+                })
+                .collect(),
+        )
+        .unwrap();
+        let (mut definition, snapshot) = t
+            .engine()
+            .transact_snapshot(|tx| {
+                let definition = IndexDefinition {
+                    id: Uuid::new_v4(),
+                    generation: Uuid::new_v4(),
+                    spec: IndexSpec {
+                        name: "value".into(),
+                        fields: vec![IndexField {
+                            field: "/value".into(),
+                            order: Order::Asc,
+                        }],
+                        unique: true,
+                        include: vec![],
+                    },
+                    state: IndexState::Building,
+                    start_seq: tx.seq,
+                    ready_seq: 0,
+                    error: None,
+                    entries: 0,
+                };
+                put(
+                    tx,
+                    named(&prefix(b'J', collection.id), "value"),
+                    &definition,
+                )?;
+                Ok(definition)
+            })
+            .unwrap();
+        t.core.builds.lock().insert(definition.generation);
+        let receipts = t
+            .write_batch(
+                "docs",
+                (0..130)
+                    .map(|n| WriteOp::Put {
+                        document: json!({"_key":format!("{n:03}"),"value":129-n}),
+                        if_rev: None,
+                    })
+                    .collect(),
+            )
+            .unwrap();
+        t.populate_index(&collection, &mut definition, &snapshot, None)
+            .unwrap();
+        assert_eq!(definition.state, IndexState::Ready);
+        assert_eq!(definition.entries, 130);
+        t.create_lookup(
+            "docs",
+            LookupDefinition {
+                name: "value".into(),
+                index: "value".into(),
+                select: vec!["/_key".into()],
+                mode: MatchMode::All,
+                max_matches: 1,
+            },
+        )
+        .unwrap();
+        let indexed = t
+            .lookup_many(
+                "docs",
+                "value",
+                &(0..130)
+                    .map(|value| json!({"value":value}))
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap();
+        for (n, matches) in indexed.matches.iter().enumerate() {
+            assert_eq!(matches.len(), 1);
+            assert_eq!(matches[0]["_key"], format!("{:03}", 129 - n));
+        }
+        for (n, receipt) in receipts.iter().enumerate() {
+            let document = t.get("docs", &format!("{n:03}")).unwrap().unwrap();
+            assert_eq!(document["_rev"], receipt.rev);
+            assert_eq!(document["value"], 129 - n);
+        }
+        t.core.builds.lock().remove(&definition.generation);
+        t.engine().verify().unwrap();
+    }
 }

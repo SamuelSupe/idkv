@@ -1,0 +1,21 @@
+   Compiling tenant-kv v0.10.1 (/var/tmp/idkv-edge-baseline-20261108)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.57s
+     Running tests/backup.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/backup-aac84cda2a61954c)
+
+running 1 test
+
+thread 'edge_review_backup_order_survives_clock_rollback_and_restart' panicked at tests/backup.rs:1043:5:
+assertion `left == right` failed
+  left: Number(1794130132892)
+ right: 9223372036854775808
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test edge_review_backup_order_survives_clock_rollback_and_restart ... FAILED
+
+failures:
+
+failures:
+    edge_review_backup_order_survives_clock_rollback_and_restart
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 17 filtered out; finished in 0.52s
+
+error: test failed, to rerun pass `--test backup`

@@ -59,3 +59,5 @@ v0.10.1 的详细引擎统计 `scheduler.cancelled_jobs` 记录出队时跳过�
 嵌入式应用显式创建 `Telemetry`，传给 `http::app_with_runtime`。构造 exporter 和 `shutdown` 在阻塞线程执行；组件不会安装全局 tracer、logger 或 tracing subscriber，不接管宿主日志配置。自定义非 HTTP 调用可用 `Telemetry::begin(...).context()` 传递上下文并在完成后调用 `finish(status)`；默认只自动观测 HTTP 适配器，不声称已经自动覆盖宿主所有 Rust 函数。
 
 依赖接口参考：[官方 Rust SDK](https://opentelemetry.io/docs/languages/rust/)、[固定 OTLP 0.31.1 API](https://docs.rs/opentelemetry-otlp/0.31.1/opentelemetry_otlp/)。本版本选择并固定这组兼容版本，未依赖 latest 文档的接口。
+
+读取计数和 `db.read` trace 事件只接收执行器返回的类型化 ReadStats（查询、Lookup、组合/发布读取及身份解析），不再从响应 JSON 推断。普通 Get/MultiGet 与 DSL Get 返回的用户 `stats` 或 `result.stats` 字段仅作为业务数据返回。累计读取计数使用饱和加法，达到 u64 上限后不回绕。

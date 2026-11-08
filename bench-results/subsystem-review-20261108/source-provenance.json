@@ -1,0 +1,32 @@
+{
+  "base_commit": "5600a4ea0aca5f0d13e9ec7f5966cb2782f294f1",
+  "baseline_note": "Includes the preceding uncommitted WAL tail recovery fix; its source hashes are unchanged.",
+  "environment": "OrbStack Ubuntu AArch64; test data in Linux /var/tmp/idkv-p01-tmp-20261108",
+  "source_sha256": {
+    "src/backup/jobs.rs": "fac740d05f9aaa01177147da1e47ec6c4639be3c0d51eed375ca085394ea9db1",
+    "src/backup/mod.rs": "b2e681c3f58b78431284f3874d6130c117fe3f8aac321a465d0b37133f497dd3",
+    "src/backup/repository.rs": "fb40e56f0583eacf58ae16cc00d6f55ebd925c7c09663d56a1d03d999fc1f279",
+    "src/backup/transfer.rs": "142eb77fef1ec97a7fa876fb4924ab86de8b9853bdc5824dd7139a37fe8217a2",
+    "src/http.rs": "59c8bd774b53cc1efdaa3380737657facf9d7cc3def08a89e57152c7ce9b9d91",
+    "src/http/identity.rs": "b81ba74efb3ca1335ffcbbe647ea4be977f7a8010e56e5877fcab0c5f285d65a",
+    "src/http/operations.rs": "87ec2fecd27240bbbfafb4edd8e69f71a4c550a4ae1c6b63dfa719951b5f83be",
+    "src/replication/client.rs": "dbccdf25339f15035e94561ab1e5722d078da83d48cb7625c5565ed8d2b5aabd",
+    "src/storage/wal.rs": "de03f27a955780407f61aed1e422117708cbe2a82433584c0984790578e83609",
+    "src/telemetry.rs": "1eff113d82b80d79f5a03b51a0470248e10e96dbaedf069bda9c6d8608efa5b8",
+    "src/tenant/indexes.rs": "3a911b083bd9136f48d0cc1a6b21be1bc8085081316935f789be09d6375637c3",
+    "src/tenant/manager.rs": "6b8a73c423281caeb2d3e4f34de5b4a14f0728a24a86a0a21101dd6d82d0be79",
+    "src/tenant/manager/lifecycle.rs": "be7f2d4667f3b1c65c3d074b8c14c6132c6b4612636c25a3b81665b91b3994b2",
+    "tests/backup.rs": "5a0cb54ecbffb3a32c835c41083fcd89738a815d4f1ef538d9e50a5f8f363a78",
+    "tests/engine.rs": "2ee5e8d54dde8dc38d02d57134446a8c1fcd1f531bb8e658addba6f417edb49b",
+    "tests/middleware.rs": "7db2f5c106efd86bedb4ca147221fc97c449ad7ea5cc0cfbdf0078a696995478",
+    "tests/recovery.rs": "1c623756e2318b5b3ec042279a622384fb947e1742d12022413a6f1939405215",
+    "tests/replication.rs": "6cafa5441098eff88722b455d45e6f8779975a72e14c15ec062fcc39bfd7f3f5",
+    "Cargo.toml": "2ce875309589cf2fc762a516a4c2452a9a4d555729a7ad682fce2bde0d75758c",
+    "Cargo.lock": "c4823edb9eb7a4340a12dd14217e5742ef3a92d8341d0889e38a9015ce92dd46"
+  },
+  "commands": [
+    "cargo test --locked --features failpoints --lib --tests -- --test-threads=1",
+    "cargo clippy --locked --features failpoints --all-targets -- -D warnings",
+    "cargo fmt --all -- --check"
+  ]
+}

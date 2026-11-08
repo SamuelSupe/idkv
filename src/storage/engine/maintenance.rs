@@ -808,8 +808,9 @@ impl Engine {
         let mut backup = manifest;
         backup.wals = vec![new_wal.info];
         backup.retained_wals.clear();
-        publish(destination, &backup)?;
         sync_dir(&destination.join("sst"))?;
+        crate::storage::failpoint("checkpoint_files_synced");
+        publish(destination, &backup)?;
         sync_dir(destination)?;
         sync_dir(parent)?;
         Ok(backup.checkpoint)

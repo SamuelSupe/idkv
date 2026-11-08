@@ -1,0 +1,21 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.82s
+     Running tests/middleware.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/middleware-7008c0deda8fe1e8)
+
+running 1 test
+
+thread 'subsystem_review_user_documents_cannot_supply_read_telemetry' panicked at tests/middleware.rs:1573:5:
+assertion `left == right` failed
+  left: ["tkv_query_candidate_files_total 0", "tkv_query_scanned_entries_total 18446744073709551612", "tkv_query_blocks_read_total 0", "tkv_query_decompressed_bytes_total 0", "tkv_query_cache_hits_total 0", "tkv_query_document_reads_total 18446744073709551612"]
+ right: ["tkv_query_candidate_files_total 0", "tkv_query_scanned_entries_total 0", "tkv_query_blocks_read_total 0", "tkv_query_decompressed_bytes_total 0", "tkv_query_cache_hits_total 0", "tkv_query_document_reads_total 0"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test subsystem_review_user_documents_cannot_supply_read_telemetry ... FAILED
+
+failures:
+
+failures:
+    subsystem_review_user_documents_cannot_supply_read_telemetry
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 14 filtered out; finished in 0.13s
+
+error: test failed, to rerun pass `--test middleware`

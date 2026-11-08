@@ -120,12 +120,21 @@ impl TenantHandle {
         }
         self.engine().transact(|tx| {
             let collection = collection_tx(tx, collection_name)?;
-            let receipt_key = options.operation_id.as_ref().map(|id| {
-                let mut key = prefix(b'R', collection.id);
-                codec::escape(principal.as_bytes(), &mut key);
-                codec::escape(id.as_bytes(), &mut key);
-                key
-            });
+            let receipt_key = options
+                .operation_id
+                .as_ref()
+                .map(|id| -> Result<Vec<u8>> {
+                    let namespace = tx
+                        .get(&named(b"r", collection_name))?
+                        .map(|bytes| parse::<Uuid>(&bytes))
+                        .transpose()?
+                        .unwrap_or(collection.id);
+                    let mut key = prefix(b'R', namespace);
+                    codec::escape(principal.as_bytes(), &mut key);
+                    codec::escape(id.as_bytes(), &mut key);
+                    Ok(key)
+                })
+                .transpose()?;
             if let Some(key) = &receipt_key
                 && let Some(bytes) = tx.get(key)?
             {
@@ -173,6 +182,8 @@ impl TenantHandle {
                 Vec::new()
             };
             let mut results = Vec::with_capacity(operations.len());
+            let mut index_changes = std::collections::BTreeMap::new();
+            let mut index_memory = Vec::new();
             for (ordinal, operation) in operations.into_iter().enumerate() {
                 let (key, document, if_rev) = match operation {
                     WriteOp::Check { .. } => continue,
@@ -218,7 +229,7 @@ impl TenantHandle {
                 if if_rev.is_some_and(|expected| old_rev.unwrap_or(0) != expected) {
                     return Err(Error::new("REVISION_CONFLICT", "document revision changed"));
                 }
-                for index in &indexes {
+                for (index_number, index) in indexes.iter().enumerate() {
                     if index.state == IndexState::Failed {
                         continue;
                     }
@@ -232,8 +243,24 @@ impl TenantHandle {
                         .map(|d| index_entry(collection.id, index, d))
                         .transpose()?
                         .flatten();
-                    if index.state == IndexState::Ready {
+                    if index.state == IndexState::Ready && !index.spec.unique {
                         maintain_index(tx, index, old_entry.as_ref(), new_entry.as_ref())?;
+                    } else if index.state == IndexState::Ready {
+                        let bytes = old_entry
+                            .iter()
+                            .chain(new_entry.iter())
+                            .map(|entry| {
+                                entry.key.len() + entry.value.len() + entry.document_key.len() + 256
+                            })
+                            .sum::<usize>();
+                        index_memory.push(self.engine().budget.reserve(bytes + 256)?);
+                        index_changes
+                            .entry((index_number, key.clone()))
+                            .and_modify(|change: &mut Delta| change.new = new_entry.clone())
+                            .or_insert(Delta {
+                                old: old_entry,
+                                new: new_entry,
+                            });
                     } else {
                         let mut delta_key = delta_prefix(collection.id, index.generation);
                         delta_key.extend(tx.seq.to_be_bytes());
@@ -260,6 +287,13 @@ impl TenantHandle {
                     deleted,
                     history: history.clone(),
                 });
+            }
+            // Unique constraints apply to the final batch, including swaps.
+            for ((number, _), change) in &index_changes {
+                maintain_index(tx, &indexes[*number], change.old.as_ref(), None)?;
+            }
+            for ((number, _), change) in &index_changes {
+                maintain_index(tx, &indexes[*number], None, change.new.as_ref())?;
             }
             if let Some(key) = receipt_key {
                 put(

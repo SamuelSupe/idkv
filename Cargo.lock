@@ -1910,6 +1910,7 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
+ "libc",
  "lz4_flex",
  "opendal",
  "opentelemetry",

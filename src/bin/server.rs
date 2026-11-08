@@ -55,12 +55,13 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             let listener = http::Listener::new(listener, &transport_options);
             let server = listener.serve(router, async move {
                 shutdown_signal().await;
-                runtime.drain();
+                runtime.withdraw_readiness();
                 let _ = draining.send(());
                 eprintln!("tenant-kv draining requests");
                 // Give health checks a visible not-ready interval before the
                 // listener closes. Existing accepted work then has a deadline.
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                runtime.drain();
             });
             tokio::pin!(server);
             tokio::select! {

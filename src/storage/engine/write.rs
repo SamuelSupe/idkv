@@ -55,9 +55,6 @@ impl Engine {
                 check()?;
             }
             let permission = authority.as_ref().map(|a| a.write()).transpose()?;
-            if self.closed.load(Ordering::Acquire) {
-                return Err(Error::new("UNAVAILABLE", "tenant closed"));
-            }
             let waiting = Instant::now();
             let transaction = self.transaction.lock();
             let writer = self.writer.lock();
@@ -104,6 +101,7 @@ impl Engine {
             changes: BTreeMap::new(),
             memory: Vec::new(),
             bounded_reads: !maintenance && check.is_none(),
+            maintenance_disk: maintenance,
             json_cache: Default::default(),
         };
         let read_seq = writer.staged;
@@ -111,6 +109,7 @@ impl Engine {
         // Serialize transaction evaluation independently from durable publication.
         // A cold read must not keep a preceding fsync from confirming its prefix.
         let result = f(&mut tx)?;
+        let maintenance_disk = tx.maintenance_disk;
         drop(tx.json_cache);
         let mut writer = self.writer.lock();
         if let Some(error) = &writer.poison {
@@ -155,7 +154,7 @@ impl Engine {
             None
         };
         let reserved_disk = bytes.len() as u64 + 4096;
-        self.reserve_disk(reserved_disk, maintenance)?;
+        self.reserve_disk(reserved_disk, maintenance_disk)?;
         let wal_bytes = bytes.len() as u64;
         if let Err(error) = writer.wal.append(bytes, &self.io, self.info.id) {
             if error.code == "COMMIT_UNKNOWN" {
@@ -294,9 +293,13 @@ pub struct Transaction<'a> {
     pub(super) changes: BTreeMap<Vec<u8>, Record>,
     pub(super) memory: Vec<Reservation>,
     bounded_reads: bool,
+    maintenance_disk: bool,
     json_cache: Mutex<BTreeMap<Vec<u8>, DecodedMetadata>>,
 }
 impl Transaction<'_> {
+    pub(crate) fn require_foreground_disk(&mut self) {
+        self.maintenance_disk = false;
+    }
     pub(crate) fn cached_json<T: serde::de::DeserializeOwned + Send + Sync + 'static>(
         &self,
         key: &[u8],
@@ -871,6 +874,8 @@ mod tests {
             let store = crate::Store::open(dir.path(), Options::default()).unwrap();
             let token = dir.path().join("peer-token");
             fs::write(&token, "replication-recovery-test-secret").unwrap();
+            std::fs::set_permissions(&token, std::os::unix::fs::PermissionsExt::from_mode(0o600))
+                .unwrap();
             let service = Service::open(
                 store.clone(),
                 Config {
@@ -1294,6 +1299,8 @@ mod tests {
         let tenant = store
             .tenant(store.create_tenant("gc-headroom").unwrap().id)
             .unwrap();
+        drop(store);
+        tenant.set_retention(60).unwrap();
         let engine = tenant.engine();
         engine
             .transact(|tx| {
@@ -1313,6 +1320,16 @@ mod tests {
                 .unwrap_err()
                 .code,
             "RESOURCE_EXHAUSTED"
+        );
+        let before = engine.seq();
+        assert_eq!(
+            tenant.retention_step().unwrap_err().code,
+            "RESOURCE_EXHAUSTED"
+        );
+        assert_eq!(
+            engine.seq(),
+            before,
+            "migration consumed maintenance disk reserve"
         );
         engine
             .transact_maintenance(|tx| tx.delete(b"expired".to_vec()))

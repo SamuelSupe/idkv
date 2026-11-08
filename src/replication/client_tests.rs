@@ -13,6 +13,7 @@ fn primary(options: Options) -> (tempfile::TempDir, Store, Service) {
     let store = Store::open(dir.path(), options).unwrap();
     let token = dir.path().join("peer-token");
     fs::write(&token, "replication-unit-test-secret").unwrap();
+    std::fs::set_permissions(&token, std::os::unix::fs::PermissionsExt::from_mode(0o600)).unwrap();
     let service = Service::open(
         store.clone(),
         Config {
@@ -141,6 +142,7 @@ async fn transient_log_busy_uses_short_backoff_without_resetting_initialization_
     let b = Store::open(dir.path(), Options::default()).unwrap();
     let token = dir.path().join("peer-token");
     fs::write(&token, "replication-unit-test-secret").unwrap();
+    std::fs::set_permissions(&token, std::os::unix::fs::PermissionsExt::from_mode(0o600)).unwrap();
     let sb = Service::open(
         b.clone(),
         Config {
@@ -434,4 +436,131 @@ async fn unwinding_checkpoint_preparation_releases_the_reserved_export() {
     service.release_snapshot(snapshot.id).unwrap();
     service.expire_exports().unwrap();
     assert!(service.inner.exports.lock().garbage.is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn edge_review_peer_errors_and_token_rotation_are_bounded() {
+    use axum::{
+        http::{HeaderMap, StatusCode},
+        response::IntoResponse,
+        routing::get,
+    };
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let app = axum::Router::new()
+        .route(
+            "/gateway",
+            get(|| async { (StatusCode::BAD_GATEWAY, "<html>bad gateway</html>") }),
+        )
+        .route(
+            "/foreign",
+            get(|| async {
+                (
+                    StatusCode::BAD_REQUEST,
+                    axum::Json(json!({"error":{"code":"SURPRISE","message":"foreign"}})),
+                )
+            }),
+        )
+        .route(
+            "/rotate",
+            get(|headers: HeaderMap| async move {
+                if headers.get("authorization").unwrap() == "Bearer rotated-replication-secret" {
+                    axum::Json(json!({"ok":true})).into_response()
+                } else {
+                    StatusCode::UNAUTHORIZED.into_response()
+                }
+            }),
+        );
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(dir.path(), Options::default()).unwrap();
+    let token = dir.path().join("token");
+    fs::write(&token, "original-replication-secret").unwrap();
+    fs::set_permissions(&token, fs::Permissions::from_mode(0o600)).unwrap();
+    let service = Service::open(
+        store,
+        Config {
+            cluster: Uuid::new_v4(),
+            role: Role::Replica,
+            peer_url: url,
+            token_file: token.clone(),
+            poll_ms: 10,
+            log_retention_bytes: 1 << 20,
+        },
+    )
+    .unwrap();
+    for path in ["/gateway", "/foreign", "/rotate"] {
+        assert_eq!(
+            service
+                .request::<Value>(path, None)
+                .await
+                .err()
+                .unwrap()
+                .code,
+            "REPLICATION_UNAVAILABLE"
+        );
+    }
+    fs::write(&token, "rotated-replication-secret").unwrap();
+    assert_eq!(
+        service
+            .request::<Value>("/rotate", None)
+            .await
+            .unwrap()
+            .value["ok"],
+        true
+    );
+    fs::set_permissions(&token, fs::Permissions::from_mode(0o644)).unwrap();
+    assert!(read_token(&token).is_err());
+    fs::set_permissions(&token, fs::Permissions::from_mode(0o600)).unwrap();
+    fs::write(&token, vec![b'x'; 4096]).unwrap();
+    assert!(read_token(&token).is_err());
+    server.abort();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn edge_review_progressing_response_body_can_take_more_than_thirty_seconds() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let server = tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let mut headers = Vec::new();
+        while !headers.ends_with(b"\r\n\r\n") {
+            assert!(headers.len() < 4096);
+            headers.push(socket.read_u8().await.unwrap());
+        }
+        socket
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 34\r\nConnection: close\r\n\r\n\"")
+            .await
+            .unwrap();
+        for _ in 0..32 {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            socket.write_all(b"a").await.unwrap();
+        }
+        socket.write_all(b"\"").await.unwrap();
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(dir.path(), Options::default()).unwrap();
+    let token = dir.path().join("token");
+    fs::write(&token, "replication-unit-test-secret").unwrap();
+    fs::set_permissions(&token, fs::Permissions::from_mode(0o600)).unwrap();
+    let service = Service::open(
+        store,
+        Config {
+            cluster: Uuid::new_v4(),
+            role: Role::Replica,
+            peer_url: url,
+            token_file: token,
+            poll_ms: 10,
+            log_retention_bytes: 1 << 20,
+        },
+    )
+    .unwrap();
+    let start = Instant::now();
+    let response = service.request::<String>("/slow", None).await.unwrap();
+    assert_eq!(response.value, "a".repeat(32));
+    assert!(start.elapsed() > Duration::from_secs(30));
+    server.await.unwrap();
 }

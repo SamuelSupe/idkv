@@ -1,0 +1,25 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.55s
+     Running unittests src/lib.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv-2393aa090e8f705f)
+
+running 1 test
+test tenant::retention::tests::edge_review_publication_gc_keeps_long_lived_write_receipts_after_policy_shrink ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 112 filtered out; finished in 1.40s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running unittests src/lib.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv-2393aa090e8f705f)
+
+running 1 test
+test tenant::manager::admission::tests::management_interrupts_index_backpressure_and_preserves_recoverable_builds ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 112 filtered out; finished in 3.61s
+
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.02s
+     Running tests/http.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/http-52dff16772f7d8c2)
+
+running 1 test
+test server_exposes_not_ready_before_closing_its_listener_on_sigterm ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 12 filtered out; finished in 2.10s

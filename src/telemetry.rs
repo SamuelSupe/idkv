@@ -212,25 +212,28 @@ impl Telemetry {
         self.0.config.metrics
     }
 
-    pub(crate) fn record_read(&self, value: &serde_json::Value) {
-        let Some(stats) = value
-            .get("stats")
-            .or_else(|| value.get("result").and_then(|r| r.get("stats")))
-        else {
-            return;
-        };
+    pub(crate) fn record_read(&self, stats: &crate::ReadStats) {
+        let counts = [
+            stats.candidate_files,
+            stats.scanned_entries,
+            stats.blocks_read,
+            stats.decompressed_bytes,
+            stats.cache_hits,
+            stats.document_reads,
+        ];
         let mut attributes = Vec::new();
-        for (i, field) in READ_FIELDS.iter().enumerate() {
-            if let Some(count) = stats.get(field).and_then(serde_json::Value::as_u64) {
-                if self.metrics_enabled() {
-                    self.0.reads[i].fetch_add(count, Ordering::Relaxed);
-                }
-                if self.0.traces.is_some() {
-                    attributes.push(KeyValue::new(
-                        format!("db.{field}"),
-                        count.min(i64::MAX as u64) as i64,
-                    ));
-                }
+        for (i, (field, count)) in READ_FIELDS.iter().zip(counts).enumerate() {
+            if self.metrics_enabled() {
+                let _ =
+                    self.0.reads[i].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |total| {
+                        Some(total.saturating_add(count))
+                    });
+            }
+            if self.0.traces.is_some() {
+                attributes.push(KeyValue::new(
+                    format!("db.{field}"),
+                    count.min(i64::MAX as u64) as i64,
+                ));
             }
         }
         if self.0.traces.is_some() {

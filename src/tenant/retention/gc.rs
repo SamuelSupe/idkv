@@ -179,11 +179,12 @@ fn expire(tx: &mut Transaction<'_>, state: &mut State, batch: usize) -> Result<(
                         if c.id != collection {
                             return Err(Error::corrupt("published collection identity changed"));
                         }
+                        crate::tenant::catalog::retain_receipt_namespace(tx, &c)?;
                         tx.delete(catalog_key)?;
                         tx.delete(prefix(b'S', collection))?;
                         queue_gc(
                             tx,
-                            [b'D', b'I', b'J', b'L', b'B', b'R']
+                            [b'D', b'I', b'J', b'L', b'B']
                                 .iter()
                                 .map(|kind| prefix(*kind, collection))
                                 .collect(),
@@ -290,6 +291,7 @@ pub(super) fn step(tenant: &TenantHandle) -> Result<()> {
             let before = serde_json::to_vec(&state)?;
             let previous_reclaimed = state.reclaimed_records;
             if state.migration_phase < 5 {
+                tx.require_foreground_disk();
                 attempted_batch = batch;
                 migration(tx, &p, &mut state, batch)?;
             } else {

@@ -1,0 +1,9 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.99s
+     Running unittests src/lib.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv-da4845942d3e9983)
+
+running 2 tests
+test storage::wal::tests::buffered_replication_preserves_frames_limits_and_pinned_end ... ok
+test storage::wal::tests::recovery_discards_bad_frames_only_in_the_unsealed_tail ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 102 filtered out; finished in 0.13s

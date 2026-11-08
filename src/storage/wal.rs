@@ -80,13 +80,20 @@ impl Wal {
         {
             return Err(Error::corrupt("WAL identity or version mismatch"));
         }
+        if synced_len.is_some_and(|synced| length < synced) {
+            return Err(Error::corrupt("WAL shorter than its synced prefix"));
+        }
+        let fully_synced = synced_len == Some(length);
         let mut offset = HEADER as u64;
         while offset < length {
+            // A torn append can have its full length but invalid page contents.
+            // Never discard any part of a known synced prefix or a sealed WAL.
+            let unsealed_tail = tail && offset >= synced_len.unwrap_or(HEADER as u64);
             if length - offset < 24 {
-                if tail {
+                if unsealed_tail {
                     break;
                 }
-                return Err(Error::corrupt("truncated non-tail WAL"));
+                return Err(Error::corrupt("truncated WAL batch header"));
             }
             let mut frame = [0; 24];
             file.read_exact(&mut frame)?;
@@ -94,6 +101,9 @@ impl Wal {
                 || crc32fast::hash(&frame[..16])
                     != u32::from_le_bytes(frame[16..20].try_into().unwrap())
             {
+                if unsealed_tail {
+                    break;
+                }
                 return Err(Error::corrupt("WAL batch header checksum"));
             }
             let len = u32::from_le_bytes(frame[4..8].try_into().unwrap()) as usize;
@@ -102,15 +112,18 @@ impl Wal {
                 return Err(Error::corrupt("WAL batch bounds"));
             }
             if length - offset - 24 < len as u64 {
-                if tail {
+                if unsealed_tail {
                     break;
                 }
-                return Err(Error::corrupt("truncated non-tail WAL payload"));
+                return Err(Error::corrupt("truncated WAL batch payload"));
             }
             let _payload_memory = budget.reserve(len)?;
             let mut payload = vec![0; len];
             file.read_exact(&mut payload)?;
             if crc32fast::hash(&payload) != u32::from_le_bytes(frame[20..24].try_into().unwrap()) {
+                if unsealed_tail {
+                    break;
+                }
                 return Err(Error::corrupt("WAL batch checksum"));
             }
             let count = Reader::new(&payload).u32()? as usize;
@@ -120,7 +133,9 @@ impl Wal {
             let _decoded_memory =
                 budget.reserve(len + count * (std::mem::size_of::<Record>() + 96))?;
             let records = decode(&payload, seq)?;
-            apply(seq, records)?;
+            if fully_synced {
+                apply(seq, records)?;
+            }
             offset += 24 + len as u64;
         }
         let temp = dir.join(format!("{}.recover", info.id));
@@ -142,6 +157,10 @@ impl Wal {
         let _memory = budget.reserve(64 << 10)?;
         let rewritten = (|| -> std::io::Result<File> {
             use std::os::unix::fs::OpenOptionsExt;
+            #[cfg(feature = "failpoints")]
+            if std::env::var("TKV_ERRORPOINT").as_deref() == Ok("wal_recovery_enospc") {
+                return Err(std::io::Error::from_raw_os_error(28));
+            }
             if fs2::available_space(dir)? < offset {
                 return Err(std::io::Error::from_raw_os_error(28));
             }
@@ -180,6 +199,34 @@ impl Wal {
             Err(error) if error.raw_os_error() == Some(28) => true,
             Err(error) => return Err(error.into()),
         };
+        // On ENOSPC expose only a proven durable prefix. The original bytes are
+        // retained for a later successful recovery, but cannot become read promises.
+        let replay_end = if recovery_read_only {
+            synced_len.unwrap_or(HEADER as u64).min(offset)
+        } else {
+            offset
+        };
+        if !fully_synced {
+            file.seek(SeekFrom::Start(HEADER as u64))?;
+            let mut cursor = HEADER as u64;
+            while cursor < replay_end {
+                let mut frame = [0; 24];
+                file.read_exact(&mut frame)?;
+                let len = u32::from_le_bytes(frame[4..8].try_into().unwrap()) as usize;
+                if cursor + 24 + len as u64 > replay_end {
+                    return Err(Error::corrupt("WAL watermark splits frame"));
+                }
+                let _payload = budget.reserve(len)?;
+                let mut payload = vec![0; len];
+                file.read_exact(&mut payload)?;
+                let count = Reader::new(&payload).u32()? as usize;
+                let _decoded =
+                    budget.reserve(len + count * (std::mem::size_of::<Record>() + 96))?;
+                let seq = u64::from_le_bytes(frame[8..16].try_into().unwrap());
+                apply(seq, decode(&payload, seq)?)?;
+                cursor += 24 + len as u64;
+            }
+        }
         file.seek(SeekFrom::End(0))?;
         Ok(Self {
             info: info.clone(),
@@ -195,13 +242,22 @@ impl Wal {
         let len = bytes.len();
         #[cfg(feature = "failpoints")]
         if let Ok(point) = std::env::var("TKV_FAILPOINT") {
-            let cut = match point.as_str() {
-                "wal_torn_header" => Some(10),
-                "wal_torn_payload" => Some(bytes.len() - 1),
+            let torn = match point.as_str() {
+                "wal_torn_header" => Some(bytes[..10].to_vec()),
+                "wal_torn_payload" => Some(bytes[..bytes.len() - 1].to_vec()),
+                "wal_torn_zero_header" | "wal_torn_header_crc" | "wal_torn_payload_crc" => {
+                    let mut torn = bytes.clone();
+                    match point.as_str() {
+                        "wal_torn_zero_header" => torn[..24].fill(0),
+                        "wal_torn_header_crc" => torn[16] ^= 1,
+                        _ => torn[24] ^= 1,
+                    }
+                    Some(torn)
+                }
                 _ => None,
             };
-            if let Some(cut) = cut {
-                file.write_all_at(&bytes[..cut], offset)?;
+            if let Some(torn) = torn {
+                file.write_all_at(&torn, offset)?;
                 file.sync_all()?;
                 std::process::abort();
             }
@@ -405,6 +461,110 @@ pub(super) fn decoded_memory(payload: &[u8]) -> Result<usize> {
 mod tests {
     use super::*;
     use crate::resources::{Budget, Counter};
+    #[test]
+    fn recovery_discards_bad_frames_only_in_the_unsealed_tail() {
+        let info = crate::TenantInfo {
+            id: Uuid::new_v4(),
+            generation: Uuid::new_v4(),
+            history: Uuid::new_v4(),
+            name: "torn-tail".into(),
+            memory_bytes: 1 << 20,
+            disk_bytes: 1 << 20,
+        };
+        let budget = Budget {
+            global: Counter::new(info.memory_bytes),
+            tenant: Counter::new(info.memory_bytes),
+        };
+        let frames: Vec<_> = (1..=3)
+            .map(|seq| {
+                encode(
+                    seq,
+                    &[Record {
+                        key: b"key".to_vec(),
+                        seq,
+                        value: Some(Arc::new(Bytes::new(vec![seq as u8; 4096]))),
+                        prefix_len: 0,
+                    }],
+                )
+                .unwrap()
+            })
+            .collect();
+        let prefix_len = (HEADER + frames[0].len()) as u64;
+        for damage in [
+            "magic",
+            "header_crc",
+            "payload_crc",
+            "zero_page",
+            "short_header",
+            "short_payload",
+        ] {
+            let mut broken = frames[1].clone();
+            match damage {
+                "magic" => broken[0] ^= 1,
+                "header_crc" => broken[16] ^= 1,
+                "payload_crc" => *broken.last_mut().unwrap() ^= 1,
+                "zero_page" => broken[24..].fill(0),
+                "short_header" => broken.truncate(10),
+                "short_payload" => {
+                    broken.pop();
+                }
+                _ => unreachable!(),
+            }
+            // Later pages can reach disk before the hole. They must not be
+            // resynchronized or applied after the first damaged transaction.
+            if !damage.starts_with("short") {
+                broken.extend_from_slice(&frames[2]);
+            }
+            for tail in [false, true] {
+                for synced_len in [
+                    None,
+                    Some(prefix_len),
+                    Some(prefix_len + frames[1].len() as u64),
+                ] {
+                    let dir = tempfile::tempdir().unwrap();
+                    let wal = Wal::create(dir.path(), info.id, info.generation, 1).unwrap();
+                    let mut file = wal.file.as_ref();
+                    file.write_all(&frames[0]).unwrap();
+                    file.write_all(&broken).unwrap();
+                    wal.file.sync_all().unwrap();
+                    let wal_info = wal.info.clone();
+                    drop(wal);
+                    let path = dir.path().join(format!("{}.wal", wal_info.id));
+                    let original = fs::read(&path).unwrap();
+                    let mut applied = Vec::new();
+                    let result = Wal::recover(
+                        dir.path(),
+                        &wal_info,
+                        &info,
+                        tail,
+                        synced_len,
+                        &budget,
+                        |seq, records| {
+                            applied.push((seq, records[0].value.as_ref().unwrap()[0]));
+                            Ok(())
+                        },
+                    );
+                    let recoverable = tail && synced_len.is_none_or(|length| length <= prefix_len);
+                    if recoverable {
+                        let recovered =
+                            result.unwrap_or_else(|e| panic!("{damage}, {synced_len:?}: {e}"));
+                        assert_eq!(applied, [(1, 1)]);
+                        assert_eq!(recovered.len, prefix_len);
+                        assert!(!recovered.recovery_read_only);
+                        assert_eq!(fs::read(&path).unwrap(), original[..prefix_len as usize]);
+                    } else {
+                        assert_eq!(
+                            result.err().unwrap().code,
+                            "CORRUPTION",
+                            "{damage}, {tail}, {synced_len:?}"
+                        );
+                        assert_eq!(fs::read(&path).unwrap(), original);
+                    }
+                }
+            }
+        }
+    }
+
     #[test]
     fn buffered_replication_preserves_frames_limits_and_pinned_end() {
         let dir = tempfile::tempdir().unwrap();

@@ -1,0 +1,23 @@
+     Running tests/replication.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/replication-6f3b3c02e26346c8)
+
+running 1 test
+test subsystem_review_switchover_retries_a_busy_snapshot_export ... FAILED
+
+failures:
+
+---- subsystem_review_switchover_retries_a_busy_snapshot_export stdout ----
+
+thread 'subsystem_review_switchover_retries_a_busy_snapshot_export' panicked at tests/replication.rs:2596:12:
+called `Result::unwrap()` on an `Err` value: Error { code: "BUSY", message: "another replica checkpoint transfer is active", location: None }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+tenant 5e94cf8c-ac0f-4f67-ae56-40be72fce7e4 clean-close watermark: IO_ERROR: No such file or directory (os error 2)
+tenant 3668da58-a453-458d-bba2-56a1a9e71de9 clean-close watermark: IO_ERROR: No such file or directory (os error 2)
+tenant ad941c4f-2a95-45be-a5e2-094e77b6b564 clean-close watermark: IO_ERROR: No such file or directory (os error 2)
+
+
+failures:
+    subsystem_review_switchover_retries_a_busy_snapshot_export
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 31 filtered out; finished in 0.97s
+
+error: test failed, to rerun pass `--test replication`

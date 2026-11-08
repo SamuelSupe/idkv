@@ -1,0 +1,19 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.12s
+     Running tests/recovery.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/recovery-f6a81e561e45aac2)
+
+running 1 test
+
+thread 'unsealed_tail_garbage_preserves_confirmed_wal_data_and_future_writes' panicked at tests/recovery.rs:197:43:
+called `Result::unwrap()` on an `Err` value: Error { code: "CORRUPTION", message: "WAL batch header checksum", location: None }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test unsealed_tail_garbage_preserves_confirmed_wal_data_and_future_writes ... FAILED
+
+failures:
+
+failures:
+    unsealed_tail_garbage_preserves_confirmed_wal_data_and_future_writes
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 15 filtered out; finished in 0.64s
+
+error: test failed, to rerun pass `--test recovery`

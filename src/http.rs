@@ -47,6 +47,7 @@ struct AppState {
     maintenance_tenants: Arc<Mutex<HashMap<Uuid, std::sync::Weak<Semaphore>>>>,
     tenants: Arc<Mutex<HashMap<Uuid, std::sync::Weak<Semaphore>>>>,
     runtime: HttpRuntime,
+    openapi: axum::body::Bytes,
 }
 
 /// Shared lifecycle and observability for the HTTP adapter. Embedders own its
@@ -55,6 +56,7 @@ struct AppState {
 pub struct HttpRuntime {
     pub telemetry: crate::telemetry::Telemetry,
     draining: Arc<std::sync::atomic::AtomicBool>,
+    not_ready: Arc<std::sync::atomic::AtomicBool>,
 }
 impl HttpRuntime {
     pub fn new(telemetry: crate::telemetry::Telemetry) -> Self {
@@ -63,7 +65,13 @@ impl HttpRuntime {
             ..Self::default()
         }
     }
+    /// Withdraw readiness while continuing to serve traffic during LB propagation.
+    pub fn withdraw_readiness(&self) {
+        self.not_ready
+            .store(true, std::sync::atomic::Ordering::Release);
+    }
     pub fn drain(&self) {
+        self.withdraw_readiness();
         self.draining
             .store(true, std::sync::atomic::Ordering::Release);
     }
@@ -186,7 +194,9 @@ pub fn app_with_runtime(
     let admission_workers = Arc::new(Semaphore::new(store.options().max_http_admission_requests));
     let index_workers = Arc::new(Semaphore::new(store.options().max_http_index_requests));
     let lifecycle_workers = Arc::new(Semaphore::new(store.options().max_http_lifecycle_requests));
+    let openapi = serde_json::to_vec(&openapi::openapi_for(store.options()))?.into();
     let state = AppState {
+        openapi,
         store,
         auth: Arc::new(auth),
         backups,
@@ -319,11 +329,18 @@ async fn dispatch_async(
         return Ok(Json(crate::replication::capabilities()).into_response());
     }
     if route == "/openapi.json" && method == Method::GET {
-        return Ok(Json(openapi::openapi_for(state.store.options())).into_response());
+        return Ok((
+            [(axum::http::header::CONTENT_TYPE, "application/json")],
+            state.openapi.clone(),
+        )
+            .into_response());
     }
     if matches!(route.as_str(), "/ready" | "/ready/write") && method == Method::GET {
         let role = state.store.replication_state().role;
-        let ready = !state.runtime.is_draining()
+        let ready = !state
+            .runtime
+            .not_ready
+            .load(std::sync::atomic::Ordering::Acquire)
             && role != crate::replication::Role::Fenced
             && (route == "/ready" || state.store.writable());
         return Ok((
@@ -332,7 +349,7 @@ async fn dispatch_async(
             } else {
                 StatusCode::SERVICE_UNAVAILABLE
             },
-            Json(json!({"ready":ready,"role":role,"draining":state.runtime.is_draining()})),
+            Json(json!({"ready":ready,"role":role,"draining":state.runtime.not_ready.load(std::sync::atomic::Ordering::Acquire)})),
         )
             .into_response());
     }
@@ -616,7 +633,8 @@ async fn dispatch_async(
         let _maintenance = maintenance_permit;
         let _lifecycle = lifecycle_permit;
         let _tenant = tenant_permit;
-        let read_only = required_role(&route, &method)? == Role::Read
+        let read_only = !route.ends_with("/retry-context")
+            && required_role(&route, &method)? == Role::Read
             && (!route.ends_with("/dsl")
                 || !crate::dsl::is_write(
                     body.get("statement").and_then(Value::as_str).unwrap_or(""),
@@ -695,10 +713,26 @@ async fn dispatch_async(
                     request.cursor.as_deref(),
                 )?
             };
+            match &output {
+                crate::dsl::Output::Query(result) => {
+                    state.runtime.telemetry.record_read(&result.stats)
+                }
+                crate::dsl::Output::Lookup(result) => {
+                    state.runtime.telemetry.record_read(&result.stats)
+                }
+                _ => {}
+            }
             serde_json::to_value(output)?
         } else if route.contains("/identity/") {
             let tenant = store.tenant(tenant.ok_or_else(|| Error::invalid("tenant required"))?)?;
-            identity::dispatch(&tenant, &route, &params, body, &token)?
+            identity::dispatch(
+                &tenant,
+                &route,
+                &params,
+                body,
+                &token,
+                &state.runtime.telemetry,
+            )?
         } else {
             operations::dispatch(
                 &state,
@@ -722,7 +756,6 @@ async fn dispatch_async(
                 "read crossed a database history change; retry",
             ));
         }
-        state.runtime.telemetry.record_read(&value);
         // JSON may be an arbitrary user document. History is manager-owned
         // metadata and must never be inferred from the response payload.
         let response_history = if read_only {

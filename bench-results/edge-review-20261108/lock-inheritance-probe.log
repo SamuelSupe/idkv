@@ -1,0 +1,2 @@
+parent released all handles, child retains inherited descriptors: BUSY
+after child exit: reopened, acknowledged revision 2 verified

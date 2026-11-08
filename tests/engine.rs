@@ -1633,3 +1633,149 @@ fn restore_cleanup_error_still_fences_the_tenant_until_store_recovery() {
         .put("assets", json!({"_key":"recovered"}), None)
         .unwrap();
 }
+
+#[test]
+fn subsystem_review_tenant_deletion_reclaims_local_backups_and_legacy_residue() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(dir.path(), Options::default()).unwrap();
+    let mut ids = Vec::new();
+    for name in ["delete", "keep"] {
+        let id = store.create_tenant(name).unwrap().id;
+        let tenant = store.tenant(id).unwrap();
+        tenant.create_collection("docs").unwrap();
+        tenant
+            .put("docs", json!({"_key":"ack","value":name}), None)
+            .unwrap();
+        drop(tenant);
+        store.backup(id).unwrap();
+        ids.push(id);
+    }
+    store.delete_tenant(ids[0]).unwrap();
+    let deleted = dir.path().join("backups").join(ids[0].to_string());
+    let kept = dir.path().join("backups").join(ids[1].to_string());
+    assert!(!deleted.exists());
+    assert!(kept.exists());
+    drop(store);
+    std::fs::create_dir_all(&deleted).unwrap();
+    std::fs::write(deleted.join("legacy-backup"), b"deleted data").unwrap();
+    let store = Store::open(dir.path(), Options::default()).unwrap();
+    assert!(!deleted.exists());
+    assert!(kept.exists());
+    assert_eq!(
+        store
+            .tenant(ids[1])
+            .unwrap()
+            .get("docs", "ack")
+            .unwrap()
+            .unwrap()["value"],
+        "keep"
+    );
+}
+
+#[test]
+fn edge_review_unique_swaps_validate_final_batch_and_preserve_conflict_atomicity() {
+    let (_dir, _store, t) = setup();
+    t.put("assets", json!({"_key":"a","ip":1}), None).unwrap();
+    t.put("assets", json!({"_key":"b","ip":2}), None).unwrap();
+    t.create_index("assets", index("unique-ip", &[("/ip", Order::Asc)], true))
+        .unwrap();
+    let operations = |a, b| {
+        vec![
+            WriteOp::Put {
+                document: json!({"_key":"a","ip":a}),
+                if_rev: None,
+            },
+            WriteOp::Put {
+                document: json!({"_key":"b","ip":b}),
+                if_rev: None,
+            },
+        ]
+    };
+    let swapped = t.write_batch("assets", operations(2, 1)).unwrap();
+    assert_eq!(
+        t.get("assets", "a").unwrap().unwrap()["_rev"],
+        swapped[0].rev
+    );
+    assert_eq!(t.get("assets", "b").unwrap().unwrap()["ip"], 1);
+    assert_eq!(
+        t.write_batch("assets", operations(3, 3)).unwrap_err().code,
+        "UNIQUE_CONFLICT"
+    );
+    assert_eq!(t.get("assets", "a").unwrap().unwrap()["ip"], 2);
+    t.create_lookup("assets", lookup("swapped", "unique-ip"))
+        .unwrap();
+    let indexed = t
+        .lookup_many("assets", "swapped", &[json!({"ip":1}), json!({"ip":2})])
+        .unwrap();
+    assert_eq!(indexed.matches[0][0]["_key"], "b");
+    assert_eq!(indexed.matches[1][0]["_key"], "a");
+    t.engine().flush().unwrap();
+    t.engine().verify().unwrap();
+}
+
+#[test]
+fn edge_review_receipts_survive_collection_recreation_and_restart() {
+    let (dir, store, t) = setup();
+    let id = t.id();
+    let opts = WriteOptions {
+        operation_id: Some("create-once".into()),
+        expected_history: Some(t.history()),
+        ..Default::default()
+    };
+    let ops = vec![WriteOp::Put {
+        document: json!({"ip":"created"}),
+        if_rev: None,
+    }];
+    let first = t
+        .write_batch_with("assets", ops.clone(), &opts, "writer")
+        .unwrap();
+    t.drop_collection("assets").unwrap();
+    t.create_collection("assets").unwrap();
+    let seq = t.engine().seq();
+    let retry = t
+        .write_batch_with("assets", ops.clone(), &opts, "writer")
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(&first).unwrap(),
+        serde_json::to_value(&retry).unwrap()
+    );
+    assert_eq!(t.engine().seq(), seq);
+    assert!(t.get("assets", &first[0].key).unwrap().is_none());
+    drop(t);
+    drop(store);
+    let store = Store::open(dir.path(), options()).unwrap();
+    let t = store.tenant(id).unwrap();
+    let retry = t.write_batch_with("assets", ops, &opts, "writer").unwrap();
+    assert_eq!(retry[0].key, first[0].key);
+    assert_eq!(retry[0].rev, first[0].rev);
+}
+
+#[test]
+fn edge_review_disk_quota_shrink_cannot_remove_delete_headroom() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(dir.path(), Options::default()).unwrap();
+    let t = store
+        .tenant(store.create_tenant("quota-headroom").unwrap().id)
+        .unwrap();
+    t.create_collection("assets").unwrap();
+    let info = t.info();
+    t.put(
+        "assets",
+        json!({"_key":"ack","payload":"x".repeat(900 << 10)}),
+        None,
+    )
+    .unwrap();
+    drop(t);
+    assert_eq!(
+        store
+            .set_quota(info.id, info.memory_bytes, 1 << 20)
+            .unwrap_err()
+            .code,
+        "RESOURCE_EXHAUSTED"
+    );
+    let t = store.tenant(info.id).unwrap();
+    assert_eq!(t.info().disk_bytes, info.disk_bytes);
+    assert!(t.get("assets", "ack").unwrap().is_some());
+    t.delete("assets", "ack", None).unwrap();
+    assert!(t.get("assets", "ack").unwrap().is_none());
+}

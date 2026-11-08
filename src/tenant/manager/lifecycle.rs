@@ -50,7 +50,7 @@ impl Store {
         *registry = next;
         atomic_json(&root.join("control/tenants.json"), registry)?;
         crate::storage::failpoint("tenant_create_journal");
-        recover_lifecycle(root, registry)?;
+        recover_lifecycle(root, registry, Some(info.id))?;
         atomic_json(&root.join("control/tenants.json"), registry)?;
         crate::storage::failpoint("tenant_create_published");
         Ok(())
@@ -128,7 +128,7 @@ impl Store {
         preparation.journaled = true;
         atomic_json(&inner.root.join("control/tenants.json"), &*registry)?;
         crate::storage::failpoint("backup_import_journal");
-        recover_lifecycle(&inner.root, &mut registry)?;
+        recover_lifecycle(&inner.root, &mut registry, Some(info.id))?;
         atomic_json(&inner.root.join("control/tenants.json"), &*registry)
     }
     fn local_backup_lock(&self, id: Uuid) -> Result<Arc<Mutex<()>>> {
@@ -143,6 +143,7 @@ impl Store {
         let parent = self.root().join("backups").join(id.to_string());
         fs::create_dir_all(&parent)?;
         reject_symlink(&parent)?;
+        clean_pending_backups(&parent)?;
         if fs::read_dir(&parent)?.count() >= 64 {
             return Err(Error::limit("local backup count limit; delete old backups"));
         }
@@ -153,7 +154,7 @@ impl Store {
         let remaining = limit
             .checked_sub(crate::storage::directory_size(&parent)?)
             .ok_or_else(|| Error::limit("local backup byte limit"))?;
-        let destination = parent.join(backup.to_string());
+        let destination = parent.join(format!(".pending-{backup}"));
         let result = (|| -> Result<()> {
             tenant.engine().checkpoint_limited(
                 &destination,
@@ -172,7 +173,9 @@ impl Store {
             )?;
             check.verify()?;
             drop(check);
+            fs::rename(&destination, parent.join(backup.to_string()))?;
             sync_dir(&parent)?;
+            sync_dir(&self.root().join("backups"))?;
             Ok(())
         })();
         if result.is_err() {
@@ -308,6 +311,20 @@ impl Store {
         slot.last_seq = None;
         let _offline = self.offline_lock(id)?;
         let mut registry = inner.registry.write();
+        let current = registry
+            .tenants
+            .get(&id)
+            .ok_or_else(|| Error::missing("tenant"))?;
+        if !matches!(current.lifecycle, Lifecycle::Active)
+            || current.info.memory_bytes != registration.info.memory_bytes
+            || current.info.disk_bytes != registration.info.disk_bytes
+            || current.info.generation != registration.info.generation
+        {
+            return Err(Error::new(
+                "BUSY",
+                "tenant changed during restore preparation",
+            ));
+        }
         let mut next = registry.clone();
         next.tenants.get_mut(&id).unwrap().info = registration.info.clone();
         next.tenants.get_mut(&id).unwrap().lifecycle = Lifecycle::Restoring {
@@ -319,10 +336,10 @@ impl Store {
         // and fence this tenant until the manager is reopened.
         preparation.journaled = true;
         let result = (|| {
-            atomic_json(&inner.root.join("control/tenants.json"), &next)?;
-            crate::storage::errorpoint("restore_journal_published")?;
             *registry = next;
-            recover_lifecycle(&inner.root, &mut registry)?;
+            atomic_json(&inner.root.join("control/tenants.json"), &*registry)?;
+            crate::storage::errorpoint("restore_journal_published")?;
+            recover_lifecycle(&inner.root, &mut registry, Some(id))?;
             atomic_json(&inner.root.join("control/tenants.json"), &*registry)?;
             collect_lifecycle_debris(&inner.root, &registry, false)
         })();
@@ -357,57 +374,73 @@ impl Store {
     }
 }
 
-pub(super) fn recover_lifecycle(root: &Path, registry: &mut Registry) -> Result<()> {
+pub(super) fn recover_lifecycle(
+    root: &Path,
+    registry: &mut Registry,
+    only: Option<Uuid>,
+) -> Result<()> {
     for (id, registration) in &mut registry.tenants {
-        let current = root.join("tenants").join(id.to_string());
-        match registration.lifecycle.clone() {
-            Lifecycle::Deleting => {
-                let trash = root.join("trash").join(id.to_string());
-                if current.exists() {
-                    reject_symlink(&current)?;
-                    fs::rename(&current, &trash)?;
-                    sync_dir(&root.join("tenants"))?;
-                    sync_dir(&root.join("trash"))?;
-                }
-                registration.lifecycle = Lifecycle::Deleted;
-            }
-            Lifecycle::Restoring { stage, old } => {
-                let staged = root.join("staging").join(stage.to_string());
-                let previous = root.join("trash").join(old.to_string());
-                if staged.exists() {
-                    reject_symlink(&staged)?;
+        if only.is_some_and(|only| only != *id) {
+            continue;
+        }
+        let result = (|| -> Result<()> {
+            let current = root.join("tenants").join(id.to_string());
+            match registration.lifecycle.clone() {
+                Lifecycle::Deleting => {
+                    let trash = root.join("trash").join(id.to_string());
                     if current.exists() {
-                        if previous.exists() {
-                            return Err(Error::corrupt("ambiguous restore journal"));
-                        }
                         reject_symlink(&current)?;
-                        fs::rename(&current, &previous)?;
+                        fs::rename(&current, &trash)?;
                         sync_dir(&root.join("tenants"))?;
                         sync_dir(&root.join("trash"))?;
-                        crate::storage::failpoint("restore_old_moved");
                     }
-                    fs::rename(&staged, &current)?;
-                    sync_dir(&root.join("staging"))?;
-                    sync_dir(&root.join("tenants"))?;
-                    crate::storage::failpoint("restore_new_moved");
+                    registration.lifecycle = Lifecycle::Deleted;
                 }
-                if !current.exists() {
-                    return Err(Error::corrupt(
-                        "restore lost both current and staged database",
-                    ));
+                Lifecycle::Restoring { stage, old } => {
+                    let staged = root.join("staging").join(stage.to_string());
+                    let previous = root.join("trash").join(old.to_string());
+                    if staged.exists() {
+                        reject_symlink(&staged)?;
+                        if current.exists() {
+                            if previous.exists() {
+                                return Err(Error::corrupt("ambiguous restore journal"));
+                            }
+                            reject_symlink(&current)?;
+                            fs::rename(&current, &previous)?;
+                            sync_dir(&root.join("tenants"))?;
+                            sync_dir(&root.join("trash"))?;
+                            crate::storage::failpoint("restore_old_moved");
+                        }
+                        fs::rename(&staged, &current)?;
+                        sync_dir(&root.join("staging"))?;
+                        sync_dir(&root.join("tenants"))?;
+                        crate::storage::failpoint("restore_new_moved");
+                    }
+                    if !current.exists() {
+                        return Err(Error::corrupt(
+                            "restore lost both current and staged database",
+                        ));
+                    }
+                    let actual: TenantInfo = read_json(&current.join("TENANT.meta"))?;
+                    if actual.id != *id
+                        || actual.generation != registration.info.generation
+                        || actual.history != registration.info.history
+                    {
+                        return Err(Error::corrupt("restore tenant mismatch"));
+                    }
+                    registration.lifecycle = Lifecycle::Active;
+                    // Keep the old directory until the Active registry is durable.
+                    // A later startup can remove unreferenced trash safely.
                 }
-                let actual: TenantInfo = read_json(&current.join("TENANT.meta"))?;
-                if actual.id != *id
-                    || actual.generation != registration.info.generation
-                    || actual.history != registration.info.history
-                {
-                    return Err(Error::corrupt("restore tenant mismatch"));
-                }
-                registration.lifecycle = Lifecycle::Active;
-                // Keep the old directory until the Active registry is durable.
-                // A later startup can remove unreferenced trash safely.
+                _ => {}
             }
-            _ => {}
+            Ok(())
+        })();
+        if let Err(error) = result {
+            if only.is_some() {
+                return Err(error);
+            }
+            eprintln!("tenant {id} lifecycle recovery deferred: {error}");
         }
     }
     Ok(())
@@ -439,7 +472,17 @@ pub(super) fn clean_lifecycle_debris(
     registry: &Registry,
     startup: bool,
 ) -> Result<()> {
-    remove_lifecycle_debris(root, collect_lifecycle_debris(root, registry, startup)?)
+    remove_lifecycle_debris(root, collect_lifecycle_debris(root, registry, startup)?)?;
+    if startup {
+        for entry in fs::read_dir(root.join("backups"))? {
+            let entry = entry?;
+            reject_symlink(&entry.path())?;
+            if entry.file_type()?.is_dir() {
+                clean_pending_backups(&entry.path())?;
+            }
+        }
+    }
+    Ok(())
 }
 pub(super) fn collect_lifecycle_debris(
     root: &Path,
@@ -447,9 +490,9 @@ pub(super) fn collect_lifecycle_debris(
     startup: bool,
 ) -> Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
-    for directory in ["trash", "staging", "tenants"] {
+    for directory in ["trash", "staging", "tenants", "backups"] {
         // Another tenant may be preparing an unpublished restore while serving traffic.
-        if directory != "trash" && !startup {
+        if !matches!(directory, "trash" | "backups") && !startup {
             continue;
         }
         for entry in fs::read_dir(root.join(directory))? {
@@ -457,7 +500,11 @@ pub(super) fn collect_lifecycle_debris(
             let Ok(id) = Uuid::parse_str(&entry.file_name().to_string_lossy()) else {
                 continue;
             };
-            let referenced = if directory == "tenants" {
+            let referenced = if directory == "backups" {
+                !registry.tenants.get(&id).is_some_and(|registration| {
+                    matches!(registration.lifecycle, Lifecycle::Deleted)
+                })
+            } else if directory == "tenants" {
                 registry.tenants.contains_key(&id)
             } else {
                 registry
@@ -517,6 +564,7 @@ pub(super) fn remove_lifecycle_debris(root: &Path, paths: Vec<PathBuf>) -> Resul
         sync_dir(&root.join("tenants"))?;
     }
     sync_dir(&root.join("trash"))?;
+    sync_dir(&root.join("backups"))?;
     sync_dir(&root.join("staging"))?;
     Ok(())
 }
@@ -546,5 +594,62 @@ mod tests {
         completed
             .expect("another tenant waited for the backup lock")
             .unwrap();
+    }
+}
+
+fn clean_pending_backups(parent: &Path) -> Result<()> {
+    for entry in fs::read_dir(parent)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        if name.to_str().is_some_and(|name| {
+            name.strip_prefix(".pending-")
+                .is_some_and(|id| Uuid::parse_str(id).is_ok())
+        }) {
+            reject_symlink(&entry.path())?;
+            fs::remove_dir_all(entry.path())?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod edge_review_tests {
+    use super::*;
+    #[test]
+    fn edge_review_broken_tenant_journal_does_not_block_healthy_tenants() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        let bad = store.create_tenant("bad-journal").unwrap();
+        let good = store.create_tenant("good-journal").unwrap();
+        store
+            .tenant(good.id)
+            .unwrap()
+            .create_collection("docs")
+            .unwrap();
+        store
+            .tenant(good.id)
+            .unwrap()
+            .put("docs", serde_json::json!({"_key":"ack"}), None)
+            .unwrap();
+        let mut registry = store.owner.inner.registry.read().clone();
+        registry.tenants.get_mut(&bad.id).unwrap().lifecycle = Lifecycle::Restoring {
+            stage: Uuid::new_v4(),
+            old: Uuid::new_v4(),
+        };
+        drop(store);
+        fs::remove_dir_all(dir.path().join("tenants").join(bad.id.to_string())).unwrap();
+        atomic_json(&dir.path().join("control/tenants.json"), &registry).unwrap();
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        assert_eq!(store.tenant(bad.id).err().unwrap().code, "UNAVAILABLE");
+        let good_handle = store.tenant(good.id).unwrap();
+        assert!(good_handle.get("docs", "ack").unwrap().is_some());
+        good_handle
+            .put("docs", serde_json::json!({"_key":"next"}), None)
+            .unwrap();
+        store.create_tenant("created-after-bad-journal").unwrap();
+        assert!(matches!(
+            store.owner.inner.registry.read().tenants[&bad.id].lifecycle,
+            Lifecycle::Restoring { .. }
+        ));
     }
 }

@@ -275,7 +275,6 @@ pub struct Engine {
     disk: AtomicU64,
     disk_inventory: Mutex<DiskInventory>,
     metrics: Metrics,
-    closed: AtomicBool,
     recovery_read_only: bool,
     draining: AtomicBool,
     pub maintenance_error: Mutex<Option<String>>,
@@ -374,7 +373,7 @@ impl Engine {
                 synced.as_ref().and_then(|mark| mark.length(wal_info.id)),
                 &budget,
                 |seq, records| {
-                    if seq <= manifest.checkpoint {
+                    if recovery_read_only || seq <= manifest.checkpoint {
                         return Ok(());
                     }
                     if seq != staged + 1 {
@@ -435,7 +434,6 @@ impl Engine {
                 non_wal_bytes,
             }),
             metrics: Metrics::default(),
-            closed: AtomicBool::new(false),
             recovery_read_only,
             draining: AtomicBool::new(false),
             maintenance_error: Mutex::new(None),
@@ -528,8 +526,7 @@ impl Engine {
         self.progress_wake.notify_all();
     }
     pub fn writable(&self) -> bool {
-        !self.closed.load(Ordering::Acquire)
-            && !self.recovery_read_only
+        !self.recovery_read_only
             && self.writer.lock().poison.is_none()
             && self
                 .authority

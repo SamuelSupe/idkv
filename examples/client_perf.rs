@@ -37,6 +37,10 @@ async fn main() -> Result<()> {
     let token = format!("benchmark-{}", Uuid::new_v4());
     let token_file = root.join("token");
     std::fs::write(&token_file, &token)?;
+    std::fs::set_permissions(
+        &token_file,
+        std::os::unix::fs::PermissionsExt::from_mode(0o600),
+    )?;
     let cluster = Uuid::new_v4();
     let config = |role, peer_url| Config {
         role,

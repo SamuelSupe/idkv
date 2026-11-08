@@ -43,6 +43,8 @@ struct Inner {
     store: Store,
     config: BackupConfig,
     op: Operator,
+    upload_op: opendal::Operator,
+    network: tokio::runtime::Handle,
     jobs_path: PathBuf,
     work_path: PathBuf,
     _lock: File,
@@ -52,7 +54,7 @@ struct Inner {
     stop: Arc<AtomicBool>,
     gate: RequestGate,
     bandwidth: Mutex<Instant>,
-    staging: Mutex<HashMap<Uuid, u64>>,
+    staging: Mutex<HashMap<Uuid, (Uuid, u64)>>,
 }
 struct Owner {
     inner: Arc<Inner>,
@@ -106,7 +108,10 @@ impl BackupService {
                 .insert("root".into(), path.to_string_lossy().into());
             config.options.insert(
                 "atomic_write_dir".into(),
-                path.join(".opendal-tmp").to_string_lossy().into(),
+                path.join(".opendal-tmp")
+                    .join(hash(store.root().as_os_str().as_encoded_bytes()))
+                    .to_string_lossy()
+                    .into(),
             );
         } else {
             config
@@ -147,6 +152,18 @@ impl BackupService {
         } else {
             atomic_json(&target, &fingerprint)?;
         }
+        if config.service == "fs" {
+            let temp = PathBuf::from(&config.options["atomic_write_dir"]);
+            fs::create_dir_all(&temp)?;
+            reject_symlink(&temp)?;
+            for entry in fs::read_dir(&temp)? {
+                let entry = entry?;
+                reject_symlink(&entry.path())?;
+                if entry.file_type()?.is_file() {
+                    fs::remove_file(entry.path())?;
+                }
+            }
+        }
         let runtime = NetworkRuntime(Some(
             tokio::runtime::Builder::new_multi_thread()
                 .worker_threads(2)
@@ -174,10 +191,11 @@ impl BackupService {
                         "backup backend requires read/write/stat/list and conditional create",
                     ));
                 }
-                Operator::new(op).map_err(remote_error)
+                Ok::<_, Error>((Operator::new(op.clone()).map_err(remote_error)?, op))
             })()
         };
-        let op = op_result?;
+        let (op, upload_op) = op_result?;
+        let network = runtime.0.as_ref().unwrap().handle().clone();
         let mut jobs = BTreeMap::new();
         let mut active = HashMap::new();
         let mut resume = Vec::new();
@@ -216,16 +234,34 @@ impl BackupService {
                 // data service from starting. Interrupted restores are never queued.
             }
             jobs.insert(job.id, job);
-            if jobs.len() > config.max_jobs {
-                return Err(Error::limit("persisted backup jobs exceed max_jobs"));
+            if jobs.len() > 4096 {
+                return Err(Error::limit("persisted backup jobs exceed hard limit"));
             }
         }
-        let (sender, receiver) = mpsc::sync_channel(config.max_jobs);
+        let mut cleaned_work = false;
+        for job in jobs.values().filter(|job| {
+            job.state.terminal()
+                && (job.state == JobState::Completed
+                    || !matches!(job.operation, BackupOperation::Create))
+        }) {
+            let work = work_path.join(job.id.to_string());
+            if work.exists() {
+                reject_symlink(&work)?;
+                fs::remove_dir_all(work)?;
+                cleaned_work = true;
+            }
+        }
+        if cleaned_work {
+            sync_dir(&work_path)?;
+        }
+        let (sender, receiver) = mpsc::sync_channel(config.max_jobs.max(resume.len()));
         let receiver = Arc::new(Mutex::new(receiver));
         let stop = Arc::new(AtomicBool::new(false));
         let inner = Arc::new(Inner {
             store,
             op,
+            upload_op,
+            network,
             jobs_path,
             work_path,
             _lock: lock,
@@ -294,6 +330,18 @@ impl BackupService {
         }
         if state.jobs.len() >= inner.config.max_jobs {
             return Err(Error::limit("backup job limit; forget terminal jobs"));
+        }
+        let tenant_limit = inner.config.max_jobs.div_ceil(2).min(64);
+        if state
+            .jobs
+            .values()
+            .filter(|job| job.tenant == tenant)
+            .count()
+            >= tenant_limit
+        {
+            return Err(Error::limit(
+                "tenant backup job limit; forget terminal jobs",
+            ));
         }
         let backup = match operation {
             BackupOperation::Restore { backup }

@@ -1,0 +1,95 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.59s
+     Running unittests src/lib.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv-2393aa090e8f705f)
+
+running 5 tests
+test replication::client::tests::edge_review_peer_errors_and_token_rotation_are_bounded ... ok
+test backup::transfer::tests::edge_review_failed_stream_aborts_fs_upload_and_cleans_stale_workspace ... ok
+tenant 7564aab0-3d04-44a1-a257-27653bd0c312 lifecycle recovery deferred: CORRUPTION: restore lost both current and staged database
+test tenant::indexes::tests::edge_review_online_unique_build_applies_complete_source_transactions ... ok
+test tenant::manager::lifecycle::edge_review_tests::edge_review_broken_tenant_journal_does_not_block_healthy_tenants ... ok
+test replication::client::tests::edge_review_progressing_response_body_can_take_more_than_thirty_seconds ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 105 filtered out; finished in 32.18s
+
+     Running unittests src/bin/crash_probe.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/crash_probe-908a2b5674b0a3c6)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/server.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv-ff39cc658b406b80)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/restore_remote.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv_restore-bdcd2f5707c4399c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/backup.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/backup-7537044b4004ea42)
+
+running 2 tests
+test edge_review_lower_job_limit_preserves_startup_and_old_jobs ... ok
+test edge_review_backup_order_survives_clock_rollback_and_restart ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.85s
+
+     Running tests/dsl.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/dsl-37bcc5e4345bb5db)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/engine.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/engine-9f1653c14ecc2004)
+
+running 3 tests
+test edge_review_unique_swaps_validate_final_batch_and_preserve_conflict_atomicity ... ok
+test edge_review_receipts_survive_collection_recreation_and_restart ... ok
+test edge_review_disk_quota_shrink_cannot_remove_delete_headroom ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 30 filtered out; finished in 0.22s
+
+     Running tests/http.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/http-52dff16772f7d8c2)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.00s
+
+     Running tests/identity.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/identity-c9d7b94029695abc)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/middleware.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/middleware-ebc6847251b285dd)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 15 filtered out; finished in 0.00s
+
+     Running tests/recovery.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/recovery-f151d9dc457b27b2)
+
+running 2 tests
+test edge_review_crashed_local_checkpoint_is_reclaimed_before_backup_count_limit ... ok
+test edge_review_readonly_enospc_exposes_only_durable_prefix_and_preserves_recovery_bytes ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.33s
+
+     Running tests/reliability.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/reliability-31129f0616cbcb85)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/replication.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/replication-de485e5d27775de6)
+
+running 1 test
+tenant 5207353d-24d3-47b1-a936-8bf31e6a2328 clean-close watermark: IO_ERROR: No such file or directory (os error 2)
+tenant 5207353d-24d3-47b1-a936-8bf31e6a2328 clean-close watermark: IO_ERROR: No such file or directory (os error 2)
+test edge_review_switchover_rejects_initial_replica_but_retries_completed_transfer ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 32 filtered out; finished in 0.22s

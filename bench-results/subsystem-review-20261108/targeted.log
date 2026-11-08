@@ -1,0 +1,88 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.03s
+     Running unittests src/lib.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv-da4845942d3e9983)
+
+running 1 test
+test tenant::indexes::tests::subsystem_review_dropped_collection_stops_snapshot_index_batches ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 104 filtered out; finished in 0.78s
+
+     Running unittests src/bin/crash_probe.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/crash_probe-3cda2296e5ca21b1)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/server.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv-5b3bea7f02536d25)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/restore_remote.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv_restore-15c7ced665025993)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/backup.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/backup-aac84cda2a61954c)
+
+running 5 tests
+test subsystem_review_failed_restore_releases_downloaded_workspace ... ok
+test subsystem_review_one_tenant_cannot_fill_the_backup_job_table ... ok
+test subsystem_review_prune_bounds_memory_without_a_reference_count_dead_end ... ok
+test subsystem_review_prune_recovers_beyond_the_snapshot_listing_limit ... ok
+test subsystem_review_retained_create_cannot_exhaust_other_tenants_staging ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 24.00s
+
+     Running tests/dsl.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/dsl-058eff9da779ef39)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/engine.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/engine-981d405c4bf85dae)
+
+running 1 test
+test subsystem_review_tenant_deletion_reclaims_local_backups_and_legacy_residue ...      Running tests/http.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/http-36ba96b4e84739bd)
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 29 filtered out; finished in 0.33s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.00s
+
+     Running tests/identity.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/identity-7213c11406cdb333)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/middleware.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/middleware-7008c0deda8fe1e8)
+
+running 1 test
+test subsystem_review_user_documents_cannot_supply_read_telemetry ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 14 filtered out; finished in 0.13s
+
+     Running tests/recovery.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/recovery-f6a81e561e45aac2)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.00s
+
+     Running tests/reliability.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/reliability-22cd774b881d533b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/replication.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/replication-6f3b3c02e26346c8)
+
+running 1 test
+test subsystem_review_switchover_retries_a_busy_snapshot_export ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 31 filtered out; finished in 0.99s

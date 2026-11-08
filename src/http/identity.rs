@@ -7,6 +7,7 @@ pub(super) fn dispatch(
     params: &HashMap<String, String>,
     body: Value,
     token: &Token,
+    telemetry: &crate::telemetry::Telemetry,
 ) -> Result<Value> {
     let context = IdentityContext {
         source: "http".into(),
@@ -25,7 +26,9 @@ pub(super) fn dispatch(
             .unwrap_or_default();
         serde_json::to_value(tenant.identity_write_with(&context, decode(body)?, &options)?)?
     } else if route.ends_with("/resolve") {
-        serde_json::to_value(tenant.identity_resolve(&decode(body)?)?)?
+        let result = tenant.identity_resolve(&decode(body)?)?;
+        telemetry.record_read(&result.stats);
+        serde_json::to_value(result)?
     } else if route.ends_with("/timeline") {
         serde_json::to_value(tenant.identity_timeline(&decode(body)?)?)?
     } else if route.ends_with("/{entity}") {

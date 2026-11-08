@@ -1,0 +1,81 @@
+{
+  "recorded_at_utc": "2026-11-08T09:41:30.052915+00:00",
+  "base_commit": "5600a4ea0aca5f0d13e9ec7f5966cb2782f294f1",
+  "workspace": "Includes preceding uncommitted WAL-tail and subsystem fixes; this report covers the latest 23 reported issues.",
+  "environment": {
+    "platform": "OrbStack Ubuntu AArch64",
+    "kernel": "Linux 7.2.12-orbstack-00394-gbecdd6130068 aarch64",
+    "rustc": "1.90.0 (1159e78c4 2025-09-14)",
+    "cargo": "1.90.0 (840b83a10 2025-07-30)",
+    "target_dir": "/var/tmp/idkv-p01-target-20261108",
+    "temp_dir": "/var/tmp/idkv-p01-tmp-20261108"
+  },
+  "full_suite": {
+    "command": "cargo test --locked --features failpoints --no-fail-fast -- --test-threads=1",
+    "passed": 259,
+    "failed": 0,
+    "log": "tests.log",
+    "runner": "Serial test scheduling; concurrency inside scenario tests remains enabled."
+  },
+  "new_regression_tests": 16,
+  "final_fixture_revalidation": {
+    "passed": 3,
+    "failed": 0,
+    "log": "final-fixtures.log",
+    "reason": "Clippy adjustments to the slow HTTP fixture and crash-probe branches after the full-suite run started; no production changes."
+  },
+  "static_checks": {
+    "clippy": {
+      "command": "cargo clippy --locked --features failpoints --all-targets -- -D warnings",
+      "passed": true,
+      "log": "clippy.log"
+    },
+    "format": {
+      "command": "cargo fmt --all -- --check",
+      "passed": true
+    },
+    "diff": {
+      "command": "git diff --check",
+      "passed": true
+    }
+  },
+  "baseline_reproductions": {
+    "distinct_failures": 5,
+    "commit": "5600a4ea0aca5f0d13e9ec7f5966cb2782f294f1",
+    "logs": [
+      "baseline.log",
+      "baseline-clock.log"
+    ],
+    "cases": [
+      "unique value swaps",
+      "receipt replay after collection recreation",
+      "unsafe disk quota shrink",
+      "startup with lowered max_jobs",
+      "backup ordering after clock rollback"
+    ],
+    "note": "The clock case was refined to use a valid completed remote checkpoint and rerun; baseline-clock.log is its final reproduction."
+  },
+  "reopen_isolation": {
+    "case": "missing_or_foreign_sst_never_becomes_an_empty_database",
+    "runs": 20,
+    "passed": 20,
+    "failed": 0,
+    "log": "isolated-reopen.log"
+  },
+  "remaining_uncertainty": [
+    {
+      "case": "One BUSY on immediate Store reopen in a parallel suite",
+      "log": "tests-parallel.log",
+      "status": "Original lock owner not captured; root cause unconfirmed. Serial full suite and 20 isolated repetitions passed.",
+      "independent_experiment": "lock-inheritance-probe.rs",
+      "experiment_log": "lock-inheritance-probe.log",
+      "experiment_result": "A child inheriting descriptors keeps the root lock after parent closure. Reopen succeeds after child exit with acknowledged revision intact. This does not prove the cause of the original parallel failure."
+    }
+  ],
+  "not_validated": [
+    "Physical power loss or real block-device errors",
+    "Real S3 multipart failure / service outage",
+    "Long-running production load"
+  ],
+  "delivery": "Local changes only; no commit or push performed."
+}

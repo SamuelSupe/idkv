@@ -1,0 +1,19 @@
+{
+  "base_commit": "5600a4ea0aca5f0d13e9ec7f5966cb2782f294f1",
+  "environment": "OrbStack Ubuntu AArch64; Linux 7.2.12-orbstack-00394-gbecdd6130068",
+  "test_tmpdir": "/var/tmp/idkv-p01-tmp-20261108",
+  "test_target_dir": "/var/tmp/idkv-p01-target-20261108",
+  "source_sha256": {
+    "src/storage/wal.rs": "de03f27a955780407f61aed1e422117708cbe2a82433584c0984790578e83609",
+    "tests/recovery.rs": "1c623756e2318b5b3ec042279a622384fb947e1742d12022413a6f1939405215",
+    "Cargo.toml": "2ce875309589cf2fc762a516a4c2452a9a4d555729a7ad682fce2bde0d75758c",
+    "Cargo.lock": "c4823edb9eb7a4340a12dd14217e5742ef3a92d8341d0889e38a9015ce92dd46"
+  },
+  "commands": [
+    "cargo test --locked --features failpoints --lib storage::wal::tests -- --test-threads=1",
+    "cargo test --locked --features failpoints --lib --tests -- --test-threads=1",
+    "cargo clippy --locked --features failpoints --all-targets -- -D warnings",
+    "cargo fmt --all -- --check"
+  ],
+  "fault_scope": "Deterministic damaged file images and child process aborts; no physical power loss or device writeback fault testing."
+}

@@ -43,6 +43,10 @@ async fn main() -> Result<()> {
     let token = format!("benchmark-{}", Uuid::new_v4());
     let token_file = root.join("peer-token");
     std::fs::write(&token_file, &token)?;
+    std::fs::set_permissions(
+        &token_file,
+        std::os::unix::fs::PermissionsExt::from_mode(0o600),
+    )?;
     let la = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let lb = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let ua = format!("http://{}", la.local_addr()?);

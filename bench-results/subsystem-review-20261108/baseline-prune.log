@@ -1,0 +1,33 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.69s
+     Running tests/backup.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/backup-aac84cda2a61954c)
+
+running 2 tests
+test subsystem_review_prune_bounds_memory_without_a_reference_count_dead_end ... FAILED
+test subsystem_review_prune_recovers_beyond_the_snapshot_listing_limit ... FAILED
+
+failures:
+
+---- subsystem_review_prune_bounds_memory_without_a_reference_count_dead_end stdout ----
+
+thread 'subsystem_review_prune_bounds_memory_without_a_reference_count_dead_end' panicked at tests/backup.rs:83:5:
+assertion `left == right` failed: BackupJob { id: 7f5827aa-3419-4999-885d-051bff96c627, tenant: a065be33-f387-41e2-a3d3-043e4c60498f, backup: d3dd95b5-2359-4bfc-a725-3531691d3c41, operation: Prune { keep_last: 6 }, state: Failed, created_ms: 1794127232869, updated_ms: 1794127234443, uploaded_bytes: 0, reused_bytes: 0, processed_files: 0, checkpoint_seq: None, result: None, error: Some("RESOURCE_EXHAUSTED: backup GC reference budget") }
+  left: Failed
+ right: Completed
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- subsystem_review_prune_recovers_beyond_the_snapshot_listing_limit stdout ----
+
+thread 'subsystem_review_prune_recovers_beyond_the_snapshot_listing_limit' panicked at tests/backup.rs:83:5:
+assertion `left == right` failed: BackupJob { id: 28fcdae3-3300-4c37-b644-695858dc3c63, tenant: f793b695-b124-48a3-a28d-7e42d197ea6a, backup: 48242f83-e22d-4427-9086-66b462657913, operation: Prune { keep_last: 1 }, state: Failed, created_ms: 1794127235198, updated_ms: 1794127236993, uploaded_bytes: 0, reused_bytes: 0, processed_files: 0, checkpoint_seq: None, result: None, error: Some("RESOURCE_EXHAUSTED: remote backup listing limit") }
+  left: Failed
+ right: Completed
+
+
+failures:
+    subsystem_review_prune_bounds_memory_without_a_reference_count_dead_end
+    subsystem_review_prune_recovers_beyond_the_snapshot_listing_limit
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 14 filtered out; finished in 5.53s
+
+error: test failed, to rerun pass `--test backup`

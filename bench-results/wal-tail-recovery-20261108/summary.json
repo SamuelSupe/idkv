@@ -1,0 +1,14 @@
+{
+  "passed": 234,
+  "failed": 0,
+  "library_tests": 104,
+  "integration_tests": 130,
+  "recovery_integration_tests": 16,
+  "replication_integration_tests": 31,
+  "wal_damage_matrix_cases": 36,
+  "baseline_reproductions": 2,
+  "clippy": "passed",
+  "format": "passed",
+  "full_suite_exit_code": 0,
+  "physical_power_loss_tested": false
+}

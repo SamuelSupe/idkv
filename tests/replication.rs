@@ -22,6 +22,7 @@ fn options() -> Options {
 fn config(path: &Path, cluster: Uuid, role: Role, peer_url: String) -> Config {
     let token = path.join("peer-token");
     std::fs::write(&token, PEER).unwrap();
+    std::fs::set_permissions(&token, std::os::unix::fs::PermissionsExt::from_mode(0o600)).unwrap();
     Config {
         cluster,
         role,
@@ -522,9 +523,15 @@ async fn checkpoint_install_waits_for_readers_without_retransferring_and_other_t
     assert!(pair.sb.status().unwrap().waiting_for_readers.contains(&id));
     let deadline = Instant::now() + Duration::from_secs(12);
     loop {
-        match pair.sb.sync_once().await {
-            Err(error) if error.code == "DEADLINE_EXCEEDED" => break,
-            result => assert!(result.is_ok(), "{result:?}"),
+        pair.sb.sync_once().await.unwrap();
+        if pair
+            .sb
+            .status()
+            .unwrap()
+            .initialization_errors
+            .contains_key(&id)
+        {
+            break;
         }
         assert!(Instant::now() < deadline, "reader drain never timed out");
         tokio::time::sleep(Duration::from_millis(10)).await;
@@ -540,7 +547,13 @@ async fn checkpoint_install_waits_for_readers_without_retransferring_and_other_t
             .is_none()
     );
     drop(raced_reader);
+    tokio::time::sleep(Duration::from_secs(31)).await;
     pair.catch_up(false).await;
+    assert_eq!(
+        gate.snapshots.load(Ordering::Relaxed),
+        downloads + 1,
+        "redownloaded verified checkpoint after drain timeout"
+    );
     assert_eq!(
         pair.b.tenant(id).unwrap().get("docs", "hot").unwrap(),
         tenant.get("docs", "hot").unwrap()
@@ -2570,4 +2583,65 @@ async fn indexed_pages_fit_global_budget_or_rebuild_without_infinite_retry() {
         drop(source);
         stop_test_pair(pair).await;
     }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn subsystem_review_switchover_retries_a_busy_snapshot_export() {
+    let pair = Pair::new().await;
+    let mut expected = Vec::new();
+    for name in ["first", "second", "export-owner"] {
+        let id = pair.a.create_tenant(name).unwrap().id;
+        let tenant = pair.a.tenant(id).unwrap();
+        tenant.create_collection("docs").unwrap();
+        let ack = tenant
+            .put("docs", json!({"_key":"confirmed","tenant":name}), None)
+            .unwrap();
+        tenant.engine().flush().unwrap();
+        expected.push((id, ack.rev));
+    }
+    let state = pair.a.replication_state();
+    let export = pair
+        .sa
+        .snapshot(state.cluster, state.epoch, expected[2].0)
+        .unwrap();
+    let source = pair.sa.clone();
+    let release = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(700)).await;
+        source.release_snapshot(export.id).unwrap();
+    });
+    let result = pair.sa.switchover().await;
+    release.await.unwrap();
+    result.unwrap();
+    assert_eq!(pair.a.replication_state().role, Role::Replica);
+    assert_eq!(pair.b.replication_state().role, Role::Primary);
+    for (id, rev) in expected {
+        assert_eq!(
+            pair.b
+                .tenant(id)
+                .unwrap()
+                .get("docs", "confirmed")
+                .unwrap()
+                .unwrap()["_rev"],
+            rev
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn edge_review_switchover_rejects_initial_replica_but_retries_completed_transfer() {
+    let pair = Pair::new().await;
+    let id = pair.a.create_tenant("switch-role").unwrap().id;
+    let t = pair.a.tenant(id).unwrap();
+    t.create_collection("docs").unwrap();
+    t.put("docs", json!({"_key":"ack"}), None).unwrap();
+    pair.catch_up(false).await;
+    assert_eq!(pair.sb.switchover().await.unwrap_err().code, "CONFLICT");
+    assert_eq!(pair.a.replication_state().role, Role::Primary);
+    let first = pair.sa.switchover().await.unwrap();
+    let retry = pair.sa.switchover().await.unwrap();
+    assert_eq!(first.epoch, retry.epoch);
+    assert_eq!(
+        pair.b.tenant(id).unwrap().get("docs", "ack").unwrap(),
+        t.get("docs", "ack").unwrap()
+    );
 }

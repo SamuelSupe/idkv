@@ -173,7 +173,7 @@ impl Store {
         // A healthy v4 root can serve reads even on a full disk. Upgrade its
         // representation only when a registry mutation already needs a write.
         registry.version = registry.version.max(4);
-        recover_lifecycle(&root, &mut registry)?;
+        recover_lifecycle(&root, &mut registry, None)?;
         if serde_json::to_vec(&registry)? != previous {
             registry.prepare_publish()?;
             atomic_json(&registry_path, &registry)?;
@@ -657,6 +657,8 @@ impl Store {
             None => self.owner.inner.node.write()?,
         };
         drop(permission);
+        let backup_lock = self.slot(id).lock().local_backups.clone();
+        let _backup = backup_lock.lock();
         let _drain = self.drain_for_management(id, false)?;
         let permission = match source {
             Some(source) => self.owner.inner.node.replica_write(source)?,
@@ -684,7 +686,7 @@ impl Store {
         let result = (|| {
             atomic_json(&inner.root.join("control/tenants.json"), &*registry)?;
             crate::storage::errorpoint("tenant_delete_journal_published")?;
-            recover_lifecycle(&inner.root, &mut registry)?;
+            recover_lifecycle(&inner.root, &mut registry, Some(id))?;
             atomic_json(&inner.root.join("control/tenants.json"), &*registry)?;
             collect_lifecycle_debris(&inner.root, &registry, false)
         })();

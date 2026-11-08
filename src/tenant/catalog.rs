@@ -91,6 +91,16 @@ pub(crate) fn indexes_tx(tx: &Transaction<'_>, collection: Uuid) -> Result<Vec<I
         .map(|(_, v)| parse(&v))
         .collect()
 }
+pub(crate) fn retain_receipt_namespace(
+    tx: &mut Transaction<'_>,
+    collection: &Collection,
+) -> Result<()> {
+    let namespace = named(b"r", &collection.name);
+    if tx.get(&namespace)?.is_none() {
+        put(tx, namespace, &collection.id)?;
+    }
+    Ok(())
+}
 pub(crate) fn queue_gc(tx: &mut Transaction<'_>, prefixes: Vec<Vec<u8>>) -> Result<()> {
     put(
         tx,
@@ -165,10 +175,13 @@ impl TenantHandle {
         self.engine().transact(|tx| {
             let collection = collection_tx(tx, name)?;
             super::datasets::mutable(tx, collection.id)?;
+            // Preserve the receipt namespace across drop/recreate. Existing UUID
+            // namespaces stay readable without rewriting every retained receipt.
+            retain_receipt_namespace(tx, &collection)?;
             tx.delete(named(b"C", name))?;
             queue_gc(
                 tx,
-                [b'D', b'I', b'J', b'L', b'B', b'R']
+                [b'D', b'I', b'J', b'L', b'B']
                     .iter()
                     .map(|kind| prefix(*kind, collection.id))
                     .collect(),
@@ -345,5 +358,44 @@ mod tests {
             "NOT_FOUND"
         );
         assert_eq!(tenant.collection_id(&new, "assets").unwrap(), new_id);
+    }
+    #[test]
+    fn edge_review_collection_gc_keeps_unexpired_write_receipts() {
+        use crate::{WriteOp, WriteOptions};
+        let root = tempfile::tempdir().unwrap();
+        let store = Store::open(root.path(), Options::default()).unwrap();
+        let tenant = store
+            .tenant(store.create_tenant("receipt-gc").unwrap().id)
+            .unwrap();
+        drop(store);
+        tenant.create_collection("docs").unwrap();
+        tenant.set_retention(60).unwrap();
+        let context = tenant.retry_context("writer").unwrap();
+        let options = WriteOptions {
+            operation_id: Some("op".into()),
+            expected_history: Some(context.history),
+            retry_token: Some(context.retry_token),
+        };
+        let operations = vec![WriteOp::Put {
+            document: serde_json::json!({"value":"once"}),
+            if_rev: None,
+        }];
+        let first = tenant
+            .write_batch_with("docs", operations.clone(), &options, "writer")
+            .unwrap();
+        tenant.drop_collection("docs").unwrap();
+        for _ in 0..16 {
+            tenant.gc_step().unwrap();
+            tenant.retention_step().unwrap();
+        }
+        tenant.create_collection("docs").unwrap();
+        let before = tenant.engine().seq();
+        let retry = tenant
+            .write_batch_with("docs", operations, &options, "writer")
+            .unwrap();
+        assert_eq!(retry[0].key, first[0].key);
+        assert_eq!(retry[0].rev, first[0].rev);
+        assert_eq!(tenant.engine().seq(), before);
+        assert!(tenant.get("docs", &retry[0].key).unwrap().is_none());
     }
 }

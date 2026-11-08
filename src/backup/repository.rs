@@ -83,38 +83,31 @@ impl Inner {
         manifest.validate(tenant, backup, self.config.max_backup_bytes)?;
         Ok(manifest)
     }
-    pub(super) fn summaries(&self, tenant: Uuid) -> Result<Vec<BackupSummary>> {
+    fn scan_snapshots(
+        &self,
+        tenant: Uuid,
+        scan_limit: Option<usize>,
+        check: &impl Fn() -> Result<()>,
+        mut visit: impl FnMut(BackupSummary) -> Result<()>,
+    ) -> Result<()> {
         let prefix = format!("tenants/{tenant}/snapshots/");
-        let mut result = Vec::new();
-        let mut visited = 0;
-        for entry in self.op.lister(&prefix).map_err(remote_error)? {
-            let entry = entry.map_err(remote_error)?;
-            visited += 1;
-            if visited > 200_000 {
-                return Err(Error::limit(
-                    "backup inventory scan limit; retry prune to reclaim empty directories",
-                ));
+        for (visited, entry) in self.op.lister(&prefix).map_err(remote_error)?.enumerate() {
+            check()?;
+            if scan_limit.is_some_and(|limit| visited >= limit) {
+                return Err(Error::limit("backup inventory scan limit; run prune"));
             }
-            let Some(name) = entry
+            let entry = entry.map_err(remote_error)?;
+            let name = entry
                 .path()
                 .strip_prefix(&prefix)
-                .map(|s| s.trim_end_matches('/'))
-            else {
-                return Err(Error::corrupt("backup listing escaped tenant prefix"));
-            };
+                .ok_or_else(|| Error::corrupt("backup listing escaped tenant prefix"))?
+                .trim_end_matches('/');
             let Ok(id) = Uuid::parse_str(name) else {
                 continue;
             };
             match self.manifest(tenant, id) {
-                Ok(manifest) => {
-                    result.push(manifest.summary());
-                    if result.len() > 4096 {
-                        return Err(Error::limit("remote backup listing limit"));
-                    }
-                }
-                Err(e) if e.code == "NOT_FOUND" => {
-                    // A missing marker denotes an unfinished snapshot. A present
-                    // marker with a missing manifest is corruption, never a GC hint.
+                Ok(manifest) => visit(manifest.summary())?,
+                Err(error) if error.code == "NOT_FOUND" => {
                     if self
                         .op
                         .exists(&format!("{}COMPLETED", snapshot_prefix(tenant, id)))
@@ -123,9 +116,20 @@ impl Inner {
                         return Err(Error::corrupt("completed backup has no manifest"));
                     }
                 }
-                Err(e) => return Err(e),
+                Err(error) => return Err(error),
             }
         }
+        Ok(())
+    }
+    pub(super) fn summaries(&self, tenant: Uuid) -> Result<Vec<BackupSummary>> {
+        let mut result = Vec::new();
+        self.scan_snapshots(tenant, Some(200_000), &|| Ok(()), |summary| {
+            result.push(summary);
+            if result.len() > 4096 {
+                return Err(Error::limit("remote backup listing limit; run prune"));
+            }
+            Ok(())
+        })?;
         result.sort_by_key(|m| {
             (
                 std::cmp::Reverse(m.checkpoint_ms),
@@ -133,6 +137,31 @@ impl Inner {
             )
         });
         Ok(result)
+    }
+    pub(super) fn checkpoint_time(
+        &self,
+        tenant: Uuid,
+        check: impl Fn() -> Result<()>,
+    ) -> Result<u64> {
+        check()?;
+        let path = self.jobs_path.join(format!("CLOCK-{tenant}"));
+        let previous: u64 = if path.try_exists()? {
+            read_json(&path)?
+        } else {
+            let mut latest = 0;
+            self.scan_snapshots(tenant, None, &check, |summary| {
+                latest = latest.max(summary.checkpoint_ms);
+                Ok(())
+            })?;
+            latest
+        };
+        let next = now_ms().max(
+            previous
+                .checked_add(1)
+                .ok_or_else(|| Error::limit("backup clock exhausted"))?,
+        );
+        atomic_json(&path, &next)?;
+        Ok(next)
     }
     pub(super) fn publish_backup(&self, manifest: &BackupManifest) -> Result<()> {
         manifest.validate(
@@ -161,38 +190,38 @@ impl Inner {
         keep: usize,
         check: impl Fn() -> Result<()>,
     ) -> Result<serde_json::Value> {
-        // Reclaim legacy residue before listing, so an inventory scan limit
-        // cannot permanently prevent the operation that removes that residue.
         self.reclaim_empty_snapshots(tenant, &check)?;
-        let manifests = self.summaries(tenant)?;
-        let mut referenced = HashSet::new();
-        for summary in manifests.iter().take(keep) {
-            check()?;
-            let m = self.manifest(tenant, summary.backup)?;
-            for file in &m.files {
-                referenced.insert(object_key(tenant, m.tenant.generation, &file.sha256));
-                if referenced.len() > 100_000 {
-                    return Err(Error::limit("backup GC reference budget"));
-                }
+        // Validate the inventory before deleting. Selection retains only the
+        // newest `keep` summaries, so list's response cap cannot block pruning.
+        let mut newest = BTreeMap::new();
+        self.scan_snapshots(tenant, None, &check, |summary| {
+            newest.insert((summary.checkpoint_ms, summary.backup), summary);
+            if newest.len() > keep {
+                newest.pop_first();
             }
-        }
+            Ok(())
+        })?;
+        let retained: Vec<_> = newest.into_values().collect();
+        let ids: HashSet<_> = retained.iter().map(|m| m.backup).collect();
         let mut removed = 0;
-        for m in manifests.iter().skip(keep) {
-            check()?;
-            let prefix = snapshot_prefix(tenant, m.backup);
-            self.op
-                .delete(&format!("{prefix}COMPLETED"))
-                .map_err(remote_error)?;
-            self.op
-                .delete(&format!("{prefix}manifest.json"))
-                .map_err(remote_error)?;
-            self.op.delete(&prefix).map_err(remote_error)?;
-            removed += 1;
-        }
+        self.scan_snapshots(tenant, None, &check, |summary| {
+            if !ids.contains(&summary.backup) {
+                let prefix = snapshot_prefix(tenant, summary.backup);
+                self.op
+                    .delete(&format!("{prefix}COMPLETED"))
+                    .map_err(remote_error)?;
+                self.op
+                    .delete(&format!("{prefix}manifest.json"))
+                    .map_err(remote_error)?;
+                self.op.delete(&prefix).map_err(remote_error)?;
+                removed += 1;
+            }
+            Ok(())
+        })?;
         let cutoff = now_ms().saturating_sub(self.config.gc_grace_seconds.saturating_mul(1000));
         let prefix = format!("tenants/{tenant}/objects/");
         let mut deleted = 0;
-        let mut visited = 0;
+        let mut candidates = HashSet::new();
         let options = opendal::options::ListOptions {
             recursive: true,
             ..Default::default()
@@ -204,14 +233,10 @@ impl Inner {
         {
             check()?;
             let entry = entry.map_err(remote_error)?;
-            visited += 1;
-            if visited > 200_000 {
-                return Err(Error::limit("backup GC object budget"));
-            }
             if !entry.path().starts_with(&prefix) {
                 return Err(Error::corrupt("GC listing escaped tenant prefix"));
             }
-            if entry.metadata().is_dir() || referenced.contains(entry.path()) {
+            if entry.metadata().is_dir() {
                 continue;
             }
             let meta = self.op.stat(entry.path()).map_err(remote_error)?;
@@ -219,13 +244,47 @@ impl Inner {
                 t.into_inner().as_millisecond() >= 0
                     && t.into_inner().as_millisecond() as u64 <= cutoff
             }) {
-                self.op.delete(entry.path()).map_err(remote_error)?;
-                deleted += 1;
+                candidates.insert(entry.path().to_owned());
+            }
+            if candidates.len() == 4096 {
+                deleted += self.prune_object_batch(tenant, &retained, &mut candidates, &check)?;
             }
         }
+        deleted += self.prune_object_batch(tenant, &retained, &mut candidates, &check)?;
         Ok(
-            serde_json::json!({"retained_backups":manifests.len().min(keep),"deleted_backups":removed,"deleted_objects":deleted}),
+            serde_json::json!({"retained_backups":retained.len(),"deleted_backups":removed,"deleted_objects":deleted}),
         )
+    }
+
+    fn prune_object_batch(
+        &self,
+        tenant: Uuid,
+        retained: &[BackupSummary],
+        candidates: &mut HashSet<String>,
+        check: &impl Fn() -> Result<()>,
+    ) -> Result<usize> {
+        // Bound memory by candidate objects, not the total number of references.
+        // Large inventories trade repeated manifest reads for bounded workspace.
+        for summary in retained {
+            if candidates.is_empty() {
+                return Ok(0);
+            }
+            check()?;
+            let manifest = self.manifest(tenant, summary.backup)?;
+            for file in &manifest.files {
+                candidates.remove(&object_key(
+                    tenant,
+                    manifest.tenant.generation,
+                    &file.sha256,
+                ));
+            }
+        }
+        let deleted = candidates.len();
+        for path in candidates.drain() {
+            check()?;
+            self.op.delete(&path).map_err(remote_error)?;
+        }
+        Ok(deleted)
     }
 
     fn reclaim_empty_snapshots(&self, tenant: Uuid, check: &impl Fn() -> Result<()>) -> Result<()> {

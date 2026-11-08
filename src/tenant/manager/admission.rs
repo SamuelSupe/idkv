@@ -252,8 +252,9 @@ mod tests {
                 );
                 thread::sleep(Duration::from_millis(10));
             }
-            tenant
-                .create_lookup(
+            let deadline = Instant::now() + Duration::from_secs(5);
+            loop {
+                match tenant.create_lookup(
                     "docs",
                     LookupDefinition {
                         name: "by-value".into(),
@@ -262,8 +263,16 @@ mod tests {
                         mode: MatchMode::All,
                         max_matches: 1,
                     },
-                )
-                .unwrap();
+                ) {
+                    Ok(()) => break,
+                    Err(error)
+                        if error.code == "RESOURCE_EXHAUSTED" && Instant::now() < deadline =>
+                    {
+                        thread::sleep(Duration::from_millis(10))
+                    }
+                    Err(error) => panic!("lookup admission after recovered build: {error}"),
+                }
+            }
             for (batch, acks) in keys.chunks(128).zip(acknowledged.chunks(128)) {
                 let docs = tenant.multi_get("docs", batch).unwrap();
                 let inputs: Vec<_> = batch

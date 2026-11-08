@@ -111,3 +111,5 @@ python3 scripts/retention_smoke.py http://127.0.0.1:8080 token.txt
 后续 history sweep 遇到上一次已完成下界以下的旧 baseline 后，直接定位到下一个 identifier，跳过此前回收留下的更老墓碑；首次 sweep 仍逐页检查所有旧版本。此优化依赖知识 ordinal 单调增加、历史不可变，以及上一次 sweep 完成后每个 identifier 在下界以下最多保留一个 baseline。新增且仍需回收的记录会先被访问，不因定位跳过遗漏。
 
 物理 GC 页对已访问键叠加本事务写入/删除，因此 expire 已删除的知识条目不再被本事务 history 用作下界。本事务中新插入、但物理视图中尚无的键由下一步访问，仍是保守回收。GC 在迁移完成后的清理阶段不调用 schedule_at；若以后引入此类路径，发布本地 State 前必须合并 schedule_at 的游标回退，代码中标明了这一约束。
+
+历史保留策略迁移会新增期限、引用及游标记录，使用普通写入的磁盘额度，不能消耗为 flush/compaction 预留的最后 20%。空间不足时保留迁移游标并返回 RESOURCE_EXHAUSTED；迁移完成后的实际过期删除仍可使用维护预算推进回收。
