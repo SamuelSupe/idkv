@@ -1,5 +1,7 @@
 # WAL 尾部完整长度损坏恢复（2026-11-08）
 
+> 历史记录：其中自动容忍 CRC/魔数损坏、ENOSPC 提供旧前缀读取及暂存预算等结论已由 [0732ffd 复查](review0732-20261108.md) 修订。
+
 基线为 `5600a4ea0aca5f0d13e9ec7f5966cb2782f294f1`。报告中的打开失败已复现：在包含已确认文档的 WAL 后追加 8 KiB 全零字节，重开返回 `CORRUPTION: WAL batch header checksum`。底层多帧回归同样在完整长度的坏帧处失败。修复前日志见 [底层复现](../bench-results/wal-tail-recovery-20261108/baseline-unit.log)和 [Store 复现](../bench-results/wal-tail-recovery-20261108/baseline-integration.log)。
 
 ## 恢复边界

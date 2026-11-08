@@ -47,6 +47,7 @@ HTTP 所有数据接口以 `/v1/tenants/{tenant_uuid}` 开头。`GET /openapi.js
 | `GET / POST T/remote-backups` | 列出远端备份 / 提交异步创建任务 |
 | `POST T/remote-backups/{backup}/verify` | 提交全文件 SHA-256 校验 |
 | `POST T/remote-backups/{backup}/restore` | 提交校验及恢复任务 |
+| `POST T/remote-backups/{backup}/delete` | 显式删除远端备份元数据，含坏清单；返回异步任务 |
 | `POST T/remote-backups/prune` | `{"keep_last":7}`，按引用保留清理 |
 | `GET T/backup-jobs` | 持久任务列表 |
 | `GET / DELETE T/backup-jobs/{job}` | 查询任务 / 忘记终态任务与本地暂存 |
@@ -191,3 +192,5 @@ v0.9.1 的查询定位规则：
 租户级统一过期时间、最新状态保护、历史查询到期和 v0.8 发布版本兼容性见 [retention.md](retention.md)。IDEMPOTENCY_EXPIRED/VERSION_UNAVAILABLE 返回 410，RETRY_TOKEN_REQUIRED 返回 428；KNOWLEDGE_UNAVAILABLE 保持 409。
 
 `POST T/retry-context` 是会写入 retry token 的操作：read 角色仍被拒绝，响应按写入路径处理，不附加只读响应语义或接受一致性读控制。`GET /openapi.json` 的配置专属文档在创建 HTTP router 时生成并编码一次，各请求复用同一份内容。
+
+恢复未完成的只读诊断实例拒绝普通业务读取，返回 RECOVERY_REQUIRED（503），而非旧视图下的正常 404。本地备份在 rename 后同步结果不确定时返回 BACKUP_COMMIT_UNKNOWN，message 包含可检查/删除的 UUID。

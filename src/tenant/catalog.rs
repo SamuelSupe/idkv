@@ -96,7 +96,9 @@ pub(crate) fn retain_receipt_namespace(
     collection: &Collection,
 ) -> Result<()> {
     let namespace = named(b"r", &collection.name);
-    if tx.get(&namespace)?.is_none() {
+    if tx.get(&namespace)?.is_none()
+        && !tx.prefix_first(&prefix(b'R', collection.id), 1)?.is_empty()
+    {
         put(tx, namespace, &collection.id)?;
     }
     Ok(())

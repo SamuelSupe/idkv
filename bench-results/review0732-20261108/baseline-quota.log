@@ -1,0 +1,22 @@
+   Compiling tenant-kv v0.10.1 (/var/tmp/idkv-review0732-baseline-20261108)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.31s
+     Running unittests src/lib.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv-2393aa090e8f705f)
+
+running 1 test
+test tenant::manager::quota::tests::review0732_replica_disk_shrink_flushes_source_checkpointed_wal_first ... FAILED
+
+failures:
+
+---- tenant::manager::quota::tests::review0732_replica_disk_shrink_flushes_source_checkpointed_wal_first stdout ----
+
+thread 'tenant::manager::quota::tests::review0732_replica_disk_shrink_flushes_source_checkpointed_wal_first' panicked at src/tenant/manager/quota.rs:292:9:
+{a6a6f58e-9388-4c9d-9a60-f548444239c4: Error { code: "RESOURCE_EXHAUSTED", message: "new disk quota leaves no foreground write headroom", location: None }}
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tenant::manager::quota::tests::review0732_replica_disk_shrink_flushes_source_checkpointed_wal_first
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 113 filtered out; finished in 2.51s
+
+error: test failed, to rerun pass `--lib`

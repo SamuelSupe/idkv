@@ -548,6 +548,12 @@ impl Engine {
             .count()
     }
     pub fn snapshot(self: &Arc<Self>) -> Result<Snapshot> {
+        if self.recovery_read_only {
+            return Err(Error::new(
+                "RECOVERY_REQUIRED",
+                "WAL recovery is incomplete: free disk space and reopen the tenant; reads may otherwise omit acknowledged data",
+            ));
+        }
         let view = self.view.read();
         self.pin(view.clone(), self.seq(), self.options.snapshot_seconds)
     }
@@ -721,6 +727,9 @@ fn cleanup_unreferenced(path: &Path, manifest: &Manifest, budget: &Budget) -> Re
         let entry = entry?;
         reject_symlink(&entry.path())?;
         let name = entry.file_name().to_string_lossy().to_string();
+        if name.ends_with(".corrupt") {
+            continue;
+        }
         if !wals.as_ref().map_or_else(
             || {
                 manifest

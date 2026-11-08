@@ -4,6 +4,7 @@ mod files;
 mod sst;
 mod wal;
 pub(crate) use cache::ReclaimBudget;
+pub(crate) use wal::recovery_metrics;
 
 pub(crate) use engine::LogRetention;
 pub(crate) use engine::ScanRange;

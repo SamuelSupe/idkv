@@ -224,8 +224,8 @@ impl Service {
             tenants.retain(|entry| entry.info.id != info.id);
             if !unavailable.iter().any(|entry| entry.info.id == info.id) {
                 unavailable.push(UnavailableTenant {
+                    error: self.inner.store.lifecycle_error(info.id),
                     info,
-                    error: "UNAVAILABLE: tenant lifecycle recovery is pending".into(),
                 });
             }
         }
@@ -308,6 +308,33 @@ impl Service {
         path: &str,
         body: Option<Value>,
     ) -> Result<Received<T>> {
+        let timeout = Duration::from_secs(if path == "/v1/replication/promote" {
+            180
+        } else {
+            120
+        });
+        self.request_bounded(path, body, timeout).await
+    }
+    pub(super) async fn request_bounded<T: DeserializeOwned>(
+        &self,
+        path: &str,
+        body: Option<Value>,
+        timeout: Duration,
+    ) -> Result<Received<T>> {
+        tokio::time::timeout(timeout, self.receive_response(path, body))
+            .await
+            .map_err(|_| {
+                Error::new(
+                    "REPLICATION_UNAVAILABLE",
+                    "peer request total deadline exceeded",
+                )
+            })?
+    }
+    async fn receive_response<T: DeserializeOwned>(
+        &self,
+        path: &str,
+        body: Option<Value>,
+    ) -> Result<Received<T>> {
         let url = format!(
             "{}{}",
             self.inner.config.peer_url.trim_end_matches('/'),
@@ -320,7 +347,13 @@ impl Service {
         let token_path = self.inner.config.token_file.clone();
         let token = tokio::task::spawn_blocking(move || read_token(&token_path))
             .await
-            .map_err(|_| Error::new("INTERNAL", "token reader failed"))??;
+            .map_err(|_| Error::new("INTERNAL", "token reader failed"))?
+            .map_err(|error| {
+                Error::new(
+                    "REPLICATION_UNAVAILABLE",
+                    format!("peer credential unavailable: {error}"),
+                )
+            })?;
         let header_timeout = if path == "/v1/replication/promote" {
             150
         } else {
@@ -388,6 +421,9 @@ impl Service {
                 | "LOG_GONE"
                 | "SNAPSHOT_EXPIRED"
                 | "REPLICATION_CONFLICT"
+                | "CONFLICT"
+                | "READ_ONLY"
+                | "RECOVERY_REQUIRED"
                 | "INCOMPATIBLE_VERSION"
                 | "RESOURCE_EXHAUSTED"
                 | "DEADLINE_EXCEEDED"
@@ -397,9 +433,19 @@ impl Service {
                 | "REPLICATION_UNAVAILABLE" => code,
                 _ => "REPLICATION_UNAVAILABLE",
             };
+            let detail: String = value["error"]["message"]
+                .as_str()
+                .unwrap_or("")
+                .chars()
+                .filter(|c| !c.is_control())
+                .take(512)
+                .collect();
             return Err(Error::new(
                 code,
-                format!("peer rejected replication request ({})", response.status()),
+                format!(
+                    "peer rejected replication request ({}): {detail}",
+                    response.status()
+                ),
             ));
         }
         let value = serde_json::from_slice(&bytes)?;
@@ -1018,7 +1064,7 @@ impl Service {
 fn read_token(path: &std::path::Path) -> Result<String> {
     use std::{
         io::Read,
-        os::unix::fs::{OpenOptionsExt, PermissionsExt},
+        os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt},
     };
     // Open without following a link and validate the opened inode, not a prior stat.
     let file = OpenOptions::new()
@@ -1026,9 +1072,13 @@ fn read_token(path: &std::path::Path) -> Result<String> {
         .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
         .open(path)?;
     let metadata = file.metadata()?;
-    if !metadata.is_file() || metadata.permissions().mode() & 0o077 != 0 {
+    if !metadata.is_file()
+        || metadata.permissions().mode() & 0o077 != 0
+        || metadata.nlink() != 1
+        || metadata.uid() != unsafe { libc::geteuid() }
+    {
         return Err(Error::invalid(
-            "replication token must be a private regular file (0600)",
+            "replication token must be a private regular file (0600), owned by this user with one link",
         ));
     }
     let mut token = String::new();

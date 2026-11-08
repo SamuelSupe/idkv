@@ -1024,7 +1024,11 @@ fn edge_review_backup_order_survives_clock_rollback_and_restart() {
     assert_eq!(wait(&service, &older).state, JobState::Completed);
     // A completed backup from before a wall-clock rollback must not outrank
     // a subsequently created checkpoint, including after local clock state loss.
-    let future = u64::MAX / 2;
+    let future = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64
+        + 86400 * 1000;
     let path = snapshot(dir.path(), id, older.backup);
     let mut manifest: BackupManifest =
         serde_json::from_slice(&fs::read(path.join("manifest.json")).unwrap()).unwrap();
@@ -1034,12 +1038,12 @@ fn edge_review_backup_order_survives_clock_rollback_and_restart() {
         .root()
         .join("control/backup-jobs")
         .join(format!("CLOCK-{id}"));
-    if clock.exists() {
-        fs::remove_file(clock).unwrap();
-    }
+    tenant_kv::storage::atomic_json(&clock, &1u64).unwrap();
+    drop(service);
+    let service = BackupService::open(store.clone(), cfg.clone()).unwrap();
     let newer = start(&service, id, BackupOperation::Create);
     let completed = wait(&service, &newer);
-    assert_eq!(completed.state, JobState::Completed);
+    assert_eq!(completed.state, JobState::Completed, "{completed:?}");
     assert_eq!(completed.result.unwrap()["checkpoint_ms"], future + 1);
     drop(service);
     let service = BackupService::open(store, cfg).unwrap();
@@ -1059,4 +1063,66 @@ fn edge_review_backup_order_survives_clock_rollback_and_restart() {
         },
     );
     assert_eq!(wait(&service, &verify).state, JobState::Completed);
+}
+
+#[test]
+fn review0732_bad_or_oversized_inventory_does_not_block_new_backups_and_can_be_deleted() {
+    let (dir, store, id, mut cfg) = setup();
+    let service = BackupService::open(store.clone(), cfg.clone()).unwrap();
+    let oversized = complete(&service, id, BackupOperation::Create);
+    let broken = complete(&service, id, BackupOperation::Create);
+    let future = complete(&service, id, BackupOperation::Create);
+    let missing = complete(&service, id, BackupOperation::Create);
+    drop(service);
+    let load = |backup| -> BackupManifest {
+        serde_json::from_slice(
+            &fs::read(snapshot(dir.path(), id, backup).join("manifest.json")).unwrap(),
+        )
+        .unwrap()
+    };
+    let mut large = load(oversized.backup);
+    large.files[0].size += 2 << 20;
+    large.total_bytes += 2 << 20;
+    publish_manifest_fixture(dir.path(), &large);
+    fs::write(
+        snapshot(dir.path(), id, broken.backup).join("manifest.json"),
+        b"damaged",
+    )
+    .unwrap();
+    let mut invalid_time = load(future.backup);
+    invalid_time.checkpoint_ms = u64::MAX;
+    publish_manifest_fixture(dir.path(), &invalid_time);
+    fs::remove_file(snapshot(dir.path(), id, missing.backup).join("manifest.json")).unwrap();
+    let clock = store
+        .root()
+        .join("control/backup-jobs")
+        .join(format!("CLOCK-{id}"));
+    tenant_kv::storage::atomic_json(&clock, &u64::MAX).unwrap();
+    cfg.max_backup_bytes = 1 << 20;
+    let service = BackupService::open(store, cfg).unwrap();
+    let newest = complete(&service, id, BackupOperation::Create);
+    let failed_prune = wait(
+        &service,
+        &start(&service, id, BackupOperation::Prune { keep_last: 1 }),
+    );
+    assert_eq!(failed_prune.state, JobState::Failed);
+    assert!(
+        snapshot(dir.path(), id, newest.backup)
+            .join("COMPLETED")
+            .exists()
+    );
+    for backup in [broken.backup, future.backup, missing.backup] {
+        complete(&service, id, BackupOperation::Delete { backup });
+    }
+    complete(&service, id, BackupOperation::Prune { keep_last: 1 });
+    let remaining = service.list(id).unwrap();
+    assert_eq!(remaining.len(), 1);
+    assert_eq!(remaining[0].backup, newest.backup);
+    complete(
+        &service,
+        id,
+        BackupOperation::Verify {
+            backup: newest.backup,
+        },
+    );
 }

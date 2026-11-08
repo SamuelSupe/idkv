@@ -77,10 +77,48 @@ fn main() {
         }
     }
     let tenant = store.tenant(args[2].parse().unwrap()).unwrap();
-    if args[3] == "readonly-recovery" {
+    if args[3] == "ack-and-abort" {
+        let first = tenant
+            .put(
+                "assets",
+                json!({"_key":"confirmed-first","ip":"three","owner":"confirmed"}),
+                None,
+            )
+            .unwrap();
+        let last = tenant
+            .put(
+                "assets",
+                json!({"_key":"confirmed-last","ip":"four","owner":"confirmed"}),
+                None,
+            )
+            .unwrap();
+        std::fs::write(
+            store.root().join("acknowledged.json"),
+            serde_json::to_vec(&json!({"first":first.rev,"last":last.rev})).unwrap(),
+        )
+        .unwrap();
+        std::process::abort();
+    } else if args[3] == "readonly-recovery" {
         assert!(!tenant.engine().writable());
-        assert!(tenant.get("assets", "old").unwrap().is_some());
-        assert!(tenant.get("assets", "new").unwrap().is_none());
+        assert_eq!(
+            tenant.get("assets", "old").unwrap_err().code,
+            "RECOVERY_REQUIRED"
+        );
+        assert_eq!(
+            tenant.get("assets", "new").unwrap_err().code,
+            "RECOVERY_REQUIRED"
+        );
+    } else if args[3] == "local-backup-uncertain" {
+        let error = store.backup(tenant.id()).unwrap_err();
+        assert_eq!(error.code, "BACKUP_COMMIT_UNKNOWN");
+        let parent = store.root().join("backups").join(tenant.id().to_string());
+        let entries: Vec<_> = std::fs::read_dir(&parent).unwrap().collect();
+        assert_eq!(entries.len(), 1);
+        let entry = entries.into_iter().next().unwrap().unwrap();
+        let id = entry.file_name().to_string_lossy().parse().unwrap();
+        assert!(error.message.contains(&format!("{id}")));
+        store.delete_backup(tenant.id(), id).unwrap();
+        assert_eq!(std::fs::read_dir(parent).unwrap().count(), 0);
     } else if args[3] == "local-backup" {
         store.backup(tenant.id()).unwrap();
     } else if args[3] == "retention" {

@@ -62,6 +62,9 @@ impl Inner {
         }
     }
     pub(super) fn manifest(&self, tenant: Uuid, backup: Uuid) -> Result<BackupManifest> {
+        self.read_manifest(tenant, backup, self.config.max_backup_bytes)
+    }
+    fn read_manifest(&self, tenant: Uuid, backup: Uuid, max_bytes: u64) -> Result<BackupManifest> {
         let prefix = snapshot_prefix(tenant, backup);
         let marker: Completed =
             serde_json::from_slice(&self.remote_bytes(&format!("{prefix}COMPLETED"), 1024)?)
@@ -80,13 +83,14 @@ impl Inner {
         }
         let manifest: BackupManifest = serde_json::from_slice(&bytes)
             .map_err(|_| Error::corrupt("backup manifest encoding"))?;
-        manifest.validate(tenant, backup, self.config.max_backup_bytes)?;
+        manifest.validate(tenant, backup, max_bytes)?;
         Ok(manifest)
     }
     fn scan_snapshots(
         &self,
         tenant: Uuid,
         scan_limit: Option<usize>,
+        tolerate_invalid: bool,
         check: &impl Fn() -> Result<()>,
         mut visit: impl FnMut(BackupSummary) -> Result<()>,
     ) -> Result<()> {
@@ -105,7 +109,7 @@ impl Inner {
             let Ok(id) = Uuid::parse_str(name) else {
                 continue;
             };
-            match self.manifest(tenant, id) {
+            match self.read_manifest(tenant, id, u64::MAX) {
                 Ok(manifest) => visit(manifest.summary())?,
                 Err(error) if error.code == "NOT_FOUND" => {
                     if self
@@ -113,8 +117,25 @@ impl Inner {
                         .exists(&format!("{}COMPLETED", snapshot_prefix(tenant, id)))
                         .map_err(remote_error)?
                     {
-                        return Err(Error::corrupt("completed backup has no manifest"));
+                        let error = Error::corrupt("completed backup has no manifest");
+                        if !tolerate_invalid {
+                            return Err(error);
+                        }
+                        eprintln!(
+                            "backup {tenant}/{id} excluded from clock recovery: {error}; inspect or explicitly delete this backup"
+                        );
                     }
+                }
+                Err(error)
+                    if tolerate_invalid
+                        && matches!(
+                            error.code.as_str(),
+                            "CORRUPTION" | "RESOURCE_EXHAUSTED" | "INVALID_ARGUMENT"
+                        ) =>
+                {
+                    eprintln!(
+                        "backup {tenant}/{id} excluded from clock recovery: {error}; inspect or explicitly delete this backup"
+                    );
                 }
                 Err(error) => return Err(error),
             }
@@ -123,7 +144,7 @@ impl Inner {
     }
     pub(super) fn summaries(&self, tenant: Uuid) -> Result<Vec<BackupSummary>> {
         let mut result = Vec::new();
-        self.scan_snapshots(tenant, Some(200_000), &|| Ok(()), |summary| {
+        self.scan_snapshots(tenant, Some(200_000), false, &|| Ok(()), |summary| {
             result.push(summary);
             if result.len() > 4096 {
                 return Err(Error::limit("remote backup listing limit; run prune"));
@@ -145,22 +166,45 @@ impl Inner {
     ) -> Result<u64> {
         check()?;
         let path = self.jobs_path.join(format!("CLOCK-{tenant}"));
-        let previous: u64 = if path.try_exists()? {
-            read_json(&path)?
+        let exists = path.try_exists()?;
+        let mut previous: u64 = if exists {
+            match read_json(&path) {
+                Ok(clock) => clock,
+                Err(error) if error.code == "CORRUPTION" => {
+                    eprintln!(
+                        "backup {tenant}: {error}; rebuilding local clock from remote inventory"
+                    );
+                    self.clock_checked.lock().remove(&tenant);
+                    0
+                }
+                Err(error) => return Err(error),
+            }
         } else {
-            let mut latest = 0;
-            self.scan_snapshots(tenant, None, &check, |summary| {
-                latest = latest.max(summary.checkpoint_ms);
+            0
+        };
+        let ceiling = now_ms().saturating_add(366 * 86400 * 1000);
+        if previous > ceiling {
+            eprintln!(
+                "backup {tenant}: invalid future local clock {previous}; rebuilding from remote inventory"
+            );
+            previous = 0;
+            self.clock_checked.lock().remove(&tenant);
+        }
+        // One Store owns a tenant's remote namespace. Reconcile once per process,
+        // even with a local marker: that marker may come from an old disk image.
+        if !exists || !self.clock_checked.lock().contains(&tenant) {
+            self.scan_snapshots(tenant, None, true, &check, |summary| {
+                previous = previous.max(summary.checkpoint_ms);
                 Ok(())
             })?;
-            latest
-        };
+        }
         let next = now_ms().max(
             previous
                 .checked_add(1)
                 .ok_or_else(|| Error::limit("backup clock exhausted"))?,
         );
         atomic_json(&path, &next)?;
+        self.clock_checked.lock().insert(tenant);
         Ok(next)
     }
     pub(super) fn publish_backup(&self, manifest: &BackupManifest) -> Result<()> {
@@ -184,6 +228,20 @@ impl Inner {
         crate::storage::failpoint("backup_completed");
         Ok(())
     }
+    pub(super) fn delete_backup(&self, tenant: Uuid, backup: Uuid) -> Result<serde_json::Value> {
+        let prefix = snapshot_prefix(tenant, backup);
+        // Explicit operator choice, never inferred from a failed decode. Remove
+        // publication first; later prune can reclaim unreferenced content safely.
+        self.op
+            .delete(&format!("{prefix}COMPLETED"))
+            .map_err(remote_error)?;
+        self.op
+            .delete(&format!("{prefix}manifest.json"))
+            .map_err(remote_error)?;
+        self.op.delete(&prefix).map_err(remote_error)?;
+        Ok(serde_json::json!({"deleted_backup":backup}))
+    }
+
     pub(super) fn prune(
         &self,
         tenant: Uuid,
@@ -194,7 +252,7 @@ impl Inner {
         // Validate the inventory before deleting. Selection retains only the
         // newest `keep` summaries, so list's response cap cannot block pruning.
         let mut newest = BTreeMap::new();
-        self.scan_snapshots(tenant, None, &check, |summary| {
+        self.scan_snapshots(tenant, None, false, &check, |summary| {
             newest.insert((summary.checkpoint_ms, summary.backup), summary);
             if newest.len() > keep {
                 newest.pop_first();
@@ -204,7 +262,7 @@ impl Inner {
         let retained: Vec<_> = newest.into_values().collect();
         let ids: HashSet<_> = retained.iter().map(|m| m.backup).collect();
         let mut removed = 0;
-        self.scan_snapshots(tenant, None, &check, |summary| {
+        self.scan_snapshots(tenant, None, false, &check, |summary| {
             if !ids.contains(&summary.backup) {
                 let prefix = snapshot_prefix(tenant, summary.backup);
                 self.op
@@ -218,6 +276,29 @@ impl Inner {
             }
             Ok(())
         })?;
+        // Cache compact reference digests up to 8 MiB. Larger inventories retain
+        // the bounded batch fallback instead of making GC depend on total size.
+        let mut references = Vec::<[u8; 32]>::new();
+        let mut complete_references = true;
+        for summary in &retained {
+            check()?;
+            let manifest = self.read_manifest(tenant, summary.backup, u64::MAX)?;
+            if references.len().saturating_add(manifest.files.len()) > (8 << 20) / 32 {
+                complete_references = false;
+                break;
+            }
+            for file in &manifest.files {
+                references.push(
+                    Sha256::digest(
+                        object_key(tenant, manifest.tenant.generation, &file.sha256).as_bytes(),
+                    )
+                    .into(),
+                );
+            }
+        }
+        references.sort_unstable();
+        references.dedup();
+        let references = complete_references.then_some(references);
         let cutoff = now_ms().saturating_sub(self.config.gc_grace_seconds.saturating_mul(1000));
         let prefix = format!("tenants/{tenant}/objects/");
         let mut deleted = 0;
@@ -247,10 +328,22 @@ impl Inner {
                 candidates.insert(entry.path().to_owned());
             }
             if candidates.len() == 4096 {
-                deleted += self.prune_object_batch(tenant, &retained, &mut candidates, &check)?;
+                deleted += self.prune_object_batch(
+                    tenant,
+                    &retained,
+                    references.as_deref(),
+                    &mut candidates,
+                    &check,
+                )?;
             }
         }
-        deleted += self.prune_object_batch(tenant, &retained, &mut candidates, &check)?;
+        deleted += self.prune_object_batch(
+            tenant,
+            &retained,
+            references.as_deref(),
+            &mut candidates,
+            &check,
+        )?;
         Ok(
             serde_json::json!({"retained_backups":retained.len(),"deleted_backups":removed,"deleted_objects":deleted}),
         )
@@ -260,23 +353,31 @@ impl Inner {
         &self,
         tenant: Uuid,
         retained: &[BackupSummary],
+        references: Option<&[[u8; 32]]>,
         candidates: &mut HashSet<String>,
         check: &impl Fn() -> Result<()>,
     ) -> Result<usize> {
         // Bound memory by candidate objects, not the total number of references.
         // Large inventories trade repeated manifest reads for bounded workspace.
-        for summary in retained {
-            if candidates.is_empty() {
-                return Ok(0);
-            }
-            check()?;
-            let manifest = self.manifest(tenant, summary.backup)?;
-            for file in &manifest.files {
-                candidates.remove(&object_key(
-                    tenant,
-                    manifest.tenant.generation,
-                    &file.sha256,
-                ));
+        if let Some(references) = references {
+            candidates.retain(|path| {
+                let digest: [u8; 32] = Sha256::digest(path.as_bytes()).into();
+                references.binary_search(&digest).is_err()
+            });
+        } else {
+            for summary in retained {
+                if candidates.is_empty() {
+                    return Ok(0);
+                }
+                check()?;
+                let manifest = self.read_manifest(tenant, summary.backup, u64::MAX)?;
+                for file in &manifest.files {
+                    candidates.remove(&object_key(
+                        tenant,
+                        manifest.tenant.generation,
+                        &file.sha256,
+                    ));
+                }
             }
         }
         let deleted = candidates.len();

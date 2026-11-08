@@ -217,7 +217,13 @@ pub(super) struct Staging<'a> {
     job: Uuid,
 }
 impl<'a> Staging<'a> {
-    pub fn reserve(inner: &'a Inner, bytes: u64, own: Uuid, tenant: Uuid) -> Result<Self> {
+    pub fn reserve(
+        inner: &'a Inner,
+        bytes: u64,
+        own: Uuid,
+        tenant: Uuid,
+        restore: bool,
+    ) -> Result<Self> {
         let mut reserved = inner.staging.lock();
         if reserved.contains_key(&own) {
             return Err(Error::new("BUSY", "backup staging already reserved"));
@@ -249,7 +255,16 @@ impl<'a> Staging<'a> {
                 tenant_retained += uncovered;
             }
         }
-        let tenant_limit = (inner.config.max_staging_bytes / 2).max(inner.config.max_backup_bytes);
+        let operation_limit = if restore {
+            inner
+                .config
+                .max_backup_bytes
+                .saturating_mul(2)
+                .saturating_add(1 << 20)
+        } else {
+            inner.config.max_backup_bytes
+        };
+        let tenant_limit = (inner.config.max_staging_bytes / 2).max(operation_limit);
         if tenant_retained
             .saturating_add(
                 reserved
@@ -315,6 +330,45 @@ pub(super) fn tree_size(path: &Path) -> Result<u64> {
 mod tests {
     use super::*;
     #[test]
+    fn review0732_large_restore_reserves_two_copies_without_consuming_create_allowance() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path().join("data"), crate::Options::default()).unwrap();
+        let service = BackupService::open(
+            store,
+            BackupConfig {
+                service: "fs".into(),
+                options: HashMap::from([(
+                    "root".into(),
+                    dir.path().join("remote").to_string_lossy().into(),
+                )]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let inner = &service.owner.inner;
+        let tenant = Uuid::new_v4();
+        let reservation = Staging::reserve(
+            inner,
+            (60u64 << 30) * 2 + (1 << 20),
+            Uuid::new_v4(),
+            tenant,
+            true,
+        )
+        .expect("a valid 60 GiB backup must fit default restore staging");
+        assert!(Staging::reserve(inner, 100 << 30, Uuid::new_v4(), Uuid::new_v4(), false).is_err());
+        drop(reservation);
+        let maximum = Staging::reserve(
+            inner,
+            (100u64 << 30) * 2 + (1 << 20),
+            Uuid::new_v4(),
+            tenant,
+            true,
+        )
+        .unwrap();
+        drop(maximum);
+        assert!(Staging::reserve(inner, 100 << 30, Uuid::new_v4(), Uuid::new_v4(), false).is_ok());
+    }
+    #[test]
     fn staging_counts_uncovered_files_and_failed_workspaces() {
         let dir = tempfile::tempdir().unwrap();
         let store = Store::open(dir.path().join("data"), crate::Options::default()).unwrap();
@@ -337,29 +391,29 @@ mod tests {
         let first = Uuid::new_v4();
         let second = Uuid::new_v4();
         let third = Uuid::new_v4();
-        let held = Staging::reserve(inner, 1 << 20, first, first).unwrap();
+        let held = Staging::reserve(inner, 1 << 20, first, first, false).unwrap();
         let work = inner.work_path.join(first.to_string());
         fs::create_dir(&work).unwrap();
         fs::write(work.join("extra"), vec![0; 1536 << 10]).unwrap();
         assert_eq!(
-            Staging::reserve(inner, 1 << 20, second, second)
+            Staging::reserve(inner, 1 << 20, second, second, false)
                 .err()
                 .unwrap()
                 .code,
             "RESOURCE_EXHAUSTED"
         );
         fs::write(work.join("extra"), vec![0; 512 << 10]).unwrap();
-        let other = Staging::reserve(inner, 1 << 20, second, second).unwrap();
+        let other = Staging::reserve(inner, 1 << 20, second, second, false).unwrap();
         drop(held);
         assert_eq!(
-            Staging::reserve(inner, 1 << 20, third, third)
+            Staging::reserve(inner, 1 << 20, third, third, false)
                 .err()
                 .unwrap()
                 .code,
             "RESOURCE_EXHAUSTED"
         );
         fs::remove_dir_all(work).unwrap();
-        let last = Staging::reserve(inner, 1 << 20, third, third).unwrap();
+        let last = Staging::reserve(inner, 1 << 20, third, third, false).unwrap();
         drop(last);
         drop(other);
     }

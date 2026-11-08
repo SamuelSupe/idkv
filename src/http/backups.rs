@@ -51,6 +51,10 @@ pub(super) fn dispatch(
         BackupOperation::Verify {
             backup: id("backup")?,
         }
+    } else if route.ends_with("/delete") {
+        BackupOperation::Delete {
+            backup: id("backup")?,
+        }
     } else if route.ends_with("/restore") {
         BackupOperation::Restore {
             backup: id("backup")?,
@@ -76,7 +80,7 @@ pub(super) fn schemas() -> Value {
         "BackupPrune":{"type":"object","additionalProperties":false,"required":["keep_last"],"properties":{"keep_last":{"type":"integer","minimum":1,"maximum":4096}}},
         "BackupJob":{"type":"object","required":["id","tenant","backup","operation","state","created_ms","updated_ms","uploaded_bytes","reused_bytes","processed_files"],"properties":{
             "id":{"type":"string","format":"uuid"},"tenant":{"type":"string","format":"uuid"},"backup":{"type":"string","format":"uuid"},
-            "operation":{"type":"object","required":["operation"],"properties":{"operation":{"enum":["create","verify","restore","import","prune"]},"backup":{"type":"string","format":"uuid"},"keep_last":{"type":"integer","minimum":1,"maximum":4096}}},
+            "operation":{"type":"object","required":["operation"],"properties":{"operation":{"enum":["create","verify","restore","import","prune","delete"]},"backup":{"type":"string","format":"uuid"},"keep_last":{"type":"integer","minimum":1,"maximum":4096}}},
             "state":{"enum":["queued","checkpointing","uploading","verifying","restoring","pruning","completed","failed","interrupted"]},
             "created_ms":{"type":"integer"},"updated_ms":{"type":"integer"},"uploaded_bytes":{"type":"integer"},"reused_bytes":{"type":"integer"},"processed_files":{"type":"integer"},
             "checkpoint_seq":{"type":["integer","null"]},"result":{"type":["object","null"]},"error":{"type":["string","null"]}},

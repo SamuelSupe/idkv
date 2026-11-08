@@ -17,6 +17,67 @@ use std::{
 };
 use uuid::Uuid;
 
+static CORRUPT_RECOVERIES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static TORN_TAIL_RECOVERIES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+pub(crate) fn recovery_metrics() -> [(&'static str, u64); 2] {
+    use std::sync::atomic::Ordering;
+    [
+        (
+            "wal_corrupt_recoveries_total",
+            CORRUPT_RECOVERIES.load(Ordering::Relaxed),
+        ),
+        (
+            "wal_torn_tail_recoveries_total",
+            TORN_TAIL_RECOVERIES.load(Ordering::Relaxed),
+        ),
+    ]
+}
+
+fn preserve_wal(dir: &Path, info: &WalInfo) -> Result<std::path::PathBuf> {
+    use std::os::unix::fs::MetadataExt;
+    // A separate name preserves the old inode without a WAL-sized copy on a
+    // nearly full disk. Repeated failed opens must reuse that evidence name.
+    let source = dir.join(format!("{}.wal", info.id));
+    let metadata = fs::metadata(&source)?;
+    let evidence = dir.join(format!(
+        "{}.{}-{}.corrupt",
+        info.id,
+        metadata.dev(),
+        metadata.ino()
+    ));
+    match fs::hard_link(&source, &evidence) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            reject_symlink(&evidence)?;
+            let previous = fs::metadata(&evidence)?;
+            if previous.dev() != metadata.dev() || previous.ino() != metadata.ino() {
+                return Err(Error::corrupt(
+                    "WAL evidence name collision; original retained",
+                ));
+            }
+        }
+        Err(error) => return Err(error.into()),
+    }
+    sync_dir(dir)?;
+    Ok(evidence)
+}
+
+fn corrupt_wal(dir: &Path, info: &WalInfo, offset: u64, reason: &str) -> Error {
+    CORRUPT_RECOVERIES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let evidence = match preserve_wal(dir, info) {
+        Ok(path) => format!("evidence {}", path.display()),
+        Err(error) => format!("evidence link failed: {error}; original WAL unchanged"),
+    };
+    eprintln!(
+        "ERROR WAL recovery refused: {} offset {offset}: {reason}; {evidence}",
+        info.id
+    );
+    Error::corrupt(format!(
+        "{reason} at byte {offset}; original WAL retained; restore or rebuild this tenant"
+    ))
+}
+
 pub(super) const HEADER: usize = 64;
 pub const MAX_BATCH: usize = 64 << 20;
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -86,8 +147,9 @@ impl Wal {
         let fully_synced = synced_len == Some(length);
         let mut offset = HEADER as u64;
         while offset < length {
-            // A torn append can have its full length but invalid page contents.
-            // Never discard any part of a known synced prefix or a sealed WAL.
+            // The clean-close watermark does not identify all acknowledged
+            // commits. Only incomplete frames are eligible for tail recovery;
+            // checksum failures can be corruption of acknowledged data.
             let unsealed_tail = tail && offset >= synced_len.unwrap_or(HEADER as u64);
             if length - offset < 24 {
                 if unsealed_tail {
@@ -101,10 +163,7 @@ impl Wal {
                 || crc32fast::hash(&frame[..16])
                     != u32::from_le_bytes(frame[16..20].try_into().unwrap())
             {
-                if unsealed_tail {
-                    break;
-                }
-                return Err(Error::corrupt("WAL batch header checksum"));
+                return Err(corrupt_wal(dir, info, offset, "WAL batch header checksum"));
             }
             let len = u32::from_le_bytes(frame[4..8].try_into().unwrap()) as usize;
             let seq = u64::from_le_bytes(frame[8..16].try_into().unwrap());
@@ -121,10 +180,7 @@ impl Wal {
             let mut payload = vec![0; len];
             file.read_exact(&mut payload)?;
             if crc32fast::hash(&payload) != u32::from_le_bytes(frame[20..24].try_into().unwrap()) {
-                if unsealed_tail {
-                    break;
-                }
-                return Err(Error::corrupt("WAL batch checksum"));
+                return Err(corrupt_wal(dir, info, offset, "WAL batch checksum"));
             }
             let count = Reader::new(&payload).u32()? as usize;
             if count > payload.len() / 12 {
@@ -137,6 +193,15 @@ impl Wal {
                 apply(seq, records)?;
             }
             offset += 24 + len as u64;
+        }
+        if offset < length {
+            let evidence = preserve_wal(dir, info)?;
+            eprintln!(
+                "ERROR incomplete WAL tail: {} offset {offset}, discarded bytes {}; preserved {}",
+                info.id,
+                length - offset,
+                evidence.display()
+            );
         }
         let temp = dir.join(format!("{}.recover", info.id));
         if temp.exists() {
@@ -193,6 +258,9 @@ impl Wal {
         }
         let recovery_read_only = match rewritten {
             Ok(output) => {
+                if offset < length {
+                    TORN_TAIL_RECOVERIES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                }
                 file = output;
                 false
             }
@@ -462,7 +530,7 @@ mod tests {
     use super::*;
     use crate::resources::{Budget, Counter};
     #[test]
-    fn recovery_discards_bad_frames_only_in_the_unsealed_tail() {
+    fn review0732_recovery_never_discards_checksum_corruption() {
         let info = crate::TenantInfo {
             id: Uuid::new_v4(),
             generation: Uuid::new_v4(),
@@ -544,7 +612,9 @@ mod tests {
                             Ok(())
                         },
                     );
-                    let recoverable = tail && synced_len.is_none_or(|length| length <= prefix_len);
+                    let recoverable = damage.starts_with("short")
+                        && tail
+                        && synced_len.is_none_or(|length| length <= prefix_len);
                     if recoverable {
                         let recovered =
                             result.unwrap_or_else(|e| panic!("{damage}, {synced_len:?}: {e}"));

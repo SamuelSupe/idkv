@@ -65,17 +65,9 @@ impl Store {
             return Err(Error::new("CONFLICT", "tenant changed during quota update"));
         }
         self.close_slot(&mut guard)?;
-        let used =
-            crate::storage::directory_size(&self.root().join("tenants").join(id.to_string()))?;
-        // Preserve ordinary write space for deletes and their WAL records.
-        if info.disk_bytes < current.info.disk_bytes
-            && used.saturating_add(4096) > info.disk_bytes - info.disk_bytes / 5
-        {
-            return Err(Error::limit(
-                "new disk quota leaves no foreground write headroom",
-            ));
-        }
-        if info.memory_bytes >= guard.memory.limit() {
+        let shrinking_memory = info.memory_bytes < guard.memory.limit();
+        let shrinking_disk = info.disk_bytes < current.info.disk_bytes;
+        if !shrinking_memory && !shrinking_disk {
             return self.publish_quota(&mut guard, info);
         }
         let memory = guard.memory.clone();
@@ -105,37 +97,54 @@ impl Store {
             serving.flush()?;
             drop(serving);
         }
-        let available = info
-            .memory_bytes
-            .checked_sub(memory.used())
-            .ok_or_else(|| Error::limit("new quota is below current reservations"))?;
-        let check = Engine::open(
-            path,
-            info.clone(),
-            inner.options.clone(),
-            Budget {
-                global: inner.memory.clone(),
-                tenant: Counter::new(available),
-            },
-            inner.io.clone(),
-        )?;
-        let position = check.replication_position()?;
-        check.verify()?;
-        // Storage decoding alone is cheaper than returning a JSON document.
-        // A successful shrink must also leave Get's working set available.
+        let used = crate::storage::directory_size(&path)?;
+        // Keep enough foreground space for a bounded delete batch, in addition
+        // to the maintenance reserve. Larger requests can still be split/retried.
+        let delete_headroom = (inner.options.max_batch_bytes as u64).saturating_add(4096);
+        if shrinking_disk
+            && used.saturating_add(delete_headroom) > info.disk_bytes - info.disk_bytes / 5
         {
-            let snapshot = check.snapshot()?;
-            let mut stats = crate::ReadStats::default();
-            let mut documents = snapshot.scan(vec![b'D'], Some(vec![b'E']), None, &mut stats)?;
-            while let Some(record) = documents.next(&mut stats)? {
-                if let Some(value) = record.value {
-                    let _read = check
-                        .budget
-                        .reserve(crate::tenant::documents::point_read_memory(value.len()))?;
+            return Err(Error::limit(
+                "new disk quota leaves insufficient foreground delete headroom",
+            ));
+        }
+        let position = if shrinking_memory {
+            let available = info
+                .memory_bytes
+                .checked_sub(memory.used())
+                .ok_or_else(|| Error::limit("new quota is below current reservations"))?;
+            let check = Engine::open(
+                path,
+                info.clone(),
+                inner.options.clone(),
+                Budget {
+                    global: inner.memory.clone(),
+                    tenant: Counter::new(available),
+                },
+                inner.io.clone(),
+            )?;
+            let position = check.replication_position()?;
+            check.verify()?;
+            // Storage decoding alone is cheaper than returning a JSON document.
+            // A successful shrink must also leave Get's working set available.
+            {
+                let snapshot = check.snapshot()?;
+                let mut stats = crate::ReadStats::default();
+                let mut documents =
+                    snapshot.scan(vec![b'D'], Some(vec![b'E']), None, &mut stats)?;
+                while let Some(record) = documents.next(&mut stats)? {
+                    if let Some(value) = record.value {
+                        let _read = check
+                            .budget
+                            .reserve(crate::tenant::documents::point_read_memory(value.len()))?;
+                    }
                 }
             }
-        }
-        drop(check);
+            drop(check);
+            Some(position)
+        } else {
+            None
+        };
         // Reacquire in node-before-slot order. A fence must not wait behind this
         // full storage scan while blocking all other writers.
         let _permission = match source {
@@ -158,7 +167,7 @@ impl Store {
         }
         let result = self.publish_quota(&mut guard, info);
         if result.is_ok() {
-            guard.last_seq = Some(position);
+            guard.last_seq = position;
             guard.installing = None;
         }
         drop(guard);
@@ -199,6 +208,104 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn review0732_replica_disk_shrink_flushes_source_checkpointed_wal_first() {
+        use crate::replication::{Config, LogRequest, PROTOCOL, Role, TenantPosition};
+        let dirs = [tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap()];
+        let options = Options {
+            memtable_bytes: 64 << 20,
+            ..Options::default()
+        };
+        let primary = Store::open(dirs[0].path(), options.clone()).unwrap();
+        let replica = Store::open(dirs[1].path(), options).unwrap();
+        let cluster = Uuid::new_v4();
+        for (store, role) in [(&primary, Role::Primary), (&replica, Role::Replica)] {
+            store.owner.stop.store(true, Ordering::Release);
+            for worker in store.owner.workers.lock().drain(..) {
+                worker.join().unwrap();
+            }
+            store
+                .configure_replication(&Config {
+                    cluster,
+                    role,
+                    peer_url: "http://127.0.0.1:1".into(),
+                    token_file: "unused".into(),
+                    poll_ms: 10,
+                    log_retention_bytes: 1 << 20,
+                })
+                .unwrap();
+        }
+        let info = primary.create_tenant("disk-shrink").unwrap();
+        let source = replica.bind_source(&primary.replication_state()).unwrap();
+        let tenant = primary.tenant(info.id).unwrap();
+        tenant.create_collection("docs").unwrap();
+        let path = dirs[0].path().join("checkpoint");
+        tenant.engine().checkpoint(&path).unwrap();
+        replica
+            .install_replica(&source, &path, info.clone())
+            .unwrap();
+        let mut request = LogRequest {
+            protocol: PROTOCOL,
+            cluster,
+            epoch: source.epoch,
+            tenant: info.id,
+            generation: info.generation,
+            after: 1,
+            cursor: None,
+        };
+        for n in 0..200 {
+            tenant
+                .put(
+                    "docs",
+                    serde_json::json!({"_key":"ack", "version":n, "payload":"x".repeat(128 << 10)}),
+                    None,
+                )
+                .unwrap();
+        }
+        let handle = replica.tenant(info.id).unwrap();
+        loop {
+            let page = primary.export_logs(&request).unwrap();
+            handle
+                .engine()
+                .apply_replica_page(&source, request.after, &page, 0)
+                .unwrap();
+            request.after = page.through;
+            request.cursor = page.cursor;
+            if page.through == page.source_position {
+                break;
+            }
+        }
+        let expected = tenant.get("docs", "ack").unwrap();
+        tenant.engine().flush().unwrap();
+        drop(handle);
+        drop(tenant);
+        assert!(
+            crate::storage::directory_size(
+                &dirs[1].path().join("tenants").join(info.id.to_string())
+            )
+            .unwrap()
+                > 24 << 20
+        );
+        let changed = primary
+            .set_quota(info.id, info.memory_bytes, 24 << 20)
+            .unwrap();
+        let blocked = replica
+            .replica_catalog(
+                &source,
+                &[TenantPosition {
+                    info: changed,
+                    seq: request.after,
+                }],
+            )
+            .unwrap();
+        assert!(blocked.is_empty(), "{blocked:?}");
+        assert_eq!(replica.tenants()[0].disk_bytes, 24 << 20);
+        assert_eq!(
+            replica.tenant(info.id).unwrap().get("docs", "ack").unwrap(),
+            expected
+        );
+    }
+
     #[test]
     fn a_failed_shrink_keeps_existing_data_readable_across_restart() {
         for (payload_kib, flushed) in [(700, false), (700, true), (400, false)] {

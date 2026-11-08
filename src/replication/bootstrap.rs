@@ -165,7 +165,8 @@ impl Service {
                 check_cancelled()?;
                 // The verified checkpoint is durable locally. Hand off the source
                 // slot now; only its WAL pin is needed while readers drain.
-                let mut probed = std::time::Instant::now();
+                let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(90);
+                let mut next_probe = std::time::Instant::now();
                 let probe = || {
                     self.request::<super::LogPage>(
                         "/v1/replication/log",
@@ -174,31 +175,49 @@ impl Service {
                     "after":position})),
                     )
                 };
-                probe().await?;
-                let mut installation = Some(store.begin_replica_install(source, tenant)?);
+                let mut installation = None;
                 let mut retry_at = std::time::Instant::now();
-                let mut drain_attempts = 1;
+                let mut drain_timeouts = 0;
                 loop {
                     check_cancelled()?;
-                    if probed.elapsed() >= std::time::Duration::from_secs(30) {
-                        probe().await?;
-                        probed = std::time::Instant::now();
+                    if tokio::time::Instant::now() >= deadline {
+                        return Err(Error::new(
+                            "DEADLINE_EXCEEDED",
+                            "retained checkpoint installation deadline",
+                        ));
                     }
-                    if installation
-                        .as_mut()
-                        .is_some_and(|gate| gate.expire_readers().is_err())
-                    {
-                        // Reopen reads during backoff, retaining the durable copy and
-                        // renewing its WAL lease independently from the drain gate.
-                        installation.take();
-                        if drain_attempts >= 2 {
-                            return Err(Error::new(
-                                "DEADLINE_EXCEEDED",
-                                "tenant reader drain deadline after retained-checkpoint retry",
-                            ));
+                    if std::time::Instant::now() >= next_probe && installation.is_none() {
+                        let result =
+                            tokio::time::timeout_at(deadline, probe())
+                                .await
+                                .map_err(|_| {
+                                    Error::new(
+                                        "DEADLINE_EXCEEDED",
+                                        "retained checkpoint probe deadline",
+                                    )
+                                })?;
+                        match result {
+                            Ok(_) => {
+                                next_probe =
+                                    std::time::Instant::now() + std::time::Duration::from_secs(30)
+                            }
+                            Err(error)
+                                if matches!(
+                                    error.code.as_str(),
+                                    "REPLICATION_UNAVAILABLE"
+                                        | "BUSY"
+                                        | "DEADLINE_EXCEEDED"
+                                        | "RESOURCE_EXHAUSTED"
+                                ) =>
+                            {
+                                installation.take();
+                                next_probe =
+                                    std::time::Instant::now() + std::time::Duration::from_secs(1);
+                                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                                continue;
+                            }
+                            Err(error) => return Err(error),
                         }
-                        self.reader_drain_timed_out(tenant);
-                        retry_at = std::time::Instant::now() + std::time::Duration::from_secs(30);
                     }
                     if installation.is_none() {
                         if std::time::Instant::now() < retry_at {
@@ -208,7 +227,6 @@ impl Service {
                         match store.begin_replica_install(source, tenant) {
                             Ok(gate) => {
                                 installation = Some(gate);
-                                drain_attempts += 1;
                             }
                             Err(error) if error.code == "BUSY" => {
                                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -216,6 +234,24 @@ impl Service {
                             }
                             Err(error) => return Err(error),
                         }
+                    }
+                    if installation
+                        .as_mut()
+                        .is_some_and(|gate| gate.expire_readers().is_err())
+                    {
+                        // Reopen reads during backoff, retaining the durable copy and
+                        // renewing its WAL lease independently from the drain gate.
+                        installation.take();
+                        drain_timeouts += 1;
+                        if drain_timeouts >= 2 {
+                            return Err(Error::new(
+                                "DEADLINE_EXCEEDED",
+                                "tenant reader drain deadline after retained-checkpoint retry",
+                            ));
+                        }
+                        self.reader_drain_timed_out(tenant);
+                        retry_at = std::time::Instant::now() + std::time::Duration::from_secs(30);
+                        continue;
                     }
                     let installed = store
                         .check_replica_install(source, tenant)
@@ -227,10 +263,6 @@ impl Service {
                         }
                         Err(error) if error.code == "BUSY" => {
                             self.waiting_for_readers(tenant, true);
-                            if probed.elapsed() >= std::time::Duration::from_secs(30) {
-                                probe().await?;
-                                probed = std::time::Instant::now();
-                            }
                             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                         }
                         Err(error) => return Err(error),

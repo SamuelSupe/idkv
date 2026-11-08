@@ -174,6 +174,7 @@ impl Store {
             check.verify()?;
             drop(check);
             fs::rename(&destination, parent.join(backup.to_string()))?;
+            crate::storage::errorpoint("local_backup_renamed")?;
             sync_dir(&parent)?;
             sync_dir(&self.root().join("backups"))?;
             Ok(())
@@ -181,7 +182,11 @@ impl Store {
         if result.is_err() {
             let _ = fs::remove_dir_all(&destination);
         }
-        result?;
+        result.map_err(|error| {
+            if parent.join(backup.to_string()).exists() {
+                Error::new("BACKUP_COMMIT_UNKNOWN", format!("local backup {backup} was renamed but durability is uncertain: {error}; inspect or delete this backup ID before retrying"))
+            } else { error }
+        })?;
         Ok(backup)
     }
     /// Delete a local backup. The online database and remote backups are unaffected.
@@ -378,7 +383,8 @@ pub(super) fn recover_lifecycle(
     root: &Path,
     registry: &mut Registry,
     only: Option<Uuid>,
-) -> Result<()> {
+) -> Result<HashMap<Uuid, String>> {
+    let mut failures = HashMap::new();
     for (id, registration) in &mut registry.tenants {
         if only.is_some_and(|only| only != *id) {
             continue;
@@ -441,9 +447,10 @@ pub(super) fn recover_lifecycle(
                 return Err(error);
             }
             eprintln!("tenant {id} lifecycle recovery deferred: {error}");
+            failures.insert(*id, error.to_string());
         }
     }
-    Ok(())
+    Ok(failures)
 }
 fn copy_tree(
     source: &Path,
@@ -651,5 +658,17 @@ mod edge_review_tests {
             store.owner.inner.registry.read().tenants[&bad.id].lifecycle,
             Lifecycle::Restoring { .. }
         ));
+        assert!(store.lifecycle_error(bad.id).contains("lost both"));
+        assert!(
+            store
+                .replication_positions()
+                .unwrap_err()
+                .message
+                .contains(&bad.id.to_string())
+        );
+        store.delete_tenant(bad.id).unwrap();
+        assert!(store.pending_lifecycle_tenants().is_empty());
+        store.create_tenant("bad-journal").unwrap();
+        assert!(good_handle.get("docs", "ack").unwrap().is_some());
     }
 }

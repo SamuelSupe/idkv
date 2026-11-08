@@ -11,6 +11,14 @@ pub(super) struct State {
     knowledge_after: Option<Vec<u8>>,
     #[serde(default)]
     pub(super) expiry_after: Option<Vec<u8>>,
+    #[serde(default)]
+    alias_after: Option<Vec<u8>>,
+    #[serde(default)]
+    alias_receipts_after: Option<Vec<u8>>,
+    #[serde(default)]
+    alias_seq: u64,
+    #[serde(default)]
+    alias_active: bool,
     history_identifier: Option<String>,
     baseline_kept: bool,
     sweeping_floor: u64,
@@ -64,6 +72,7 @@ fn migration(
         };
         match state.migration_phase {
             2 => {
+                tx.require_foreground_disk();
                 let version = crate::tenant::datasets::parse_published(bytes)?;
                 let current: Option<Uuid> = tx
                     .get(&named(b"P", &version.name))?
@@ -93,6 +102,7 @@ fn migration(
                 }
             }
             4 => {
+                tx.require_foreground_disk();
                 let knowledge: Knowledge = codec::field_as(bytes, "/data")?
                     .ok_or_else(|| Error::corrupt("knowledge data"))?;
                 put(
@@ -117,7 +127,17 @@ fn migration(
                     )?;
                 }
             }
-            _ => schedule_at(tx, k, p.legacy_expires_at_ms, Expiration::Delete)?,
+            _ => {
+                if tx.get(&key(DEADLINE, k))?.is_none()
+                    && p.legacy_expires_at_ms <= now_ms()?.max(state.watermark_ms)
+                {
+                    tx.delete(k.clone())?;
+                    state.reclaimed_records = state.reclaimed_records.saturating_add(1);
+                } else {
+                    tx.require_foreground_disk();
+                    schedule_at(tx, k, p.legacy_expires_at_ms, Expiration::Delete)?;
+                }
+            }
         }
     }
     if exhausted {
@@ -138,11 +158,17 @@ fn expire(tx: &mut Transaction<'_>, state: &mut State, batch: usize) -> Result<(
         if at > state.watermark_ms {
             break;
         }
-        state.expiry_after = Some(queue_key.clone());
         let Some(bytes) = record.value else {
+            state.expiry_after = Some(queue_key);
             continue;
         };
         let job: Scheduled = parse(&bytes)?;
+        // Legacy publication references must be built before retiring a shared
+        // collection. Other already-scheduled expiry is safe during migration.
+        if state.migration_phase < 3 && matches!(job.action, Expiration::Publication { .. }) {
+            break;
+        }
+        state.expiry_after = Some(queue_key.clone());
         match job.action {
             Expiration::Delete => {
                 tx.delete(job.target.clone())?;
@@ -273,8 +299,45 @@ fn history(tx: &mut Transaction<'_>, state: &mut State, batch: usize) -> Result<
     }
     Ok(())
 }
+fn reclaim_receipt_alias(tx: &mut Transaction<'_>, state: &mut State) -> Result<()> {
+    let (aliases, _) = tx.gc_prefix(b"r", state.alias_after.as_deref(), 1)?;
+    let Some(alias) = aliases.first() else {
+        state.alias_after = None;
+        state.alias_receipts_after = None;
+        state.alias_seq = 0;
+        state.alias_active = false;
+        return Ok(());
+    };
+    // A write between physical pages can insert a receipt behind the cursor.
+    // Restart that namespace scan unless only our own previous GC committed.
+    if state.alias_seq.checked_add(1) != Some(tx.seq) {
+        state.alias_receipts_after = None;
+    }
+    state.alias_seq = tx.seq;
+    if let Some(value) = &alias.value {
+        let namespace: Uuid = parse(value)?;
+        let (receipts, exhausted) = tx.gc_prefix(
+            &prefix(b'R', namespace),
+            state.alias_receipts_after.as_deref(),
+            64,
+        )?;
+        let live = receipts.iter().any(|r| r.value.is_some());
+        if !live && !exhausted {
+            state.alias_receipts_after = receipts.last().map(|r| r.key.clone());
+            return Ok(());
+        }
+        if !live {
+            tx.delete(alias.key.clone())?;
+        }
+    }
+    state.alias_after = Some(alias.key.clone());
+    state.alias_receipts_after = None;
+    Ok(())
+}
+
 pub(super) fn step(tenant: &TenantHandle) -> Result<()> {
     let mut expiry_batch = (tenant.engine().options.max_batch_operations / 12).clamp(1, 64);
+    let mut skip_migration = false;
     loop {
         let batch = expiry_batch.min(16);
         let mut attempted_batch = expiry_batch;
@@ -290,10 +353,12 @@ pub(super) fn step(tenant: &TenantHandle) -> Result<()> {
                 .unwrap_or_default();
             let before = serde_json::to_vec(&state)?;
             let previous_reclaimed = state.reclaimed_records;
-            if state.migration_phase < 5 {
-                tx.require_foreground_disk();
+            if state.migration_phase < 5 && !skip_migration {
                 attempted_batch = batch;
                 migration(tx, &p, &mut state, batch)?;
+                if state.migration_phase >= 5 {
+                    state.alias_active = true;
+                }
             } else {
                 let now = now_ms()?.max(state.watermark_ms);
                 // Do not generate empty maintenance WAL traffic simply to tick time.
@@ -305,10 +370,23 @@ pub(super) fn step(tenant: &TenantHandle) -> Result<()> {
                         &r.key[EXPIRY.len()..EXPIRY.len() + 8] <= now.to_be_bytes().as_slice()
                     });
                 if due {
+                    let previous_watermark = state.watermark_ms;
+                    let previous_cursor = state.expiry_after.clone();
                     state.watermark_ms = now;
                     expire(tx, &mut state, expiry_batch)?;
+                    if state.expiry_after == previous_cursor {
+                        // A legacy publication can wait for reference migration.
+                        // Do not spend the maintenance reserve just ticking time.
+                        state.watermark_ms = previous_watermark;
+                    }
                 }
-                history(tx, &mut state, batch)?;
+                if state.migration_phase >= 5 {
+                    history(tx, &mut state, batch)?;
+                    state.alias_active |= state.reclaimed_records > previous_reclaimed;
+                    if state.alias_active {
+                        reclaim_receipt_alias(tx, &mut state)?;
+                    }
+                }
             }
             // After migration, cleanup must not schedule new expiry work here:
             // schedule_at can rewind STATE. Any future scheduling path must merge
@@ -330,6 +408,16 @@ pub(super) fn step(tenant: &TenantHandle) -> Result<()> {
         // neither deletions nor progress from the rejected attempt were published.
         if oversized && attempted_batch > 1 {
             expiry_batch = attempted_batch.div_ceil(2);
+            continue;
+        }
+        if !skip_migration
+            && result
+                .as_ref()
+                .is_err_and(|error| error.code == "RESOURCE_EXHAUSTED")
+        {
+            // Additive migration can hit the foreground quota. Retry existing
+            // cleanup independently so its reserved disk capacity remains usable.
+            skip_migration = true;
             continue;
         }
         let reclaimed = result?;

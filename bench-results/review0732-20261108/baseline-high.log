@@ -1,0 +1,29 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.78s
+     Running unittests src/lib.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv-2393aa090e8f705f)
+
+running 2 tests
+test backup::transfer::tests::review0732_large_restore_reserves_two_copies_without_consuming_create_allowance ... FAILED
+test storage::wal::tests::review0732_recovery_never_discards_checksum_corruption ... FAILED
+
+failures:
+
+---- backup::transfer::tests::review0732_large_restore_reserves_two_copies_without_consuming_create_allowance stdout ----
+
+thread 'backup::transfer::tests::review0732_large_restore_reserves_two_copies_without_consuming_create_allowance' panicked at src/backup/transfer.rs:329:14:
+a valid 60 GiB backup must fit default restore staging: Error { code: "RESOURCE_EXHAUSTED", message: "tenant backup staging budget; retry or forget retained creates", location: None }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- storage::wal::tests::review0732_recovery_never_discards_checksum_corruption stdout ----
+
+thread 'storage::wal::tests::review0732_recovery_never_discards_checksum_corruption' panicked at src/storage/wal.rs:557:42:
+called `Option::unwrap()` on a `None` value
+
+
+failures:
+    backup::transfer::tests::review0732_large_restore_reserves_two_copies_without_consuming_create_allowance
+    storage::wal::tests::review0732_recovery_never_discards_checksum_corruption
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 112 filtered out; finished in 0.34s
+
+error: test failed, to rerun pass `--lib`

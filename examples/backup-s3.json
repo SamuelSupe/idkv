@@ -8,7 +8,7 @@
   "concurrency": 2,
   "max_jobs": 256,
   "max_backup_bytes": 107374182400,
-  "max_staging_bytes": 214748364800,
+  "max_staging_bytes": 214749413376,
   "reserve_free_bytes": 1073741824,
   "bytes_per_second": 52428800,
   "timeout_seconds": 30,

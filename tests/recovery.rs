@@ -172,7 +172,7 @@ fn recovery_rewrite_survives_abort_before_and_after_publication() {
 }
 
 #[test]
-fn unsealed_tail_garbage_preserves_confirmed_wal_data_and_future_writes() {
+fn review0732_tail_garbage_requires_explicit_repair_before_future_writes() {
     for sealed in [false, true] {
         let dir = tempfile::tempdir().unwrap();
         let id = seed(dir.path());
@@ -199,10 +199,20 @@ fn unsealed_tail_garbage_preserves_confirmed_wal_data_and_future_writes() {
             .unwrap()
             .path();
         let confirmed_length = wal.metadata().unwrap().len();
+        let original = fs::read(&wal).unwrap();
         let mut file = OpenOptions::new().append(true).open(&wal).unwrap();
         file.write_all(&[0; 8192]).unwrap();
         file.sync_all().unwrap();
         drop(file);
+        let damaged = fs::read(&wal).unwrap();
+        {
+            let store = Store::open(dir.path(), Options::default()).unwrap();
+            assert_eq!(store.tenant(id).err().unwrap().code, "CORRUPTION");
+            assert_eq!(fs::read(&wal).unwrap(), damaged);
+        }
+        let repair = wal.with_extension("repair");
+        fs::write(&repair, original).unwrap();
+        fs::rename(repair, &wal).unwrap();
         let later = {
             let store = Store::open(dir.path(), Options::default()).unwrap();
             let tenant = store.tenant(id).unwrap();
@@ -368,6 +378,21 @@ fn process_crashes_preserve_atomic_documents_and_indexes() {
             .unwrap();
         assert!(!status.success(), "failpoint {point} did not trigger");
         let store = Store::open(dir.path(), Options::default()).unwrap();
+        if matches!(
+            point,
+            "wal_torn_zero_header" | "wal_torn_header_crc" | "wal_torn_payload_crc"
+        ) {
+            assert_eq!(store.tenant(id).err().unwrap().code, "CORRUPTION");
+            let wal = dir.path().join("tenants").join(id.to_string()).join("wal");
+            assert!(fs::read_dir(wal).unwrap().any(|entry| {
+                entry
+                    .unwrap()
+                    .path()
+                    .extension()
+                    .is_some_and(|ext| ext == "corrupt")
+            }));
+            continue;
+        }
         let t = store.tenant(id).unwrap();
         assert_eq!(
             t.get("assets", "old").unwrap().unwrap()["owner"],
@@ -553,6 +578,21 @@ fn temporal_corrections_history_heads_and_receipts_recover_atomically() {
             .unwrap();
         assert!(!status.success(), "{point} did not trigger");
         let store = Store::open(dir.path(), Options::default()).unwrap();
+        if matches!(
+            point,
+            "wal_torn_zero_header" | "wal_torn_header_crc" | "wal_torn_payload_crc"
+        ) {
+            assert_eq!(store.tenant(id).err().unwrap().code, "CORRUPTION");
+            let wal = dir.path().join("tenants").join(id.to_string()).join("wal");
+            assert!(fs::read_dir(wal).unwrap().any(|entry| {
+                entry
+                    .unwrap()
+                    .path()
+                    .extension()
+                    .is_some_and(|ext| ext == "corrupt")
+            }));
+            continue;
+        }
         let t = store.tenant(id).unwrap();
         let mut query = ResolveRequest {
             identifier: identifier.clone(),
@@ -851,7 +891,7 @@ fn startup_reclaims_legacy_unregistered_databases_but_preserves_a_live_engine() 
 
 #[cfg(feature = "failpoints")]
 #[test]
-fn edge_review_readonly_enospc_exposes_only_durable_prefix_and_preserves_recovery_bytes() {
+fn review0732_enospc_recovery_refuses_stale_reads_and_preserves_recovery_bytes() {
     let dir = tempfile::tempdir().unwrap();
     let id = seed(dir.path());
     let crash = std::process::Command::new(env!("CARGO_BIN_EXE_crash-probe"))
@@ -915,6 +955,117 @@ fn edge_review_crashed_local_checkpoint_is_reclaimed_before_backup_count_limit()
     assert_eq!(fs::read_dir(&parent).unwrap().count(), 0);
     let backup = store.backup(id).unwrap();
     store.restore(id, backup).unwrap();
+    assert!(
+        store
+            .tenant(id)
+            .unwrap()
+            .get("assets", "old")
+            .unwrap()
+            .is_some()
+    );
+}
+
+#[cfg(feature = "failpoints")]
+#[test]
+fn review0732_acknowledged_wal_corruption_preserves_evidence_and_blocks_sequence_reuse() {
+    let dir = tempfile::tempdir().unwrap();
+    let id = seed(dir.path());
+    let status = std::process::Command::new(env!("CARGO_BIN_EXE_crash-probe"))
+        .arg(dir.path())
+        .arg(id.to_string())
+        .arg("ack-and-abort")
+        .status()
+        .unwrap();
+    assert!(!status.success());
+    let acknowledged: serde_json::Value =
+        serde_json::from_slice(&fs::read(dir.path().join("acknowledged.json")).unwrap()).unwrap();
+    let seq = acknowledged["first"].as_u64().unwrap();
+    let wal_dir = dir.path().join("tenants").join(id.to_string()).join("wal");
+    let mut saved = None;
+    for entry in fs::read_dir(&wal_dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_none_or(|ext| ext != "wal") {
+            continue;
+        }
+        let original = fs::read(&path).unwrap();
+        let mut cursor = 64;
+        while cursor + 24 <= original.len() {
+            let frame_seq =
+                u64::from_le_bytes(original[cursor + 8..cursor + 16].try_into().unwrap());
+            let length =
+                u32::from_le_bytes(original[cursor + 4..cursor + 8].try_into().unwrap()) as usize;
+            if frame_seq == seq {
+                let mut damaged = original.clone();
+                damaged[cursor + 24] ^= 1;
+                fs::write(&path, &damaged).unwrap();
+                saved = Some((path.clone(), original.clone(), damaged));
+                break;
+            }
+            cursor += 24 + length;
+        }
+    }
+    let (path, original, damaged) = saved.expect("acknowledged frame missing before corruption");
+    for _ in 0..2 {
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        assert_eq!(store.tenant(id).err().unwrap().code, "CORRUPTION");
+        assert_eq!(
+            store.replication_positions().unwrap_err().code,
+            "CORRUPTION"
+        );
+        assert_eq!(fs::read(&path).unwrap(), damaged);
+    }
+    assert_eq!(
+        fs::read_dir(&wal_dir)
+            .unwrap()
+            .filter(|entry| entry
+                .as_ref()
+                .unwrap()
+                .path()
+                .extension()
+                .is_some_and(|ext| ext == "corrupt"))
+            .count(),
+        1,
+        "repeated failed opens duplicated the evidence inode"
+    );
+    assert!(fs::read_dir(&wal_dir).unwrap().any(|entry| {
+        let p = entry.unwrap().path();
+        p.extension().is_some_and(|ext| ext == "corrupt") && fs::read(p).unwrap() == damaged
+    }));
+    // Repair from the test's pre-corruption image using a fresh inode, preserving
+    // the forensic hard links. Then check every externally acknowledged revision.
+    let repair = path.with_extension("repair");
+    fs::write(&repair, original).unwrap();
+    fs::rename(repair, &path).unwrap();
+    let store = Store::open(dir.path(), Options::default()).unwrap();
+    let tenant = store.tenant(id).unwrap();
+    assert_eq!(
+        tenant.get("assets", "confirmed-first").unwrap().unwrap()["_rev"],
+        acknowledged["first"]
+    );
+    assert_eq!(
+        tenant.get("assets", "confirmed-last").unwrap().unwrap()["_rev"],
+        acknowledged["last"]
+    );
+    let next = tenant
+        .put("assets", json!({"_key":"after-repair","ip":"five"}), None)
+        .unwrap();
+    assert!(next.rev > acknowledged["last"].as_u64().unwrap());
+}
+
+#[cfg(feature = "failpoints")]
+#[test]
+fn review0732_uncertain_local_backup_reports_an_actionable_id() {
+    let dir = tempfile::tempdir().unwrap();
+    let id = seed(dir.path());
+    let status = std::process::Command::new(env!("CARGO_BIN_EXE_crash-probe"))
+        .arg(dir.path())
+        .arg(id.to_string())
+        .arg("local-backup-uncertain")
+        .env("TKV_ERRORPOINT", "local_backup_renamed")
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let store = Store::open(dir.path(), Options::default()).unwrap();
     assert!(
         store
             .tenant(id)

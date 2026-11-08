@@ -116,6 +116,11 @@ impl Inner {
                 let manifest = self.manifest(job.tenant, backup)?;
                 context.restore(&manifest, true)
             }
+            BackupOperation::Delete { backup } => {
+                self.update(job.id, |j| j.state = JobState::Pruning)?;
+                context.check()?;
+                self.delete_backup(job.tenant, backup)
+            }
             BackupOperation::Prune { keep_last } => {
                 self.update(job.id, |j| j.state = JobState::Pruning)?;
                 self.prune(job.tenant, keep_last, || context.check())
@@ -141,6 +146,7 @@ impl Context<'_> {
             self.inner.config.max_backup_bytes,
             self.job.id,
             self.job.tenant,
+            false,
         )?;
         let work = self.work();
         fs::create_dir_all(&work)?;
@@ -259,7 +265,7 @@ impl Context<'_> {
             .total_bytes
             .saturating_mul(2)
             .saturating_add(1 << 20);
-        let _staging = Staging::reserve(self.inner, reserve, self.job.id, self.job.tenant)?;
+        let _staging = Staging::reserve(self.inner, reserve, self.job.id, self.job.tenant, true)?;
         if fs2::available_space(&self.inner.work_path)?
             < reserve.saturating_add(self.inner.config.reserve_free_bytes)
         {

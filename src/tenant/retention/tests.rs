@@ -886,3 +886,70 @@ fn edge_review_publication_gc_keeps_long_lived_write_receipts_after_policy_shrin
     assert_eq!(t.engine().seq(), seq);
     assert!(t.get("old", &first[0].key).unwrap().is_none());
 }
+
+#[test]
+fn review0732_receipt_alias_gc_does_not_miss_a_new_receipt_behind_its_cursor() {
+    let (_dir, store, t) = setup();
+    drop(store);
+    t.set_retention(60).unwrap();
+    let namespace = Uuid::new_v4();
+    let alias = named(b"r", "retired");
+    let receipts = prefix(b'R', namespace);
+    let mut state = serde_json::to_value(gc::State::default()).unwrap();
+    state["migration_phase"] = json!(5);
+    state["alias_active"] = json!(true);
+    t.engine()
+        .transact_maintenance(|tx| {
+            put(tx, STATE.to_vec(), &state)?;
+            put(tx, alias.clone(), &namespace)?;
+            for n in 0..100u32 {
+                tx.delete(key(&receipts, &n.to_be_bytes()))?;
+            }
+            Ok(())
+        })
+        .unwrap();
+    t.retention_step().unwrap();
+    let early = key(&receipts, &0u32.to_be_bytes());
+    t.engine()
+        .transact(|tx| tx.put(early.clone(), b"live retry receipt".to_vec()))
+        .unwrap();
+    for _ in 0..4 {
+        t.retention_step().unwrap();
+    }
+    assert!(
+        t.engine()
+            .snapshot()
+            .unwrap()
+            .get(&alias, &mut ReadStats::default())
+            .unwrap()
+            .is_some()
+    );
+    t.engine()
+        .transact_maintenance(|tx| {
+            tx.delete(early)?;
+            let mut current: serde_json::Value = parse(&tx.get(STATE)?.unwrap())?;
+            current["alias_active"] = json!(true);
+            put(tx, STATE.to_vec(), &current)
+        })
+        .unwrap();
+    for _ in 0..6 {
+        t.retention_step().unwrap();
+    }
+    assert!(
+        t.engine()
+            .snapshot()
+            .unwrap()
+            .get(&alias, &mut ReadStats::default())
+            .unwrap()
+            .is_none()
+    );
+    let before = t.engine().seq();
+    for _ in 0..5 {
+        t.retention_step().unwrap();
+    }
+    assert_eq!(
+        t.engine().seq(),
+        before,
+        "idle alias GC produced WAL traffic"
+    );
+}

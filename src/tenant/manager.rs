@@ -46,6 +46,7 @@ struct Inner {
     options: Options,
     _lock: Arc<File>,
     registry: RwLock<Registry>,
+    lifecycle_errors: Mutex<HashMap<Uuid, String>>,
     slots: Mutex<HashMap<Uuid, Arc<Mutex<Slot>>>>,
     memory: Arc<Counter>,
     io: Arc<IoScheduler>,
@@ -173,7 +174,7 @@ impl Store {
         // A healthy v4 root can serve reads even on a full disk. Upgrade its
         // representation only when a registry mutation already needs a write.
         registry.version = registry.version.max(4);
-        recover_lifecycle(&root, &mut registry, None)?;
+        let lifecycle_errors = recover_lifecycle(&root, &mut registry, None)?;
         if serde_json::to_vec(&registry)? != previous {
             registry.prepare_publish()?;
             atomic_json(&registry_path, &registry)?;
@@ -196,6 +197,7 @@ impl Store {
             options: options.clone(),
             _lock: Arc::new(lock),
             registry: RwLock::new(registry),
+            lifecycle_errors: Mutex::new(lifecycle_errors),
             slots: Mutex::new(HashMap::new()),
             memory: Counter::with_headroom(
                 options.global_memory_bytes,
@@ -620,7 +622,9 @@ impl Store {
             .cloned()
             .ok_or_else(|| Error::missing("tenant"))?;
         let path = inner.root.join("tenants").join(id.to_string()).join("LOCK");
-        if !path.exists() && matches!(registration.lifecycle, Lifecycle::Deleted) {
+        if !path.parent().unwrap().try_exists()?
+            || (!path.exists() && matches!(registration.lifecycle, Lifecycle::Deleted))
+        {
             return Ok(None);
         }
         if path.exists() {
@@ -695,6 +699,8 @@ impl Store {
                 "UNAVAILABLE",
                 "tenant deletion outcome is uncertain; restart Store to recover",
             ));
+        } else {
+            inner.lifecycle_errors.lock().remove(&id);
         }
         drop(registry);
         drop(slot);

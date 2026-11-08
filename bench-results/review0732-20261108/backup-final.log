@@ -1,0 +1,26 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.20s
+     Running tests/backup.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/backup-7537044b4004ea42)
+
+running 19 tests
+test backup_during_writes_and_compaction_has_one_commit_boundary ... ok
+test completed_snapshot_limit_still_applies_after_empty_history_is_ignored ... ok
+test concurrent_backups_count_active_staging_only_once ... ok
+test corrupted_objects_and_traversal_manifests_never_replace_live_data ... ok
+test edge_review_backup_order_survives_clock_rollback_and_restart ... ok
+test edge_review_lower_job_limit_preserves_startup_and_old_jobs ... ok
+test fresh_store_import_and_import_journal_crash_recovery ... ok
+test interrupted_uploads_resume_and_only_complete_markers_are_visible ... ok
+test opendal_incremental_backup_restore_and_reference_retention ... ok
+test pruning_reclaims_snapshot_directories_and_legacy_empty_history ... ok
+test remote_restore_recovers_a_tenant_that_cannot_open ... ok
+test restore_after_switch_is_never_replayed_over_new_writes ... ok
+test review0732_bad_or_oversized_inventory_does_not_block_new_backups_and_can_be_deleted ... ok
+test storage_failure_and_quota_do_not_stop_local_commits ... ok
+test subsystem_review_failed_restore_releases_downloaded_workspace ... ok
+test subsystem_review_one_tenant_cannot_fill_the_backup_job_table ... ok
+test subsystem_review_prune_bounds_memory_without_a_reference_count_dead_end ... ok
+test subsystem_review_prune_recovers_beyond_the_snapshot_listing_limit ... ok
+test subsystem_review_retained_create_cannot_exhaust_other_tenants_staging ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 59.94s

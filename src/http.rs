@@ -123,6 +123,7 @@ const ROUTES: &[&str] = &[
     "/v1/tenants/{tenant}/remote-backups/prune",
     "/v1/tenants/{tenant}/remote-backups/{backup}/verify",
     "/v1/tenants/{tenant}/remote-backups/{backup}/restore",
+    "/v1/tenants/{tenant}/remote-backups/{backup}/delete",
     "/v1/tenants/{tenant}/backup-jobs",
     "/v1/tenants/{tenant}/backup-jobs/{job}",
     "/v1/tenants/{tenant}/backup-jobs/{job}/retry",
@@ -253,7 +254,9 @@ impl IntoResponse for Error {
             "READ_ONLY" | "REPLICATION_CONFLICT" | "REPLICA_LAG" => StatusCode::CONFLICT,
             "LOG_GONE" | "SNAPSHOT_EXPIRED" => StatusCode::GONE,
             "REPLICATION_UNAVAILABLE" => StatusCode::SERVICE_UNAVAILABLE,
-            "UNAVAILABLE" | "RESPONSE_UNAVAILABLE" => StatusCode::SERVICE_UNAVAILABLE,
+            "UNAVAILABLE" | "RESPONSE_UNAVAILABLE" | "RECOVERY_REQUIRED" => {
+                StatusCode::SERVICE_UNAVAILABLE
+            }
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         (status, Json(json!({"error":self}))).into_response()

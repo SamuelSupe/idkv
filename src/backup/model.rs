@@ -32,7 +32,7 @@ impl Default for BackupConfig {
             concurrency: 2,
             max_jobs: 256,
             max_backup_bytes: 100 << 30,
-            max_staging_bytes: 200 << 30,
+            max_staging_bytes: (200 << 30) + (1 << 20),
             reserve_free_bytes: 1 << 30,
             bytes_per_second: 50 << 20,
             timeout_seconds: 30,
@@ -85,6 +85,10 @@ pub enum BackupOperation {
     },
     Prune {
         keep_last: usize,
+    },
+    /// Explicitly remove a completed or damaged backup's metadata. Object GC is deferred to prune.
+    Delete {
+        backup: Uuid,
     },
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -172,6 +176,7 @@ impl BackupManifest {
             || self.tenant.id != tenant
             || self.files.is_empty()
             || self.files.len() > FILE_LIMIT
+            || self.checkpoint_ms > now_ms().saturating_add(366 * 86400 * 1000)
         {
             return Err(Error::corrupt("backup identity or format"));
         }

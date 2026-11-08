@@ -55,6 +55,7 @@ struct Inner {
     gate: RequestGate,
     bandwidth: Mutex<Instant>,
     staging: Mutex<HashMap<Uuid, (Uuid, u64)>>,
+    clock_checked: Mutex<HashSet<Uuid>>,
 }
 struct Owner {
     inner: Arc<Inner>,
@@ -272,6 +273,7 @@ impl BackupService {
             gate: RequestGate::new(config.concurrency),
             bandwidth: Mutex::new(Instant::now()),
             staging: Mutex::new(HashMap::new()),
+            clock_checked: Mutex::new(HashSet::new()),
             config,
         });
         let mut workers = Vec::new();
@@ -346,7 +348,8 @@ impl BackupService {
         let backup = match operation {
             BackupOperation::Restore { backup }
             | BackupOperation::Verify { backup }
-            | BackupOperation::Import { backup } => backup,
+            | BackupOperation::Import { backup }
+            | BackupOperation::Delete { backup } => backup,
             _ => Uuid::new_v4(),
         };
         let job = BackupJob {

@@ -62,6 +62,8 @@ struct Pair {
 }
 #[derive(Default)]
 struct SnapshotGate {
+    fail_logs: std::sync::atomic::AtomicUsize,
+    failed_logs: std::sync::atomic::AtomicUsize,
     contexts: std::sync::atomic::AtomicUsize,
     snapshots: std::sync::atomic::AtomicUsize,
     blocked: std::sync::atomic::AtomicBool,
@@ -116,6 +118,23 @@ impl Pair {
                 move |request: axum::extract::Request, next: axum::middleware::Next| {
                     let gate = gate.clone();
                     async move {
+                        if request.uri().path() == "/v1/replication/log"
+                            && gate
+                                .fail_logs
+                                .fetch_update(
+                                    std::sync::atomic::Ordering::AcqRel,
+                                    std::sync::atomic::Ordering::Acquire,
+                                    |n| n.checked_sub(1),
+                                )
+                                .is_ok()
+                        {
+                            gate.failed_logs
+                                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            return axum::response::IntoResponse::into_response((
+                                axum::http::StatusCode::BAD_GATEWAY,
+                                "<html>temporary gateway failure</html>",
+                            ));
+                        }
                         if request.uri().path().ends_with("/context") {
                             gate.contexts
                                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -537,6 +556,7 @@ async fn checkpoint_install_waits_for_readers_without_retransferring_and_other_t
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
     assert!(pair.sb.status().unwrap().initialization_errors[&id].contains("reader drain"));
+    gate.fail_logs.store(1, Ordering::Release);
     assert!(raced_reader.get("docs", "hot").unwrap().is_none());
     assert!(
         pair.b
@@ -559,6 +579,7 @@ async fn checkpoint_install_waits_for_readers_without_retransferring_and_other_t
         tenant.get("docs", "hot").unwrap()
     );
     assert!(!pair.sb.status().unwrap().waiting_for_readers.contains(&id));
+    assert_eq!(gate.failed_logs.load(Ordering::Acquire), 1);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

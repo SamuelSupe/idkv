@@ -1,0 +1,119 @@
+{
+  "base_commit": "0732ffd18daedc88c6a602db0a2612c4ca961693",
+  "environment": {
+    "runtime": "OrbStack",
+    "os": "Ubuntu 25.10",
+    "architecture": "aarch64",
+    "rustc": "1.90.0 (1159e78c4 2025-09-14)",
+    "cargo": "1.90.0 (840b83a10 2025-07-30)",
+    "target_dir": "/var/tmp/idkv-p01-target-20261108",
+    "tmpdir": "/var/tmp/idkv-p01-tmp-20261108"
+  },
+  "status": "passed",
+  "baseline_reproductions": [
+    {
+      "log": "baseline-high.log",
+      "expected_failures": 2,
+      "scenarios": [
+        "60 GiB restore reservation exceeds tenant staging limit",
+        "unsealed WAL checksum corruption is silently accepted"
+      ]
+    },
+    {
+      "log": "baseline-quota.log",
+      "expected_failures": 1,
+      "scenario": "source shrinks disk quota after flush; replica with more than 24 MiB retained WAL cannot apply it",
+      "checkout": "/var/tmp/idkv-review0732-baseline-20261108"
+    }
+  ],
+  "full_suite": {
+    "command": "cargo test --locked --features failpoints --no-fail-fast -- --test-threads=1",
+    "exit_code": 0,
+    "log": "tests.log",
+    "passed": 266,
+    "failed": 0,
+    "ignored": 0,
+    "test_seconds": 379.43,
+    "result_sections": 14
+  },
+  "final_affected_target": {
+    "command": "cargo test --locked --features failpoints --test backup -- --test-threads=1",
+    "exit_code": 0,
+    "log": "backup-final.log",
+    "passed": 19,
+    "failed": 0,
+    "ignored": 0,
+    "test_seconds": 59.94,
+    "result_sections": 1,
+    "reason": "Completed marker with missing manifest added to clock recovery and the existing malformed-inventory regression after the full suite compiled"
+  },
+  "targeted_regressions": {
+    "log": "targeted-second.log",
+    "passed": 12,
+    "failed": 0,
+    "ignored": 0,
+    "test_seconds": 50.84,
+    "result_sections": 15,
+    "note": "Includes real two-node reader-drain retry with one injected 502 and no repeated checkpoint transfer; counts are test executions, not additional unique tests."
+  },
+  "checks": [
+    {
+      "command": "cargo clippy --locked --features failpoints --all-targets -- -D warnings",
+      "exit_code": 0,
+      "log": "clippy.log"
+    },
+    {
+      "command": "cargo check --locked --all-targets",
+      "exit_code": 0,
+      "log": "check-final.log"
+    },
+    {
+      "command": "cargo fmt --all -- --check",
+      "exit_code": 0,
+      "log": "fmt.log"
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "validation_order_note": "Full suite compiled before the final missing-manifest clock-recovery branch and its existing-test extension. The entire backup target was then rerun on final sources; final all-target check and clippy also used final sources.",
+  "acknowledged_data_checks": [
+    "Two acknowledged WAL commits followed by process abort, first-frame corruption, repeated open refusal and unchanged evidence; trusted repair restores both revisions and subsequent sequence increases",
+    "Replica quota shrink with 200 repeated 128 KiB writes preserves final document and revision",
+    "Retained checkpoint installation after reader timeout and injected 502 matches document and revision; healthy tenant progresses",
+    "ENOSPC recovery refuses ordinary stale reads; after space recovery confirmed values reappear"
+  ],
+  "coverage_limits": [
+    "60/100 GiB limits tested via actual staging admission, not full-size data transfer",
+    "No physical device EIO or power-cut certification",
+    "No live S3 fault test",
+    "No long production performance soak or measured prune speedup",
+    "Existing sequence forks already created by older automatic truncation are not automatically detected; no new frame hash chain",
+    "No second full-suite rerun after the isolated final missing-manifest change; complete affected backup target and all-target static checks rerun"
+  ],
+  "retained_intermediate_logs": [
+    "tests-first.log",
+    "tests-pre-final.log",
+    "targeted.log",
+    "check.log"
+  ],
+  "report": "docs/review0732-20261108.md",
+  "source_provenance": "source-provenance.json",
+  "log_sha256": {
+    "backup-final.log": "e0be2e4168a6c5806bc862b019abb54bc466897f8c872cb85e925ea9afe52e87",
+    "baseline-high.log": "faec780e51a6a7115405c64f8747934858f6ce6940b1f7c60d39730de0456293",
+    "baseline-quota.log": "8743b668e541ef74a01faaa36f5f10de8302a7e7826851f2b22ab48704cb262a",
+    "check-final.log": "34110d7d7507476f610df0b3ba9966f5f58e5f67511d76f98fa33426e824f73e",
+    "check.log": "c764e24f04597756c2289d9b08042b235461c6dd45b0e078a9d3a1247a1df958",
+    "clippy.log": "1057d4c9b412e915c102e138586696b13b4065c002bf7eb397962fbb859e7515",
+    "fmt.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "targeted-second.log": "348ccaa233ec18ecd83824aed3001abcdad899b5044416d45765608a4d9a7e92",
+    "targeted.log": "3dd38af884ff363414ebb8974841e4aefdddbc2fb024257e292c8e0c6dfbe552",
+    "tests-first.log": "0b64322d5806a5c625b0c3b68556230b3e6f36372bc460f72dae94e86a9c49b2",
+    "tests-pre-final.log": "acf214f063b44e01191cbb6bbafe49458975b856363d8b83b1f88e58e1a1e85e",
+    "tests.log": "b9fb8bfec23ac2c5d11a41489a30ba4f2cbad5a74c40057ad0428b509ccf41e8"
+  },
+  "log_normalization": "Trailing empty lines removed; interior log content retained",
+  "delivery": "Local uncommitted changes; not pushed"
+}

@@ -68,12 +68,7 @@ impl Store {
     }
 
     pub fn replication_positions(&self) -> Result<Vec<TenantPosition>> {
-        if !self.pending_lifecycle_tenants().is_empty() {
-            return Err(Error::new(
-                "UNAVAILABLE",
-                "tenant lifecycle recovery is pending; restart Store before role changes",
-            ));
-        }
+        self.check_pending_lifecycle()?;
         self.tenants()
             .into_iter()
             .map(|info| {
@@ -84,12 +79,7 @@ impl Store {
     }
     fn cached_replication_positions(&self) -> Result<Vec<TenantPosition>> {
         let deadline = Instant::now() + Duration::from_millis(100);
-        if !self.pending_lifecycle_tenants().is_empty() {
-            return Err(Error::new(
-                "UNAVAILABLE",
-                "tenant lifecycle recovery is pending",
-            ));
-        }
+        self.check_pending_lifecycle()?;
         self.tenants()
             .into_iter()
             .map(|info| {
@@ -117,6 +107,29 @@ impl Store {
                 Ok(TenantPosition { info, seq })
             })
             .collect()
+    }
+
+    pub(crate) fn lifecycle_error(&self, id: Uuid) -> String {
+        self.owner
+            .inner
+            .lifecycle_errors
+            .lock()
+            .get(&id)
+            .cloned()
+            .unwrap_or_else(|| "lifecycle publication is uncertain; restart to recover".into())
+    }
+    fn check_pending_lifecycle(&self) -> Result<()> {
+        if let Some(info) = self.pending_lifecycle_tenants().first() {
+            return Err(Error::new(
+                "UNAVAILABLE",
+                format!(
+                    "tenant {} requires repair or explicit deletion before role changes: {}",
+                    info.id,
+                    self.lifecycle_error(info.id)
+                ),
+            ));
+        }
+        Ok(())
     }
 
     pub(crate) fn pending_lifecycle_tenants(&self) -> Vec<TenantInfo> {

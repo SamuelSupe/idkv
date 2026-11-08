@@ -1171,6 +1171,69 @@ async fn remote_backup_jobs_require_admin_and_preserve_tenant_scope() {
             .unwrap()["owner"],
         "original"
     );
+    let delete = format!(
+        "{base}/remote-backups/{}/delete",
+        job["backup"].as_str().unwrap()
+    );
+    for token in [tokens[2].0, tokens[3].0] {
+        assert_eq!(
+            call(&app, "POST", &delete, Some(token), json!({})).await.0,
+            StatusCode::FORBIDDEN
+        );
+    }
+    assert_eq!(
+        call(
+            &app,
+            "POST",
+            &format!(
+                "/v1/tenants/{b}/remote-backups/{}/delete",
+                job["backup"].as_str().unwrap()
+            ),
+            Some(tokens[1].0),
+            json!({})
+        )
+        .await
+        .0,
+        StatusCode::FORBIDDEN
+    );
+    let (status, deletion) = call(&app, "POST", &delete, Some(tokens[1].0), json!({})).await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{deletion}");
+    loop {
+        let (_, current) = call(
+            &app,
+            "GET",
+            &format!("{base}/backup-jobs/{}", deletion["id"].as_str().unwrap()),
+            Some(tokens[1].0),
+            json!({}),
+        )
+        .await;
+        if current["state"] == "completed" {
+            break;
+        }
+        assert!(
+            current["state"] != "failed" && std::time::Instant::now() < deadline,
+            "{current}"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    let (_, remaining) = call(
+        &app,
+        "GET",
+        &format!("{base}/remote-backups"),
+        Some(tokens[1].0),
+        json!({}),
+    )
+    .await;
+    assert_eq!(remaining, json!([]));
+    assert_eq!(
+        store
+            .tenant(a)
+            .unwrap()
+            .get("assets", "a")
+            .unwrap()
+            .unwrap()["owner"],
+        "original"
+    );
 }
 
 #[tokio::test]

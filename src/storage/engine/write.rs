@@ -1305,6 +1305,23 @@ mod tests {
         engine
             .transact(|tx| {
                 tx.put(b"expired".to_vec(), b"receipt".to_vec())?;
+                tx.put(b"Rlegacy".to_vec(), b"unexpired receipt".to_vec())?;
+                crate::tenant::retention::schedule_at(
+                    tx,
+                    b"expired",
+                    0,
+                    crate::tenant::retention::Expiration::Delete,
+                )?;
+                crate::tenant::retention::schedule_at(
+                    tx,
+                    b"legacy-publication",
+                    1,
+                    crate::tenant::retention::Expiration::Publication {
+                        version: Uuid::new_v4(),
+                        collection: Uuid::new_v4(),
+                        name: "legacy".into(),
+                    },
+                )?;
                 tx.put(b"current".to_vec(), b"business-state".to_vec())
             })
             .unwrap();
@@ -1322,18 +1339,11 @@ mod tests {
             "RESOURCE_EXHAUSTED"
         );
         let before = engine.seq();
-        assert_eq!(
-            tenant.retention_step().unwrap_err().code,
-            "RESOURCE_EXHAUSTED"
+        tenant.retention_step().unwrap();
+        assert!(
+            engine.seq() > before,
+            "existing expiry was blocked by additive migration"
         );
-        assert_eq!(
-            engine.seq(),
-            before,
-            "migration consumed maintenance disk reserve"
-        );
-        engine
-            .transact_maintenance(|tx| tx.delete(b"expired".to_vec()))
-            .unwrap();
         let snapshot = engine.snapshot().unwrap();
         assert!(
             snapshot
@@ -1346,6 +1356,28 @@ mod tests {
                 .get(b"current", &mut ReadStats::default())
                 .unwrap()
                 .is_some()
+        );
+        assert!(
+            snapshot
+                .get(b"Rlegacy", &mut ReadStats::default())
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            snapshot
+                .get(b"~d/Rlegacy", &mut ReadStats::default())
+                .unwrap()
+                .is_none(),
+            "additive migration consumed maintenance reserve"
+        );
+        let after_cleanup = engine.seq();
+        for _ in 0..3 {
+            tenant.retention_step().unwrap();
+        }
+        assert_eq!(
+            engine.seq(),
+            after_cleanup,
+            "blocked publication consumed maintenance reserve without progress"
         );
         engine.disk.store(actual, Ordering::Release);
         let orphan = engine.path.join("sst/unpublished.sst");

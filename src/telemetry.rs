@@ -292,6 +292,9 @@ impl Telemetry {
                 self.0.reads[i].load(Ordering::Relaxed)
             ));
         }
+        for (name, value) in crate::storage::recovery_metrics() {
+            out.push_str(&format!("# TYPE tkv_{name} counter\ntkv_{name} {value}\n"));
+        }
         for (name, value) in store.open_engine_metrics() {
             let family = if name.starts_with("registry_") || name.starts_with("memory_pressure_") {
                 format!("tkv_{name}")

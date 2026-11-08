@@ -462,6 +462,26 @@ async fn edge_review_peer_errors_and_token_rotation_are_bounded() {
             }),
         )
         .route(
+            "/conflict",
+            get(|| async {
+                (
+                    StatusCode::CONFLICT,
+                    axum::Json(
+                        json!({"error":{"code":"CONFLICT","message":"fence does not match"}}),
+                    ),
+                )
+            }),
+        )
+        .route(
+            "/read-only",
+            get(|| async {
+                (
+                    StatusCode::CONFLICT,
+                    axum::Json(json!({"error":{"code":"READ_ONLY","message":"source fenced"}})),
+                )
+            }),
+        )
+        .route(
             "/rotate",
             get(|headers: HeaderMap| async move {
                 if headers.get("authorization").unwrap() == "Bearer rotated-replication-secret" {
@@ -502,6 +522,19 @@ async fn edge_review_peer_errors_and_token_rotation_are_bounded() {
             "REPLICATION_UNAVAILABLE"
         );
     }
+    for (path, code) in [("/conflict", "CONFLICT"), ("/read-only", "READ_ONLY")] {
+        let error = service.request::<Value>(path, None).await.err().unwrap();
+        assert_eq!(error.code, code);
+        assert!(error.message.contains(if code == "CONFLICT" {
+            "fence does not match"
+        } else {
+            "source fenced"
+        }));
+    }
+    let link = dir.path().join("hard-linked-token");
+    fs::hard_link(&token, &link).unwrap();
+    assert!(read_token(&token).is_err());
+    fs::remove_file(link).unwrap();
     fs::write(&token, "rotated-replication-secret").unwrap();
     assert_eq!(
         service
@@ -563,4 +596,64 @@ async fn edge_review_progressing_response_body_can_take_more_than_thirty_seconds
     assert_eq!(response.value, "a".repeat(32));
     assert!(start.elapsed() > Duration::from_secs(30));
     server.await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn review0732_trickling_response_releases_cycle_at_total_deadline() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let server = tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let mut headers = Vec::new();
+        while !headers.ends_with(b"\r\n\r\n") {
+            assert!(headers.len() < 4096);
+            headers.push(socket.read_u8().await.unwrap());
+        }
+        socket
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 1024\r\n\r\n\"")
+            .await
+            .unwrap();
+        loop {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            if socket.write_all(b"a").await.is_err() {
+                break;
+            }
+        }
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(dir.path(), Options::default()).unwrap();
+    let token = dir.path().join("token");
+    fs::write(&token, "replication-unit-test-secret").unwrap();
+    fs::set_permissions(&token, fs::Permissions::from_mode(0o600)).unwrap();
+    let service = Service::open(
+        store,
+        Config {
+            cluster: Uuid::new_v4(),
+            role: Role::Replica,
+            peer_url: url,
+            token_file: token,
+            poll_ms: 10,
+            log_retention_bytes: 1 << 20,
+        },
+    )
+    .unwrap();
+    let task_service = service.clone();
+    let task = tokio::spawn(async move {
+        let _cycle = task_service.inner.cycle.lock().await;
+        task_service
+            .request_bounded::<Value>("/slow", None, Duration::from_millis(250))
+            .await
+            .err()
+            .unwrap()
+    });
+    let error = tokio::time::timeout(Duration::from_secs(2), task)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(error.code, "REPLICATION_UNAVAILABLE");
+    let _cycle = tokio::time::timeout(Duration::from_secs(1), service.inner.cycle.lock())
+        .await
+        .unwrap();
+    server.abort();
 }

@@ -118,9 +118,9 @@ v0.5.2 在发布删除 journal 前先关闭内存中的写入入口。发布或�
 
 COMMIT_UNKNOWN 后不能继续写入该引擎。新请求不再复用它，旧引用释放后自动关闭；后续打开先校验全部 WAL。健康关闭会在 WAL 同步成功后持久保存 WAL-SYNC 水位，按租户、generation、WAL UUID 和长度匹配；已匹配且未变化的 WAL 不再重写或再次同步，水位也不重复发布。水位缺失、损坏或长度改变时，仍以普通写入重建新 inode、同步文件、原子替换并同步目录，之后才能发布恢复位置，不能只重试旧 inode 的 fsync。未知结果可能在恢复后可见，仍须核对原操作 ID 和条件版本。
 
-重建临时需要最多约一个未刷盘 WAL 文件大小的额外空间。仅 ENOSPC/可用空间不足会降为只读实例，只暴露 SST 检查点及 WAL-SYNC 已证明同步的连续前缀；未被水位覆盖的帧仍保留在原 WAL 中，但在只读实例中不可见，释放空间并成功重建后才可见。不能把“CRC 正确”当作掉电后仍存在的保证。context.writable 为 false，租户状态 stats.recovery_read_only 为 true。写入、后台修改、日志导出、复制位置确认和计划切换返回 RESOURCE_EXHAUSTED；只读回放位置不能当作升主依据。该实例继续复用，不每秒重复复制。释放空间后，释放句柄并 close，再打开以完成恢复并重新允许写入。注册表无变化的 Store 启动不再重写 control/tenants.json；新建、格式迁移或待完成的生命周期发布仍需要可写空间。其他打开 IO_ERROR 缓存 1 秒，之后自动重试，close 可提前清除。
+重建临时需要最多约一个未刷盘 WAL 文件大小的额外空间。ENOSPC 会打开不允许发布位置的诊断实例，context.writable 为 false、stats.recovery_read_only 为 true；普通快照/文档/查询读取返回 RECOVERY_REQUIRED（503），写入、后台修改、日志导出、复制位置确认和计划切换拒绝，避免返回缺少已确认数据的正常 404。原始字节保持不变，不每秒重试复制。释放空间和句柄后 close/reopen 完成恢复。注册表无变化的启动不重写 control/tenants.json；其他打开 IO_ERROR 缓存一秒，close 可提前清除。
 
-最后一个 WAL 在 WAL-SYNC 水位之外的残缺帧、坏魔数或 CRC 错误按不确定尾部恢复，丢弃第一处坏帧及之后的整个后缀。水位是健康关闭时保存的长度，并非每次提交都更新；没有有效水位或水位之后的已确认帧若发生介质损坏，当前格式无法将其与未确认撕裂写区分。怀疑设备故障时应保留原数据副本，并用备份、从库及业务确认记录核对，不能将“恢复成功”等同于已确认数据完整。水位覆盖区间损坏、WAL 文件短于该水位、非尾 WAL 损坏、SST 校验失败或活跃文件缺失仍需要有效备份恢复，不能当作未命中忽略。只有健康关闭的引擎可缓存复制位置。已刷盘保留 WAL 被外部删除时，flush 移除历史引用、使旧导出租约失效并继续维护；落后副本通过 LOG_GONE 重建。
+最后一个 WAL 仅长度不完整且位于 WAL-SYNC 水位之外时可自动截尾；坏魔数和 CRC 失败一律隔离。错误日志及 tkv_wal_corrupt_recoveries_total、tkv_wal_torn_tail_recoveries_total 记录拒绝/成功截尾次数（进程累计）。截尾前或拒绝恢复时保留 wal/*.corrupt 原 inode，不自动删除；恢复或人工修复前先归档现场，修复时用新 inode 替换，不能原地覆盖诊断硬链接。已刷盘保留 WAL 被外部删除时仍使旧导出租约失效，落后副本通过 LOG_GONE 重建。
 
 installing 在检查点安装、管理操作排空及配额离线预检期间为 true。状态接口包含 commit_seq、memory_bytes、disk_bytes、各层文件数、活动快照数、维护错误，以及进程内累计的 document_bytes、wal_bytes、flush_bytes、compaction_read_bytes、compaction_write_bytes、commits、WAL fsyncs、write_lock_wait_ns，以及 scheduler.completed_jobs、cancelled_jobs、queue_wait_ns、queued_jobs。调度计数在 Store 生命周期内按租户累计；其余引擎指标在重开后清零。读取统计的 blocks_read 表示引擎文件读取，不保证绕过操作系统页缓存；decompressed_bytes 是解压后的字节数。写放大可用 `(wal_bytes + flush_bytes + compaction_write_bytes) / document_bytes` 估算，必须注明区间、索引数和合并是否追平。
 
@@ -157,3 +157,7 @@ HTTP 先用 try_lock/try_read 非阻塞取得已缓存预算。全局 registry/s
 默认 keep-alive 等待与请求头期限均为 5 秒。客户端连接池应在更短的空闲时间回收连接；内置 Rust Client 和复制客户端默认 4 秒。服务端调低此配置时，调用方需相应缩短连接池空闲时间。任何关闭竞态都不保证请求已执行与否，非幂等请求不可盲目重试，沿用操作 ID/条件版本契约。当前锁定依赖未启用 HTTP/2，内置监听器为 HTTP/1；不能仅凭 axum 的 auto builder 名称推断旧二进制支持 h2c。
 
 删除租户会在持久删除状态发布后清理其 `backups/<UUID>/` 本地备份，并与该租户的本地备份/恢复互斥；启动时补清理已删除租户的旧副本。清理错误会返回并隔离该租户，重开 Store 重试。远端备份不随租户删除自动清除，见 [备份保留](backup.md)。
+
+磁盘缩配额必须在前台 80% 范围内额外留出 `max_batch_bytes + 4096` 字节，保护一个受限删除批次的 WAL 写入；默认约 16 MiB。副本先使用旧配额刷盘，再统计占用；磁盘单独缩容同样执行该顺序。缩容后的其他写入仍会消耗空间，不保证未来任意时刻、任意大小的删除都无背压。
+
+启动隔离的生命周期故障在 stderr 和复制 unavailable 中保留具体原因及租户 UUID。缺失 current/staged 的租户可以显式删除并释放名称。未解决的 journal 仍阻止计划角色切换，不能忽略可能存在的已确认数据；应修复或明确删除该租户，不能只重复重启。
