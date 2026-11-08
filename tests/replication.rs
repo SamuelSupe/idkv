@@ -2422,6 +2422,11 @@ async fn an_oversized_log_page_rebuilds_instead_of_retrying_forever() {
             .put("docs", json!({"_key":key,"value":"x".repeat(4096)}), None)
             .unwrap();
         expected.push((key, receipt.rev));
+        // Keep source preparation within its tiny quota independently of the
+        // maintenance tick. Retained WALs still form the same oversized page.
+        if (n + 1) % 32 == 0 {
+            source.engine().flush().unwrap();
+        }
     }
     source.engine().flush().unwrap();
     pair.catch_up(false).await;

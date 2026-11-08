@@ -76,6 +76,7 @@ impl Store {
         let memory = &self.owner.inner.memory;
         BTreeMap::from([
             ("active", u64::from(memory.under_pressure())),
+            ("cache_active", u64::from(memory.cache_pressure())),
             ("foreground_limit_bytes", memory.foreground_limit() as u64),
             ("headroom_bytes", memory.headroom() as u64),
             ("headroom_in_use_bytes", memory.headroom_in_use() as u64),
@@ -230,12 +231,13 @@ impl Store {
         let worker_stop = stop.clone();
         let coordinator = thread::spawn(move || {
             let mut next = 0;
+            let mut cache_next = 0;
             while !worker_stop.load(Ordering::Acquire) {
                 thread::sleep(Duration::from_millis(100));
                 let Some(inner) = weak.upgrade() else {
                     break;
                 };
-                if !enqueue_maintenance(&inner, &sender, &mut next) {
+                if !enqueue_maintenance(&inner, &sender, &mut next, &mut cache_next) {
                     break;
                 }
             }
@@ -729,6 +731,7 @@ fn enqueue_maintenance(
     inner: &Inner,
     sender: &std::sync::mpsc::SyncSender<(Arc<Mutex<Slot>>, Option<usize>)>,
     next: &mut usize,
+    cache_next: &mut usize,
 ) -> bool {
     let slots: Vec<_> = inner.slots.lock().values().cloned().collect();
     if slots.is_empty() {
@@ -738,27 +741,36 @@ fn enqueue_maintenance(
     if inner.memory.under_pressure() {
         // Cache reclamation does no disk I/O and must precede selecting dirty
         // data. Otherwise warm readers make every tiny writer rotate its WAL.
-        for slot in &slots {
-            if let Some(guard) = slot.try_lock()
-                && let Some(core) = &guard.core
-            {
-                core.engine.reclaim_cache();
+        let mut reclaim = crate::storage::ReclaimBudget::default();
+        let start = *cache_next % slots.len();
+        for offset in 0..slots.len() {
+            if reclaim.exhausted() || !inner.memory.cache_pressure() {
+                break;
             }
+            let index = (start + offset) % slots.len();
+            let core = slots[index].try_lock().and_then(|guard| guard.core.clone());
+            if let Some(core) = core {
+                core.engine.reclaim_cache(&mut reclaim);
+            }
+            *cache_next = (index + 1) % slots.len();
         }
         if inner.memory.under_pressure() {
             let mut open = 0;
             let mut largest = (0, 0);
             for (index, slot) in slots.iter().enumerate() {
-                let Some(guard) = slot.try_lock() else {
-                    continue;
+                let core = {
+                    let Some(guard) = slot.try_lock() else {
+                        continue;
+                    };
+                    let Some(core) = &guard.core else { continue };
+                    open += 1;
+                    if guard.queued || guard.installing.is_some() {
+                        continue;
+                    }
+                    core.clone()
                 };
-                let Some(core) = &guard.core else { continue };
-                open += 1;
-                if guard.queued || guard.installing.is_some() || core.engine.needs_flush() {
-                    continue;
-                }
                 let bytes = core.engine.pressure_flush_bytes();
-                if bytes > largest.1 {
+                if bytes < inner.options.memtable_bytes && bytes > largest.1 {
                     largest = (index, bytes);
                 }
             }
@@ -1165,6 +1177,7 @@ mod tests {
                 .transact(|tx| tx.put(b"small".to_vec(), vec![1; 128]))
                 .unwrap();
             let pinned = tenants[0].engine().snapshot().unwrap();
+            thread::sleep(Duration::from_millis(1010));
             let padding = Budget {
                 global: store.owner.inner.memory.clone(),
                 tenant: Counter::new(64 << 20),
@@ -1173,7 +1186,12 @@ mod tests {
                 .reserve(padding.global.foreground_limit() - padding.global.used())
                 .unwrap();
             let (sender, receiver) = std::sync::mpsc::sync_channel(128);
-            assert!(enqueue_maintenance(&store.owner.inner, &sender, &mut 0));
+            assert!(enqueue_maintenance(
+                &store.owner.inner,
+                &sender,
+                &mut 0,
+                &mut 0
+            ));
             let jobs: Vec<_> = receiver.try_iter().collect();
             assert_eq!(
                 jobs.iter().filter(|(_, minimum)| minimum.is_some()).count(),
@@ -1218,7 +1236,12 @@ mod tests {
         let mut next = 0;
         let mut served = std::collections::HashSet::new();
         for _ in 0..64 {
-            assert!(enqueue_maintenance(&store.owner.inner, &sender, &mut next));
+            assert!(enqueue_maintenance(
+                &store.owner.inner,
+                &sender,
+                &mut next,
+                &mut 0
+            ));
             for _ in 0..5 {
                 let (slot, _) = receiver.try_recv().unwrap();
                 let mut slot = slot.lock();

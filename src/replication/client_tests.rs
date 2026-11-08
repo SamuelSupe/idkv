@@ -28,6 +28,72 @@ fn primary(options: Options) -> (tempfile::TempDir, Store, Service) {
     (dir, store, service)
 }
 
+#[test]
+fn replica_flush_retries_reclaim_contention_in_place_and_remains_bounded() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(
+        dir.path(),
+        Options {
+            global_memory_bytes: 64 << 20,
+            tenant_memory_bytes: 64 << 20,
+            memtable_bytes: 16 << 20,
+            cache_bytes: 0,
+            ..Options::default()
+        },
+    )
+    .unwrap();
+    let info = store.create_tenant("replica-flush-busy").unwrap();
+    let handle = store.tenant(info.id).unwrap();
+    handle.create_collection("docs").unwrap();
+    let receipt = handle
+        .put(
+            "docs",
+            json!({"_key":"confirmed","value":"x".repeat(128 << 10)}),
+            None,
+        )
+        .unwrap();
+    let (_, budget, _) = store.backup_context(info.id).unwrap();
+    let held = budget
+        .reserve(budget.global.foreground_limit() - budget.global.used())
+        .unwrap();
+    let (_flush, permit) = budget.for_flush(true).unwrap();
+    assert_eq!(handle.engine().flush().unwrap_err().code, "BUSY");
+    let engine = handle.engine().clone();
+    let (started, ready) = mpsc::channel();
+    let worker = std::thread::spawn(move || {
+        started.send(()).unwrap();
+        flush_replica_buffer(&engine)
+    });
+    ready.recv().unwrap();
+    std::thread::sleep(Duration::from_millis(25));
+    drop(permit);
+    worker.join().unwrap().unwrap();
+    drop(held);
+    assert_eq!(
+        handle.get("docs", "confirmed").unwrap().unwrap()["_rev"],
+        receipt.rev
+    );
+
+    handle
+        .put("docs", json!({"_key":"next","value":2}), None)
+        .unwrap();
+    let held = budget
+        .reserve(budget.global.foreground_limit() - budget.global.used())
+        .unwrap();
+    let (_flush, _permit) = budget.for_flush(true).unwrap();
+    let started = Instant::now();
+    assert_eq!(
+        flush_replica_buffer(handle.engine()).unwrap_err().code,
+        "BUSY"
+    );
+    assert!(started.elapsed() < Duration::from_secs(2));
+    drop(held);
+    assert_eq!(
+        handle.get("docs", "confirmed").unwrap().unwrap()["_rev"],
+        receipt.rev
+    );
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn transient_log_busy_uses_short_backoff_without_resetting_initialization_state() {
     let (_dir, a, sa) = primary(Options::default());

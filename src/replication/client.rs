@@ -85,6 +85,20 @@ struct PendingExport<'a> {
     exports: &'a Mutex<Exports>,
     preparation: Option<super::snapshot::Preparation>,
 }
+
+fn flush_replica_buffer(engine: &crate::storage::Engine) -> Result<()> {
+    let deadline = Instant::now() + Duration::from_millis(100);
+    loop {
+        match engine.flush() {
+            Err(error) if error.code == "BUSY" && Instant::now() < deadline => {
+                // Keep the downloaded, unappended page while another tenant
+                // finishes a short reclaim. Never retry an uncertain append.
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            result => return result,
+        }
+    }
+}
 impl Drop for PendingExport<'_> {
     fn drop(&mut self) {
         if let Some(preparation) = self.preparation.take() {
@@ -670,7 +684,7 @@ impl Service {
                 let applied = tokio::task::spawn_blocking(move || {
                     let handle = store.tenant(request.tenant)?;
                     if handle.engine().write_buffer_full() {
-                        handle.engine().flush()?;
+                        handle.engine().flush_if_needed()?;
                     }
                     let apply = || {
                         handle
@@ -681,7 +695,7 @@ impl Service {
                         Err(error) if error.code == "REPLICA_MEMORY_PRESSURE" => {
                             // Decode failures occur before append. Release buffered
                             // records once, without retrying uncertain WAL writes.
-                            handle.engine().flush()?;
+                            flush_replica_buffer(handle.engine())?;
                             apply().map_err(|error| {
                                 if error.code == "REPLICA_MEMORY_PRESSURE" {
                                     Error::new("REPLICA_SNAPSHOT_REQUIRED", error.to_string())

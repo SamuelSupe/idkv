@@ -3,6 +3,7 @@ mod engine;
 mod files;
 mod sst;
 mod wal;
+pub(crate) use cache::ReclaimBudget;
 
 pub(crate) use engine::LogRetention;
 pub(crate) use engine::ScanRange;

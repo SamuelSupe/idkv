@@ -1,0 +1,431 @@
+{
+  "native_roots": [
+    "/var/tmp/idkv-cache-followup-20261108",
+    "/var/tmp/idkv-memory-followup-progress-20261108",
+    "/var/tmp/idkv-memory-followup-mixed-20261108",
+    "/var/tmp/idkv-memory-followup-faults-20261108"
+  ],
+  "cache": {
+    "binary_sha256": "f79041a964c77871c7db46daae58e50df99606786d42f4ebfe3fdd3a3ec59354",
+    "options": {
+      "global_memory_bytes": 67108864,
+      "tenant_memory_bytes": 67108864,
+      "memtable_bytes": 16777216,
+      "cache_bytes": 8388608,
+      "target_sst_bytes": 4194304,
+      "level_base_bytes": 16777216,
+      "l0_stop": 24,
+      "tenant_disk_bytes": 4294967296
+    },
+    "after_warming": {
+      "memory_bytes": 53143356,
+      "memory_pressure": {
+        "active": 0,
+        "cache_active": 1,
+        "foreground_limit_bytes": 60751872,
+        "headroom_bytes": 6356992,
+        "headroom_in_use_bytes": 0
+      }
+    },
+    "pressure_metrics_verified": true,
+    "light_write": {
+      "calls": 120,
+      "calls_per_second": 7.839,
+      "p50_ms": 5.145,
+      "p95_ms": 8.529,
+      "p99_ms": 15.193,
+      "errors": {}
+    },
+    "light_flush_bytes": 0,
+    "light_compaction_bytes": 0,
+    "memory_samples": [
+      52199338,
+      52212808,
+      52226328,
+      52239848,
+      52253368,
+      52266888,
+      52280408,
+      52293928,
+      52307448,
+      52320968,
+      52334498,
+      52348078
+    ],
+    "retry_errors": {},
+    "confirmed_writes": 3704,
+    "verified_after_crash": 3585,
+    "acknowledged_mismatches": 0,
+    "result": "passed"
+  },
+  "zero_cache_pressure": {
+    "binary_sha256": "f79041a964c77871c7db46daae58e50df99606786d42f4ebfe3fdd3a3ec59354",
+    "options": {
+      "global_memory_bytes": 67108864,
+      "tenant_memory_bytes": 67108864,
+      "memtable_bytes": 16777216,
+      "cache_bytes": 0,
+      "target_sst_bytes": 4194304,
+      "level_base_bytes": 16777216,
+      "l0_stop": 24,
+      "tenant_disk_bytes": 4294967296
+    },
+    "elapsed_s": 27.67732983600581,
+    "operations": {
+      "heavy": {
+        "calls": 2500,
+        "calls_per_second": 90.327,
+        "p50_ms": 5.056,
+        "p95_ms": 8.676,
+        "p99_ms": 14.048,
+        "errors": {}
+      },
+      "light": {
+        "calls": 2500,
+        "calls_per_second": 90.327,
+        "p50_ms": 4.344,
+        "p95_ms": 7.619,
+        "p99_ms": 10.989,
+        "errors": {}
+      }
+    },
+    "retry_errors": {
+      "RESOURCE_EXHAUSTED": 2
+    },
+    "maximum_write_ms": {
+      "heavy": 393.6142849852331,
+      "light": 237.90842801099643
+    },
+    "verified_online": 2501,
+    "verified_after_restart": 2501,
+    "acknowledged_mismatches": 0,
+    "result": "passed"
+  },
+  "mixed": {
+    "result": "passed",
+    "before_restart": [
+      {
+        "node": 0,
+        "tenant": "af9967d6-f4bb-475b-a982-6c4499281632",
+        "documents": 5000,
+        "sha256": "032953ed73f4a7cda05a5bfbd93a53f8925f66035f44b881817ca80580cccb5d",
+        "acknowledged_mismatches": 0
+      },
+      {
+        "node": 0,
+        "tenant": "e56a5014-893e-4ced-b6f3-ebe51ff2557b",
+        "documents": 200,
+        "sha256": "4f0f77e111f1e0bdeccaa403a17214facc45c748bacff496ffae0decb6c5a717",
+        "acknowledged_mismatches": 0
+      },
+      {
+        "node": 1,
+        "tenant": "af9967d6-f4bb-475b-a982-6c4499281632",
+        "documents": 5000,
+        "sha256": "032953ed73f4a7cda05a5bfbd93a53f8925f66035f44b881817ca80580cccb5d",
+        "acknowledged_mismatches": 0
+      },
+      {
+        "node": 1,
+        "tenant": "e56a5014-893e-4ced-b6f3-ebe51ff2557b",
+        "documents": 200,
+        "sha256": "4f0f77e111f1e0bdeccaa403a17214facc45c748bacff496ffae0decb6c5a717",
+        "acknowledged_mismatches": 0
+      }
+    ],
+    "after_restart": [
+      {
+        "node": 0,
+        "tenant": "af9967d6-f4bb-475b-a982-6c4499281632",
+        "documents": 5000,
+        "sha256": "032953ed73f4a7cda05a5bfbd93a53f8925f66035f44b881817ca80580cccb5d",
+        "acknowledged_mismatches": 0
+      },
+      {
+        "node": 0,
+        "tenant": "e56a5014-893e-4ced-b6f3-ebe51ff2557b",
+        "documents": 200,
+        "sha256": "4f0f77e111f1e0bdeccaa403a17214facc45c748bacff496ffae0decb6c5a717",
+        "acknowledged_mismatches": 0
+      },
+      {
+        "node": 1,
+        "tenant": "af9967d6-f4bb-475b-a982-6c4499281632",
+        "documents": 5000,
+        "sha256": "032953ed73f4a7cda05a5bfbd93a53f8925f66035f44b881817ca80580cccb5d",
+        "acknowledged_mismatches": 0
+      },
+      {
+        "node": 1,
+        "tenant": "e56a5014-893e-4ced-b6f3-ebe51ff2557b",
+        "documents": 200,
+        "sha256": "4f0f77e111f1e0bdeccaa403a17214facc45c748bacff496ffae0decb6c5a717",
+        "acknowledged_mismatches": 0
+      }
+    ],
+    "final_validation": [
+      {
+        "node": 0,
+        "tenant": "af9967d6-f4bb-475b-a982-6c4499281632",
+        "documents": 5000,
+        "sha256": "e15cb70e0d1cdfc4d5ac92946c5f31baa08c5b2cf25d1a255cd208666179f2ee",
+        "acknowledged_mismatches": 0
+      },
+      {
+        "node": 0,
+        "tenant": "e56a5014-893e-4ced-b6f3-ebe51ff2557b",
+        "documents": 200,
+        "sha256": "bdd2a53452191332877da1f714caae775387f4679f5a9307127be3ad8da8da04",
+        "acknowledged_mismatches": 0
+      },
+      {
+        "node": 1,
+        "tenant": "af9967d6-f4bb-475b-a982-6c4499281632",
+        "documents": 5000,
+        "sha256": "e15cb70e0d1cdfc4d5ac92946c5f31baa08c5b2cf25d1a255cd208666179f2ee",
+        "acknowledged_mismatches": 0
+      },
+      {
+        "node": 1,
+        "tenant": "e56a5014-893e-4ced-b6f3-ebe51ff2557b",
+        "documents": 200,
+        "sha256": "bdd2a53452191332877da1f714caae775387f4679f5a9307127be3ad8da8da04",
+        "acknowledged_mismatches": 0
+      }
+    ],
+    "restart_to_write_and_replica_caught_up_ms": 98.5236830310896,
+    "gc_drained": {
+      "expiration_lag_ms": 0,
+      "gc": {
+        "completed_rounds": 674,
+        "history_sweep_active": false,
+        "knowledge_floor": 0,
+        "migration_complete": true,
+        "reclaimed_records": 4686,
+        "watermark_ms": 1794125393051
+      },
+      "next_expiration_ms": null,
+      "physical_reclamation": "as snapshots release and compaction completes",
+      "policy": {
+        "activated_seq": 862,
+        "legacy_expires_at_ms": 1794125296808,
+        "retention_seconds": 20
+      }
+    },
+    "restored_backup": {
+      "node": 2,
+      "tenant": "af9967d6-f4bb-475b-a982-6c4499281632",
+      "documents": 5000,
+      "sha256": "e15cb70e0d1cdfc4d5ac92946c5f31baa08c5b2cf25d1a255cd208666179f2ee",
+      "acknowledged_mismatches": 0
+    },
+    "admission_retries_total": {
+      "BUSY": 235
+    },
+    "phases": [
+      {
+        "phase": "baseline",
+        "light_writer": {
+          "calls": 400,
+          "calls_per_second": 20.0,
+          "p50_ms": 4.636,
+          "p95_ms": 10.041,
+          "p99_ms": 38.83,
+          "errors": {}
+        }
+      },
+      {
+        "phase": "combined",
+        "light_writer": {
+          "calls": 1397,
+          "calls_per_second": 19.956,
+          "p50_ms": 5.07,
+          "p95_ms": 9.029,
+          "p99_ms": 16.913,
+          "errors": {}
+        }
+      },
+      {
+        "phase": "recovery",
+        "light_writer": {
+          "calls": 500,
+          "calls_per_second": 19.997,
+          "p50_ms": 5.137,
+          "p95_ms": 8.986,
+          "p99_ms": 12.124,
+          "errors": {}
+        }
+      }
+    ]
+  },
+  "faults": [
+    {
+      "case": "enospc",
+      "result": "passed",
+      "tenant": "5741aca4-3012-49df-a216-d7f88fe5fcaa",
+      "before": {
+        "node": 0,
+        "tenant": "5741aca4-3012-49df-a216-d7f88fe5fcaa",
+        "documents": 2000,
+        "sha256": "982e513df21fb5971d7ab40a97768152f222e52bf1b9acb919aa0e32c4adf612",
+        "acknowledged_mismatches": 0
+      },
+      "disk_full": {
+        "available_before": 220516352,
+        "available_after": 0,
+        "filler_bytes": 220512256,
+        "mount": "TARGET                                                      SOURCE     FSTYPE OPTIONS\n/var/tmp/idkv-memory-followup-faults-20261108/enospc/volume /dev/loop0 ext4   rw,relatime\n"
+      },
+      "fault_response": {
+        "status": 500,
+        "body": {
+          "error": {
+            "code": "COMMIT_UNKNOWN",
+            "message": "IO_ERROR: No space left on device (os error 28)"
+          }
+        }
+      },
+      "poisoned_response": {
+        "status": 429,
+        "body": {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "WAL recovery needs free disk space; read-only until closed and reopened"
+          }
+        }
+      },
+      "uncertain_batch_visible_before_retry": 0,
+      "restart_to_safe_retry_ms": 47.73649398703128,
+      "after": {
+        "node": 0,
+        "tenant": "5741aca4-3012-49df-a216-d7f88fe5fcaa",
+        "documents": 2008,
+        "sha256": "1aaa210c39c8e38123dcf85fa7fa56209fb46f224665b75cbecb6c405006eed1",
+        "acknowledged_mismatches": 0
+      },
+      "failure_through_validation_ms": 139.83223302057013,
+      "confirmed_documents_preserved": 2000,
+      "confirmed_documents_missing": 0
+    },
+    {
+      "case": "wal-write-eio",
+      "result": "passed",
+      "tenant": "648e8267-dcd3-4f8d-824d-43b184cbfa19",
+      "before": {
+        "node": 0,
+        "tenant": "648e8267-dcd3-4f8d-824d-43b184cbfa19",
+        "documents": 2000,
+        "sha256": "982e513df21fb5971d7ab40a97768152f222e52bf1b9acb919aa0e32c4adf612",
+        "acknowledged_mismatches": 0
+      },
+      "fault_response": {
+        "status": 500,
+        "body": {
+          "error": {
+            "code": "COMMIT_UNKNOWN",
+            "message": "IO_ERROR: Input/output error (os error 5)"
+          }
+        }
+      },
+      "poisoned_response": {
+        "status": 500,
+        "body": {
+          "error": {
+            "code": "IO_ERROR",
+            "message": "Input/output error (os error 5)"
+          }
+        }
+      },
+      "uncertain_batch_visible_before_retry": 0,
+      "restart_to_safe_retry_ms": 41.831994021777064,
+      "after": {
+        "node": 0,
+        "tenant": "648e8267-dcd3-4f8d-824d-43b184cbfa19",
+        "documents": 2008,
+        "sha256": "1aaa210c39c8e38123dcf85fa7fa56209fb46f224665b75cbecb6c405006eed1",
+        "acknowledged_mismatches": 0
+      },
+      "failure_through_validation_ms": 115.32531800912693,
+      "confirmed_documents_preserved": 2000,
+      "confirmed_documents_missing": 0
+    },
+    {
+      "case": "wal-sync-eio",
+      "result": "passed",
+      "tenant": "e5334f9e-254f-4260-8211-baa7c6485b5c",
+      "before": {
+        "node": 0,
+        "tenant": "e5334f9e-254f-4260-8211-baa7c6485b5c",
+        "documents": 2000,
+        "sha256": "982e513df21fb5971d7ab40a97768152f222e52bf1b9acb919aa0e32c4adf612",
+        "acknowledged_mismatches": 0
+      },
+      "fault_response": {
+        "status": 500,
+        "body": {
+          "error": {
+            "code": "COMMIT_UNKNOWN",
+            "message": "IO_ERROR: Input/output error (os error 5)"
+          }
+        }
+      },
+      "poisoned_response": {
+        "status": 500,
+        "body": {
+          "error": {
+            "code": "IO_ERROR",
+            "message": "Input/output error (os error 5)"
+          }
+        }
+      },
+      "uncertain_batch_visible_before_retry": 8,
+      "restart_to_safe_retry_ms": 34.51795398723334,
+      "after": {
+        "node": 0,
+        "tenant": "e5334f9e-254f-4260-8211-baa7c6485b5c",
+        "documents": 2008,
+        "sha256": "1aaa210c39c8e38123dcf85fa7fa56209fb46f224665b75cbecb6c405006eed1",
+        "acknowledged_mismatches": 0
+      },
+      "failure_through_validation_ms": 113.17011102801189,
+      "confirmed_documents_preserved": 2000,
+      "confirmed_documents_missing": 0
+    }
+  ],
+  "journals": {
+    "/var/tmp/idkv-cache-followup-20261108/acknowledgements.jsonl": {
+      "rows": 3704,
+      "sha256": "8dae35bc9f83f3b1c1d1188e21a9f29491171c70ae8f6c2419e3ad07710ab3d5"
+    },
+    "/var/tmp/idkv-memory-followup-progress-20261108/acknowledgements.jsonl": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/var/tmp/idkv-memory-followup-progress-20261108/confirmed.jsonl": {
+      "rows": 5000,
+      "sha256": "5d9dc09b73b3e6940d866526668541ccdd6ade8312ff44c66bf4077c3bb93d15"
+    },
+    "/var/tmp/idkv-memory-followup-mixed-20261108/acknowledgements.jsonl": {
+      "rows": 6910,
+      "sha256": "9f910f8f05e7ccd41d55bc30f72dd696760f1ed699351a35a5a9e0a3447ce014"
+    },
+    "/var/tmp/idkv-memory-followup-faults-20261108/enospc/acknowledgements.jsonl": {
+      "rows": 21,
+      "sha256": "6a9b5b67ee68918d0b77a8b1d246391a6ef5530a391efe1d6093cdd5261353bf"
+    },
+    "/var/tmp/idkv-memory-followup-faults-20261108/wal-write-eio/acknowledgements.jsonl": {
+      "rows": 21,
+      "sha256": "1f0f1bc39b55e6849fa65f49b3a34e5d3987effbb05ab3a1ca91592f043c5c16"
+    },
+    "/var/tmp/idkv-memory-followup-faults-20261108/wal-sync-eio/acknowledgements.jsonl": {
+      "rows": 21,
+      "sha256": "cce19cbe59a9903146ddccabeb6c7961f5f11eb0b89fec75468247973f34de4a"
+    }
+  },
+  "final_tests": {
+    "passed": 232,
+    "failed": 0,
+    "replication_repeat_passed": 31,
+    "small_quota_setup_consecutive_passes": 10
+  }
+}

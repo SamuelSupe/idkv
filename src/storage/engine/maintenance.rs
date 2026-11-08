@@ -5,16 +5,26 @@ impl Engine {
         !view.frozen.is_empty()
             || view.mem.bytes.load(Ordering::Acquire) >= self.options.memtable_bytes
     }
-    pub(crate) fn reclaim_cache(&self) {
-        self.cache.reclaim(&self.budget.global);
+    pub(crate) fn reclaim_cache(&self, budget: &mut super::super::ReclaimBudget) {
+        self.cache.reclaim(&self.budget.global, budget);
     }
     pub(crate) fn pressure_flush_bytes(&self) -> usize {
         let Some(view) = self.view.try_read() else {
             return 0;
         };
-        // A snapshot or in-flight transaction keeps the old view alive after
-        // publication. Flushing it would spend memory without reclaiming it.
-        if !view.frozen.is_empty() || Arc::strong_count(&view.mem) != 1 {
+        if !view.frozen.is_empty() {
+            return 0;
+        }
+        let Some(leases) = self.snapshots.try_lock() else {
+            return 0;
+        };
+        // Short reads and transactions release old views promptly. Only a lease
+        // already held for a second predicts persistent retention after flush;
+        // a lease of a previous memtable cannot pin this one.
+        if leases.values().filter_map(Weak::upgrade).any(|lease| {
+            lease.created.elapsed() >= Duration::from_secs(1)
+                && Arc::ptr_eq(&lease.view.mem, &view.mem)
+        }) {
             return 0;
         }
         view.mem.bytes.load(Ordering::Acquire)
@@ -29,7 +39,6 @@ impl Engine {
         self.view.read().mem.bytes.load(Ordering::Acquire) >= self.options.memtable_bytes * 3
     }
     pub fn maintain(&self) -> Result<()> {
-        self.reclaim_cache();
         let started = Instant::now();
         // Small domain-local merges/promotions must not each wait for the next
         // coordinator tick. Bound the burst so another tenant can make progress;
@@ -567,15 +576,10 @@ impl Engine {
             let mut processed = 0usize;
             while let Some(item) = heap.pop() {
                 processed += 1;
-                if processed.is_multiple_of(256) {
-                    let pressure = self.budget.global.under_pressure()
-                        && self.pressure_flush_bytes() >= (self.options.memtable_bytes / 8).max(1);
+                if processed.is_multiple_of(256) && self.write_buffer_full() {
                     // Flush under the maintenance ownership already held by this
                     // merge. The merge's selected SSTs remain immutable and pinned.
-                    if (self.write_buffer_full() || pressure)
-                        && let Some((budget, _reclaim)) =
-                            self.budget.for_flush(pressure && !self.needs_flush())
-                    {
+                    if let Some((budget, _reclaim)) = self.budget.for_flush(false) {
                         self.flush_locked(&budget)?;
                         self.reserve_disk(METADATA_RESERVE, true)?;
                     }
@@ -857,12 +861,124 @@ mod tests {
     }
 
     #[test]
+    fn pressure_review_short_readers_do_not_exclude_hot_memtables() {
+        let (_dir, engine, budget) = pressure_engine(16 << 20);
+        engine
+            .transact(|tx| tx.put(b"confirmed".to_vec(), vec![7; 128 << 10]))
+            .unwrap();
+        let reader = engine.snapshot().unwrap();
+        let pending = engine.clone();
+        let (entered, ready) = std::sync::mpsc::channel();
+        let (release, wait) = std::sync::mpsc::channel();
+        let writer = std::thread::spawn(move || {
+            pending.transact(|tx| {
+                tx.put(b"confirmed".to_vec(), vec![8; 128 << 10])?;
+                entered.send(()).unwrap();
+                wait.recv().unwrap();
+                Ok(())
+            })
+        });
+        ready.recv().unwrap();
+        assert!(engine.pressure_flush_bytes() > 0);
+        let held = budget
+            .reserve(budget.global.foreground_limit() - budget.global.used())
+            .unwrap();
+        engine.flush_under_pressure(1).unwrap();
+        assert!(engine.metrics()["flush_bytes"].as_u64().unwrap() > 0);
+        drop(held);
+        release.send(()).unwrap();
+        writer.join().unwrap().unwrap();
+        assert_eq!(
+            reader
+                .get(b"confirmed", &mut ReadStats::default())
+                .unwrap()
+                .unwrap()
+                .len(),
+            128 << 10
+        );
+        assert_eq!(
+            reader
+                .get(b"confirmed", &mut ReadStats::default())
+                .unwrap()
+                .unwrap()[0],
+            7
+        );
+        assert_eq!(
+            engine
+                .snapshot()
+                .unwrap()
+                .get(b"confirmed", &mut ReadStats::default())
+                .unwrap()
+                .unwrap()[0],
+            8
+        );
+    }
+
+    #[test]
+    fn pressure_review_reads_remain_cached_while_flush_pressure_is_latched() {
+        let (_dir, engine, budget) = pressure_engine(16 << 20);
+        engine
+            .transact(|tx| tx.put(b"confirmed".to_vec(), vec![7; 128 << 10]))
+            .unwrap();
+        engine.flush().unwrap();
+        let mut pressure = budget.reserve((50 << 20) - budget.global.used()).unwrap();
+        assert!(budget.global.under_pressure());
+        pressure.shrink(pressure.size() - (5 << 20));
+        assert!(budget.global.under_pressure());
+        let mut first = ReadStats::default();
+        engine
+            .snapshot()
+            .unwrap()
+            .get(b"confirmed", &mut first)
+            .unwrap();
+        assert!(first.blocks_read > 0);
+        let mut repeat = ReadStats::default();
+        engine
+            .snapshot()
+            .unwrap()
+            .get(b"confirmed", &mut repeat)
+            .unwrap();
+        assert_eq!(
+            repeat.blocks_read, 0,
+            "latched flush pressure must not disable warm reads"
+        );
+    }
+
+    #[test]
+    fn index_blocks_stay_warm_during_cache_pressure_and_reclamation() {
+        let (_dir, engine, budget) = pressure_engine(16 << 20);
+        engine
+            .transact(|tx| tx.put(b"confirmed".to_vec(), vec![7; 128 << 10]))
+            .unwrap();
+        engine.flush().unwrap();
+        let _pressure = budget.reserve((50 << 20) - budget.global.used()).unwrap();
+        assert!(budget.global.cache_pressure());
+        let mut first = ReadStats::default();
+        engine
+            .snapshot()
+            .unwrap()
+            .get(b"confirmed", &mut first)
+            .unwrap();
+        assert_eq!(first.blocks_read, 2);
+        engine.reclaim_cache(&mut Default::default());
+        let mut repeat = ReadStats::default();
+        engine
+            .snapshot()
+            .unwrap()
+            .get(b"confirmed", &mut repeat)
+            .unwrap();
+        assert_eq!(repeat.blocks_read, 1);
+        assert_eq!(repeat.cache_hits, 1);
+    }
+
+    #[test]
     fn pressure_does_not_rotate_snapshot_pinned_memtable() {
         let (_dir, engine, budget) = pressure_engine(16 << 20);
         engine
             .transact(|tx| tx.put(b"confirmed".to_vec(), vec![7; 128 << 10]))
             .unwrap();
         let snapshot = engine.snapshot().unwrap();
+        std::thread::sleep(Duration::from_millis(1010));
         let _pressure = budget
             .reserve(budget.global.foreground_limit() - budget.global.used())
             .unwrap();
@@ -943,6 +1059,7 @@ mod tests {
         assert!(cached > 1 << 20);
         let before = engine.metrics()["flush_bytes"].as_u64().unwrap();
         let _pressure = budget.reserve((50 << 20) - budget.global.used()).unwrap();
+        engine.reclaim_cache(&mut Default::default());
         for n in 0..12_u32 {
             engine
                 .transact(|tx| tx.put(b"small".to_vec(), n.to_be_bytes().to_vec()))

@@ -770,7 +770,7 @@ fn load_frame(
         referenced: AtomicBool::new(index),
         reservation: memory,
     });
-    if (admit || index) && !budget.global.under_pressure() {
+    if index || (admit && !budget.global.cache_pressure()) {
         cache.insert(key, frame.clone());
     }
     Ok((

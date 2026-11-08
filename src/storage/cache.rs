@@ -26,34 +26,63 @@ struct Shard {
     entries: HashMap<CacheKey, Arc<Frame>>,
     clock: VecDeque<CacheKey>,
     bytes: usize,
+    index_bytes: usize,
+}
+pub(crate) struct ReclaimBudget {
+    bytes: usize,
+    entries: usize,
+}
+impl Default for ReclaimBudget {
+    fn default() -> Self {
+        Self {
+            bytes: 8 << 20,
+            entries: 512,
+        }
+    }
+}
+impl ReclaimBudget {
+    pub(crate) fn exhausted(&self) -> bool {
+        self.bytes == 0 || self.entries == 0
+    }
 }
 pub struct Cache {
     shards: Vec<Mutex<Shard>>,
     capacity: usize,
 }
 impl Cache {
-    pub(crate) fn reclaim(&self, global: &crate::resources::Counter) {
+    pub(crate) fn reclaim(&self, global: &crate::resources::Counter, budget: &mut ReclaimBudget) {
         for shard in &self.shards {
-            if !global.under_pressure() {
+            if budget.exhausted() || !global.cache_pressure() {
                 return;
             }
             let Some(mut shard) = shard.try_lock() else {
                 continue;
             };
-            for _ in 0..shard.clock.len().saturating_mul(2) {
-                if !global.under_pressure() {
+            for _ in 0..shard.clock.len() {
+                if budget.exhausted() || !global.cache_pressure() {
                     return;
                 }
                 let Some(key) = shard.clock.pop_front() else {
                     break;
                 };
+                budget.entries -= 1;
                 let frame = shard.entries.get(&key).unwrap();
-                if frame.referenced.swap(false, Ordering::Relaxed) {
+                // Keep a small index working set even while dirty data keeps
+                // flush pressure latched. Near exhaustion or on allocation
+                // failure this protection yields to the hard memory budget.
+                if matches!(&frame.contents, Contents::Index(_))
+                    && shard.index_bytes <= self.capacity.min(128 << 10)
+                    && global.used() < global.foreground_limit() - global.foreground_limit() / 16
+                {
                     shard.clock.push_back(key);
                     continue;
                 }
                 let frame = shard.entries.remove(&key).unwrap();
                 shard.bytes -= frame.reservation.size();
+                if matches!(&frame.contents, Contents::Index(_)) {
+                    shard.index_bytes -= frame.reservation.size();
+                }
+                budget.bytes = budget.bytes.saturating_sub(frame.reservation.size());
             }
         }
     }
@@ -62,7 +91,6 @@ impl Cache {
         budget: &crate::resources::Budget,
         bytes: usize,
     ) -> crate::Result<Reservation> {
-        self.reclaim(&budget.global);
         let mut result = budget.reserve(bytes);
         if result.is_ok() {
             return result;
@@ -80,6 +108,9 @@ impl Cache {
                 }
                 let frame = shard.entries.remove(&key).unwrap();
                 shard.bytes -= frame.reservation.size();
+                if matches!(&frame.contents, Contents::Index(_)) {
+                    shard.index_bytes -= frame.reservation.size();
+                }
                 drop(frame);
                 result = budget.reserve(bytes);
                 if result.is_ok() {
@@ -97,6 +128,7 @@ impl Cache {
                         entries: HashMap::new(),
                         clock: VecDeque::new(),
                         bytes: 0,
+                        index_bytes: 0,
                     })
                 })
                 .collect(),
@@ -133,10 +165,16 @@ impl Cache {
             } else {
                 let old = shard.entries.remove(&old_key).unwrap();
                 shard.bytes -= old.reservation.size();
+                if matches!(&old.contents, Contents::Index(_)) {
+                    shard.index_bytes -= old.reservation.size();
+                }
             }
         }
         if shard.bytes + size <= self.capacity {
             shard.bytes += size;
+            if matches!(&frame.contents, Contents::Index(_)) {
+                shard.index_bytes += size;
+            }
             shard.clock.push_back(key);
             shard.entries.insert(key, frame);
         }
@@ -147,6 +185,7 @@ impl Cache {
             shard.entries.clear();
             shard.clock.clear();
             shard.bytes = 0;
+            shard.index_bytes = 0;
         }
     }
 }
@@ -155,6 +194,39 @@ impl Cache {
 mod tests {
     use super::*;
     use crate::resources::{Budget, Counter};
+
+    #[test]
+    fn cache_reclamation_stops_near_entry_and_obeys_the_shared_scan_limit() {
+        let budget = Budget {
+            global: Counter::with_headroom(2048, 256),
+            tenant: Counter::new(2048),
+        };
+        let fixed = budget.reserve(1200).unwrap();
+        let cache = Cache::new(4096);
+        for n in 0..8 {
+            cache.insert(
+                CacheKey(Uuid::from_u128(n), 0),
+                Arc::new(Frame {
+                    contents: Contents::Data(vec![]),
+                    referenced: AtomicBool::new(true),
+                    reservation: Arc::new(budget.reserve(64).unwrap()),
+                }),
+            );
+        }
+        assert!(budget.global.under_pressure());
+        let mut limited = ReclaimBudget {
+            bytes: 64,
+            entries: 2,
+        };
+        cache.reclaim(&budget.global, &mut limited);
+        assert!(limited.exhausted());
+        assert_eq!(budget.global.used(), 1648);
+        cache.reclaim(&budget.global, &mut ReclaimBudget::default());
+        assert!(!budget.global.cache_pressure());
+        assert!(budget.global.under_pressure());
+        assert!(budget.global.used() > budget.global.foreground_limit() * 3 / 4);
+        assert!(budget.global.used() > fixed.size());
+    }
 
     #[test]
     fn a_failed_reservation_reclaims_only_the_cache_space_it_needs() {

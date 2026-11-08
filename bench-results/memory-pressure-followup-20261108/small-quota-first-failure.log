@@ -1,0 +1,16 @@
+failures:
+
+---- an_oversized_log_page_rebuilds_instead_of_retrying_forever stdout ----
+
+thread 'an_oversized_log_page_rebuilds_instead_of_retrying_forever' panicked at tests/replication.rs:2426:29:
+called `Result::unwrap()` on an `Err` value: Error { code: "RESOURCE_EXHAUSTED", message: "tenant memory budget exhausted", location: None }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+tenant 449ecdfa-1042-4de6-b7a8-efb797bc5312 clean-close watermark: IO_ERROR: No such file or directory (os error 2)
+
+
+failures:
+    an_oversized_log_page_rebuilds_instead_of_retrying_forever
+
+test result: FAILED. 30 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 45.04s
+
+error: test failed, to rerun pass `--test replication`

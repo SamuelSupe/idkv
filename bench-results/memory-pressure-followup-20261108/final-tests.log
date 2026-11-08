@@ -1,0 +1,314 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.48s
+     Running unittests src/lib.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv-da4845942d3e9983)
+
+running 103 tests
+test backup::jobs::tests::checkpoint_hashing_does_not_keep_the_serving_tenant_open ... ok
+test backup::tests::readers_and_forget_remain_usable_after_slow_or_uncertain_metadata_updates ... ok
+test backup::transfer::tests::staging_counts_uncovered_files_and_failed_workspaces ... ok
+test codec::typed::tests::typed_records_match_json_decoder_and_reject_malformed_nodes ... ok
+test http::body::tests::response_budget_failure_preserves_completed_mutation_status ... ok
+test http::transport::tests::connections_are_bounded_and_stalled_writes_expire ... ok
+test http::transport::tests::header_and_keep_alive_deadlines_release_idle_connections ... ok
+test http::transport::tests::slow_handler_is_not_a_socket_write_timeout ... ok
+test identity::time::tests::normal_clock_discipline_refreshes_the_anchor_but_jumps_still_fail_closed ... ok
+test identity::time::tests::timezone_precision_and_clock_discontinuities ... ok
+test replication::client::tests::checkpoint_free_space_reserve_rejects_replication_and_local_backup_without_poisoning_writes ... ok
+test replication::client::tests::checkpoint_preparation_does_not_lock_out_other_tenant_log_progress ... ok
+test replication::client::tests::export_cleanup_failure_does_not_fail_logs_and_is_retried ... ok
+test replication::client::tests::failed_preparation_releases_the_slot_for_a_new_export ... ok
+test replication::client::tests::replica_flush_retries_reclaim_contention_in_place_and_remains_bounded ... ok
+test replication::client::tests::transient_log_busy_uses_short_backoff_without_resetting_initialization_state ... ok
+test replication::client::tests::unwinding_checkpoint_preparation_releases_the_reserved_export ... ok
+test resources::tests::abandoned_reads_skip_io_but_dropped_write_handles_still_execute ... ok
+test resources::tests::concurrent_quota_shrink_preserves_reservation_bound ... ok
+test resources::tests::durable_io_bypasses_read_backlog_without_starving_reads ... ok
+test resources::tests::flush_workspace_releases_only_unused_credit_and_keeps_published_memory_charged ... ok
+test resources::tests::pressure_hysteresis_and_headroom_usage_follow_shared_reservations ... ok
+test resources::tests::pressure_review_normal_flushes_cannot_admit_the_same_free_memory ... ok
+test resources::tests::reads_overtake_bulk_output_while_background_io_still_progresses ... ok
+test resources::tests::reclamation_headroom_is_exclusive_and_respects_hard_limits ... ok
+test storage::cache::tests::a_failed_reservation_reclaims_only_the_cache_space_it_needs ... ok
+test storage::cache::tests::cache_reclamation_stops_near_entry_and_obeys_the_shared_scan_limit ... ok
+test storage::engine::maintenance::tests::cache_pressure_does_not_flush_each_small_write ... ok
+test storage::engine::maintenance::tests::checkpoint_copy_stops_at_a_chunk_boundary_after_wal_failure ... ok
+test storage::engine::maintenance::tests::compaction_flushes_growing_memtables_before_finishing_the_merge ... ok
+test storage::engine::maintenance::tests::disk_reconciliation_accounts_for_concurrent_wal_growth ... ok
+test storage::engine::maintenance::tests::flush_output_overtakes_a_read_backlog_and_keeps_confirmed_data ... ok
+test storage::engine::maintenance::tests::idle_disk_accounting_tracks_wal_growth_and_checks_drift_near_quota ... ok
+test storage::engine::maintenance::tests::index_blocks_stay_warm_during_cache_pressure_and_reclamation ... ok
+test storage::engine::maintenance::tests::missing_checkpointed_wal_does_not_block_flush_or_lose_current_data ... ok
+test storage::engine::maintenance::tests::ordinary_flush_does_not_wait_for_another_tenants_pressure_flush ... ok
+test storage::engine::maintenance::tests::pressure_does_not_rotate_snapshot_pinned_memtable ... ok
+test storage::engine::maintenance::tests::pressure_flush_contention_does_not_abort_maintenance ... ok
+test storage::engine::maintenance::tests::pressure_flush_progresses_without_lending_headroom_to_reads ... ok
+test storage::engine::maintenance::tests::pressure_review_reads_remain_cached_while_flush_pressure_is_latched ... ok
+test storage::engine::maintenance::tests::pressure_review_short_readers_do_not_exclude_hot_memtables ... ok
+test storage::engine::maintenance::tests::wal_rotation_does_not_hold_writer_lock_during_durable_publication ... ok
+test storage::engine::read::tests::disjoint_ranges_preserve_spanning_versions_and_tombstones ... ok
+test storage::engine::read::tests::keys_created_after_a_snapshot_still_consume_the_scan_budget ... ok
+test storage::engine::replication::tests::malformed_page_is_rejected_before_mutation_and_valid_replay_survives_restart ... ok
+test storage::engine::write::tests::active_replication_leases_survive_long_preparation_and_transfer_but_not_idle_expiry ... ok
+test storage::engine::write::tests::cleanup_can_use_reserved_disk_headroom_when_user_writes_are_backpressured ... ok
+test storage::engine::write::tests::consistency_deadline_does_not_wait_for_the_writer_mutex ... ok
+test storage::engine::write::tests::hot_retries_do_not_keep_an_uncertain_engine_alive ... ok
+test storage::engine::write::tests::index_admission_waits_for_compaction_before_running_the_transaction_once ... ok
+test storage::engine::write::tests::query_deadline_does_not_become_a_total_write_or_maintenance_deadline ... ok
+test storage::engine::write::tests::read_only_transaction_waits_for_the_observed_group_commit ... ok
+test storage::engine::write::tests::replication_exports_do_not_keep_uncertain_engines_alive ... ok
+test storage::engine::write::tests::replication_lease_operations_do_not_acquire_engine_ownership ... ok
+test storage::engine::write::tests::saturated_read_queue_cannot_poison_another_tenants_writer ... ok
+test storage::engine::write::tests::snapshot_admission_failure_does_not_leak_disk_reservations ... ok
+test storage::engine::write::tests::transaction_evaluation_does_not_block_preceding_commit_confirmation ... ok
+test storage::engine::write::tests::transaction_prefix_scans_charge_tombstones_and_leave_failed_work_uncommitted ... ok
+test storage::engine::write::tests::transaction_snapshot_contains_its_write_when_flush_rotates_during_evaluation ... ok
+test storage::engine::write::tests::uncertain_wal_tail_cannot_be_fenced_or_cached_as_the_old_position ... ok
+test storage::sst::point_get_preserves_versions_and_tombstones_across_index_partitions ... ok
+test storage::sst::prefix_compressed_keys_cannot_bypass_the_decoded_frame_budget ... ok
+test storage::wal::tests::buffered_replication_preserves_frames_limits_and_pinned_end ... ok
+test tenant::catalog::tests::collection_resolution_preserves_snapshot_generations ... ok
+test tenant::manager::admission::tests::draining_interrupts_consistency_waits_and_timeout_reopens_old_readers ... ok
+test tenant::manager::admission::tests::failed_management_drain_preserves_snapshots_and_does_not_pin_node_authority ... ok
+test tenant::manager::admission::tests::failed_management_drain_resumes_index_without_reopening ... ok
+test tenant::manager::admission::tests::full_cold_admission_pool_does_not_reject_global_lock_contention ... ok
+test tenant::manager::admission::tests::management_drain_keeps_a_writable_index_build_resumable ... ok
+test tenant::manager::admission::tests::management_interrupts_index_backpressure_and_preserves_recoverable_builds ... ok
+test tenant::manager::lifecycle::tests::a_tenant_backup_lock_does_not_block_another_tenants_backup ... ok
+test tenant::manager::quota::tests::a_failed_shrink_keeps_existing_data_readable_across_restart ... ok
+test tenant::manager::quota::tests::quota_validation_does_not_hold_the_node_barrier_or_slot_during_io ... ok
+test tenant::manager::quota::tests::replica_quota_shrink_flushes_a_lagging_checkpoint_under_the_old_budget ... ok
+test tenant::manager::registry::tests::capacity_rejection_keeps_registry_and_staging_unchanged ... ok
+test tenant::manager::registry::tests::legacy_full_history_migrates_without_losing_status_or_uuid_protection ... ok
+test tenant::manager::registry::tests::legacy_read_startup_defers_upgrade_until_registry_publication ... ok
+test tenant::manager::replication::tests::cached_role_positions_retry_brief_contention_and_bound_a_persistent_lock ... ok
+test tenant::manager::replication::tests::replica_quota_updates_wait_until_restore_preparation_finishes ... ok
+test tenant::manager::tests::a_full_maintenance_queue_keeps_scheduling_later_tenants ... ok
+test tenant::manager::tests::a_temporary_position_reader_does_not_close_a_reused_or_reopened_engine ... ok
+test tenant::manager::tests::cancelled_cold_get_admission_does_not_hold_execution_permits ... ok
+test tenant::manager::tests::cold_export_reuses_the_open_engine_until_its_log_pages_catch_up ... ok
+test tenant::manager::tests::deleted_tenant_history_does_not_consume_live_tenant_capacity ... ok
+test tenant::manager::tests::io_open_failures_are_cached_briefly_and_recover_without_manual_close ... ok
+test tenant::manager::tests::locked_cold_tenant_does_not_block_async_health_or_timers ... ok
+test tenant::manager::tests::management_drains_overlapping_short_readers_before_changing_quota ... ok
+test tenant::manager::tests::pressure_maintenance_selects_large_unpinned_tenants_and_scales_its_floor ... ok
+test tenant::manager::tests::replica_checkpoint_validation_shares_the_serving_tenant_budget ... ok
+test tenant::retention::tests::cached_retention_metadata_observes_changes_within_the_same_atomic_batch ... ok
+test tenant::retention::tests::expired_receipts_never_repeat_generated_writes_and_current_documents_survive ... ok
+test tenant::retention::tests::expiry_batches_resume_after_tombstones_and_revisit_backdated_insertions ... ok
+test tenant::retention::tests::knowledge_and_history_gc_advance_through_tombstones_without_rolling_back_expiry ... ok
+test tenant::retention::tests::later_history_sweeps_seek_past_the_previously_reclaimed_identifier_tail ... ok
+test tenant::retention::tests::persisted_expiry_watermark_rejects_retry_after_clock_rollback ... ok
+test tenant::retention::tests::physical_gc_page_observes_deletions_staged_in_the_same_transaction ... ok
+test tenant::retention::tests::receipt_metadata_does_not_reduce_the_public_document_batch_limit ... ok
+test tenant::retention::tests::retention_makes_progress_with_small_byte_batches_and_long_receipt_keys ... ok
+test tenant::retention::tests::retention_migration_pages_physical_records_instead_of_stalling_at_tombstones ... ok
+test tenant::retention::tests::rolling_publications_continue_beyond_the_collection_limit ... ok
+test tenant::retention::tests::shortening_policy_cannot_remove_receipts_while_the_original_token_is_valid ... ok
+test tenant::retention::tests::superseded_publications_preserve_shared_current_collections_and_old_snapshots ... ok
+test tenant::retention::tests::temporal_gc_keeps_predecessor_baselines_including_empty_timelines_and_latest_state ... ok
+
+test result: ok. 103 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 113.58s
+
+     Running unittests src/bin/crash_probe.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/crash_probe-3cda2296e5ca21b1)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/server.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv-5b3bea7f02536d25)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/restore_remote.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv_restore-15c7ced665025993)
+
+running 0 tests
+
+test result:      Running tests/backup.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/backup-aac84cda2a61954c)
+ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 11 tests
+test backup_during_writes_and_compaction_has_one_commit_boundary ... ok
+test completed_snapshot_limit_still_applies_after_empty_history_is_ignored ... ok
+test concurrent_backups_count_active_staging_only_once ... ok
+test corrupted_objects_and_traversal_manifests_never_replace_live_data ... ok
+test fresh_store_import_and_import_journal_crash_recovery ... ok
+test interrupted_uploads_resume_and_only_complete_markers_are_visible ... ok
+test opendal_incremental_backup_restore_and_reference_retention ... ok
+test pruning_reclaims_snapshot_directories_and_legacy_empty_history ... ok
+test remote_restore_recovers_a_tenant_that_cannot_open ... ok
+test restore_after_switch_is_never_replayed_over_new_writes ... ok
+test storage_failure_and_quota_do_not_stop_local_commits ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 33.09s
+
+     Running tests/dsl.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/dsl-058eff9da779ef39)
+
+running 7 tests
+test bounded_tenant_caches_bind_fresh_values_and_survive_catalog_changes ... ok
+test catalog_cache_never_uses_new_indexes_for_an_old_cursor ... ok
+test commands_bind_values_and_keep_native_index_and_write_contracts ... ok
+test compiled_filters_keep_missing_null_types_nested_fields_and_boolean_precedence ... ok
+test pagination_preserves_snapshot_and_parameter_identity_across_cached_syntax ... ok
+test repeated_large_bindings_are_budgeted_before_expansion ... ok
+test syntax_limits_parameter_injection_and_errors_never_execute_partial_commands ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.96s
+
+     Running tests/engine.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/engine-981d405c4bf85dae)
+
+running 29 tests
+test array_projection_preserves_shape_in_covering_indexes ... ok
+test atomic_indexes_unique_conflicts_and_conditional_updates ... ok
+test backup_restore_does_not_change_other_tenants ... ok
+test batched_nonunique_ranges_reuse_blocks_and_preserve_limits ... ok
+test binary_document_precision_projection_and_types ... ok
+test bounded_primary_ranges_keep_snapshot_and_encoded_key_boundaries ... ok
+test collection_gc_resumes_and_preserves_recreated_collection_and_old_snapshot ... ok
+test compaction_output_over_quota_preserves_published_files_and_pinned_reads ... ok
+test concurrent_group_commits_survive_reopen ... ok
+test confirmed_large_document_remains_readable_after_flush_compaction_and_reopen ... ok
+test covering_ranges_sparse_unique_and_boolean_queries ... ok
+test deleting_another_tenant_preserves_unpublished_restore_preparation ... ok
+test failed_unique_build_can_be_repaired_and_nonunique_lookup_is_bounded ... ok
+test flush_can_use_actual_output_space_without_multiplying_memtable_allocations ... ok
+test idle_tenant_waits_for_cursor_lease_then_reopens_with_new_runtime ... ok
+test index_multi_ranges_match_scan_with_sparse_and_typed_values ... ok
+test indexed_ranges_match_reference_with_negative_values_and_ties ... ok
+test live_handles_and_snapshots_keep_manager_ownership_after_store_drop ... ok
+test local_backup_capacity_is_bounded_and_deletion_releases_capacity ... ok
+test model_comparison_over_flush_compaction_and_recovery ... ok
+test online_index_build_tracks_concurrent_changes ... ok
+test pagination_keeps_snapshot_during_compaction_and_updates ... ok
+test quota_scan_and_expired_cursor_leave_other_tenants_usable ... ok
+test restore_cleanup_error_still_fences_the_tenant_until_store_recovery ... ok
+test shared_memory_pressure_flushes_small_tenants_and_preserves_confirmed_data ... ok
+test small_disk_compaction_keeps_confirmed_updates_readable_without_raising_quota ... ok
+test tenant_delete_respects_a_standalone_engine_directory_lock ... ok
+test tenant_files_keys_and_unique_values_are_isolated ... ok
+test write_result_limit_rejects_before_committing_and_multiget_restores_order ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 55.88s
+
+     Running tests/http.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/http-36ba96b4e84739bd)
+
+running 13 tests
+test authenticated_http_workflow_and_cross_tenant_cursor_denial ... ok
+test cursor_quotas_leave_point_reads_and_other_principals_available ... ok
+test document_history_never_controls_server_history_headers ... ok
+test dsl_http_authorizes_parsed_commands_and_reuses_read_only_cached_syntax ... ok
+test exhausted_execution_pool_rejects_without_polling_the_body ... ok
+test four_index_builds_leave_maintenance_and_lifecycle_capacity_available ... ok
+test identity_http_authentication_managed_writes_and_unforgeable_provenance ... ok
+test local_backup_deletion_requires_admin_and_preserves_tenant_scope ... ok
+test management_history_headers_do_not_reopen_closed_tenants ... ok
+test one_tenant_index_build_cannot_fill_the_maintenance_pool ... ok
+test remote_backup_jobs_require_admin_and_preserve_tenant_scope ... ok
+test server_exposes_not_ready_before_closing_its_listener_on_sigterm ... ok
+test slow_bodies_do_not_consume_other_tenants_execution_capacity ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.62s
+
+     Running tests/identity.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/identity-7213c11406cdb333)
+
+running 5 tests
+test automatic_time_preserves_expiration_future_plans_and_concurrent_receipts ... ok
+test constraints_and_expanded_limits_roll_back_every_record ... ok
+test history_boundaries_noops_replace_and_recovery ... ok
+test randomized_interval_corrections_match_a_discrete_reference ... ok
+test restore_never_reuses_a_discarded_knowledge_uuid ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.35s
+
+     Running tests/middleware.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/middleware-7008c0deda8fe1e8)
+
+running 14 tests
+test batch_checks_use_pre_write_state_and_retries_do_not_recheck ... ok
+test composed_read_limits_are_aggregate_and_failure_releases_cursors ... ok
+test composed_reads_enforce_total_response_and_memory_limits ... ok
+test composed_reads_share_snapshot_during_writes_and_cursor_continuation ... ok
+test generic_dataset_versions_keep_cursor_snapshot_across_publication_and_gc ... ok
+test generic_kv_http_routes_enforce_roles_tenants_and_publish_without_lookup ... ok
+test http_read_controls_cover_dsl_waiting_and_dropped_requests ... ok
+test http_small_waits_do_not_starve_other_tenants_and_rotation_is_stable ... ok
+test otlp_exports_correlated_redacted_signals_and_switches_independently ... ok
+test publication_freezes_all_mutations_and_keeps_queued_versions ... ok
+test request_read_controls_preserve_limits_cursors_and_independent_requests ... ok
+test restored_history_rejects_aba_and_receipts_survive_restart ... ok
+test retention_backup_restore_preserves_deadlines_and_blocks_absent_old_history_retries ... ok
+test tenant_retention_http_preserves_current_data_and_rejects_expired_retries ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.30s
+
+     Running tests/recovery.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/recovery-f6a81e561e45aac2)
+
+running 15 tests
+test durable_retry_receipt_and_generated_document_recover_together ... ok
+test failed_tenant_creation_is_reclaimed_without_losing_registered_data ... ok
+test healthy_reopens_reuse_synced_wals_and_unsealed_recovery_rewrites_them ... ok
+test incomplete_tail_is_discarded_but_complete_corruption_is_rejected ... ok
+test missing_or_foreign_sst_never_becomes_an_empty_database ... ok
+test process_crashes_preserve_atomic_documents_and_indexes ... ok
+test recovery_rewrite_survives_abort_before_and_after_publication ... ok
+test restore_journal_survives_both_directory_switch_crashes ... ok
+test retention_cleanup_recovers_before_and_after_atomic_progress_commits ... ok
+test startup_reclaims_legacy_unregistered_databases_but_preserves_a_live_engine ... ok
+test temporal_corrections_history_heads_and_receipts_recover_atomically ... ok
+test tenant_creation_recovers_staging_and_both_registry_publications ... ok
+test uncertain_backup_publication_retries_the_same_job_without_duplicate_restart_state ... ok
+test uncertain_tenant_deletion_rejects_new_writes_until_restart ... ok
+test unpublished_flush_failure_is_retryable_without_checkpoint_gaps ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 17.02s
+
+     Running tests/reliability.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/reliability-22cd774b881d533b)
+
+running 4 tests
+test a_cursor_can_only_be_consumed_once_under_concurrent_requests ... ok
+test compiled_sort_matches_reference_type_order_and_full_document_topk ... ok
+test hot_history_and_tombstones_keep_snapshot_order_through_flush_and_recovery ... ok
+test multi_get_budget_includes_missing_rows_and_json_array_framing ...      Running tests/replication.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/replication-6f3b3c02e26346c8)
+ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.52s
+
+
+running 31 tests
+test an_oversized_log_page_rebuilds_instead_of_retrying_forever ... ok
+test busy_catalog_tenant_does_not_stall_healthy_replication ... ok
+test catchup_keeps_progress_while_source_head_and_other_tenants_advance ... ok
+test checked_batches_and_generic_publications_survive_replication_and_switch ... ok
+test checkpoint_install_waits_for_readers_without_retransferring_and_other_tenants_progress ... ok
+test checkpoint_transfer_pins_wal_beyond_the_retention_byte_window ... ok
+test checkpoint_validation_uses_the_tenant_quota_instead_of_the_node_default ... ok
+test client_fallback_never_bypasses_budgets_or_cursor_affinity_and_checks_capabilities ... ok
+test client_read_apis_preserve_positions_and_pin_all_cursor_forms ... ok
+test cloned_clients_reuse_primary_discovery_for_sequential_writes ... ok
+test hot_short_readers_and_cached_cursors_cannot_starve_checkpoint_installation ... ok
+test idle_replication_does_not_reopen_cold_engines_and_read_tokens_wait_for_apply ... ok
+test incompatible_successor_is_rejected_before_fencing_primary ... ok
+test indexed_http_writes_replicate_with_the_same_small_quota ... ok
+test indexed_pages_fit_global_budget_or_rebuild_without_infinite_retry ... ok
+test large_checkpoint_keeps_its_log_pin_beyond_twice_normal_retention ... ok
+test legacy_replication_protocol_is_rejected_before_data_or_fencing ... ok
+test middleware_client_retries_receipts_across_switch_and_requires_read_history ... ok
+test one_corrupt_source_tenant_does_not_delete_its_replica_or_stop_healthy_tenants ... ok
+test persisted_fence_survives_restart_and_stale_initial_role_configuration ... ok
+test replication_credentials_and_promotion_proof_are_enforced ... ok
+test retained_log_expiry_installs_checkpoint_and_replicates_catalog_deletion ... ok
+test retention_replicates_expiry_and_current_state_across_switchover ... ok
+test slow_checkpoint_initialization_does_not_hold_healthy_replication_cycles ... ok
+test small_memory_budget_supports_replication_and_switchover ... ok
+test stalled_export_has_a_bounded_wal_window_and_cannot_pin_the_slot_forever ... ok
+test streams_atomic_indexes_deletes_and_switches_both_directions ... ok
+test switchover_preserves_every_acknowledged_write_racing_with_the_fence ... ok
+test temporal_history_receipts_and_effective_time_survive_replication_and_switchover ... ok
+test untracked_export_hands_off_its_slot_and_advances_the_retained_log ... ok
+test valid_small_quota_configuration_keeps_replicating_after_bootstrap ... ok
+
+test result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 43.95s

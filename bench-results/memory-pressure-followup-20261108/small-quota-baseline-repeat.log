@@ -1,0 +1,28 @@
+baseline trial 1 exit 0
+baseline trial 2 exit 0
+baseline trial 3 exit 0
+baseline trial 4 exit 101
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running tests/replication.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/replication-6f3b3c02e26346c8)
+
+running 1 test
+test an_oversized_log_page_rebuilds_instead_of_retrying_forever ... FAILED
+
+failures:
+
+---- an_oversized_log_page_rebuilds_instead_of_retrying_forever stdout ----
+
+thread 'an_oversized_log_page_rebuilds_instead_of_retrying_forever' panicked at tests/replication.rs:2426:29:
+called `Result::unwrap()` on an `Err` value: Error { code: "RESOURCE_EXHAUSTED", message: "tenant memory budget exhausted", location: None }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+tenant 39159ae4-1741-43b0-944c-097b79bfb173 clean-close watermark: IO_ERROR: No such file or directory (os error 2)
+
+
+failures:
+    an_oversized_log_page_rebuilds_instead_of_retrying_forever
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 30 filtered out; finished in 1.67s
+
+error: test failed, to rerun pass `--test replication`
+
+baseline failures 1

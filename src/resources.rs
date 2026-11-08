@@ -38,6 +38,29 @@ impl std::ops::Deref for Bytes {
 pub struct Counter {
     state: Arc<CounterState>,
     use_headroom: bool,
+    allowance: Option<Arc<Mutex<FlushAllowance>>>,
+}
+#[derive(Debug)]
+struct FlushAllowance {
+    available: usize,
+    active: bool,
+}
+pub(crate) struct FlushPermit<'a> {
+    _exclusive: Option<MutexGuard<'a, ()>>,
+    prepaid: Option<Arc<Counter>>,
+}
+impl Drop for FlushPermit<'_> {
+    fn drop(&mut self) {
+        if let Some(counter) = &self.prepaid {
+            let mut allowance = counter.allowance.as_ref().unwrap().lock();
+            allowance.active = false;
+            counter
+                .state
+                .used
+                .fetch_sub(allowance.available, Ordering::AcqRel);
+            allowance.available = 0;
+        }
+    }
 }
 #[derive(Debug)]
 struct CounterState {
@@ -46,6 +69,7 @@ struct CounterState {
     quota: RwLock<()>,
     headroom: usize,
     pressure: AtomicBool,
+    cache_pressure: AtomicBool,
     reclaim: Mutex<()>,
 }
 impl Counter {
@@ -60,12 +84,28 @@ impl Counter {
                 quota: RwLock::new(()),
                 headroom: headroom.min(limit / 8),
                 pressure: AtomicBool::new(false),
+                cache_pressure: AtomicBool::new(false),
                 reclaim: Mutex::new(()),
             }),
             use_headroom: false,
+            allowance: None,
         })
     }
     fn take(&self, size: usize) -> bool {
+        if let Some(allowance) = &self.allowance {
+            let mut allowance = allowance.lock();
+            if allowance.active {
+                let prepaid = allowance.available.min(size);
+                if !self.take_unreserved(size - prepaid) {
+                    return false;
+                }
+                allowance.available -= prepaid;
+                return true;
+            }
+        }
+        self.take_unreserved(size)
+    }
+    fn take_unreserved(&self, size: usize) -> bool {
         if size == 0 {
             return true;
         }
@@ -82,25 +122,43 @@ impl Counter {
             })
             .is_ok()
     }
+    fn give(&self, size: usize) {
+        if let Some(allowance) = &self.allowance {
+            let mut allowance = allowance.lock();
+            if allowance.active {
+                allowance.available += size;
+                return;
+            }
+        }
+        self.state.used.fetch_sub(size, Ordering::AcqRel);
+    }
     pub(crate) fn foreground_limit(&self) -> usize {
         self.limit().saturating_sub(self.state.headroom)
     }
     pub(crate) fn under_pressure(&self) -> bool {
         let limit = self.foreground_limit();
-        let _ = self
-            .state
-            .pressure
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |active| {
-                let used = self.used();
-                let next = self.state.headroom != 0
-                    && if active {
-                        used > limit - limit / 4
-                    } else {
-                        used >= limit - limit / 8
-                    };
-                (next != active).then_some(next)
-            });
-        self.state.pressure.load(Ordering::Acquire)
+        self.pressure_state(&self.state.pressure, limit - limit / 4)
+    }
+    pub(crate) fn cache_pressure(&self) -> bool {
+        let limit = self.foreground_limit();
+        self.pressure_state(
+            &self.state.cache_pressure,
+            limit - limit / 8 - (limit / 64).min(4 << 20),
+        )
+    }
+    fn pressure_state(&self, state: &AtomicBool, exit: usize) -> bool {
+        let limit = self.foreground_limit();
+        let _ = state.fetch_update(Ordering::AcqRel, Ordering::Acquire, |active| {
+            let used = self.used();
+            let next = self.state.headroom != 0
+                && if active {
+                    used > exit
+                } else {
+                    used >= limit - limit / 8
+                };
+            (next != active).then_some(next)
+        });
+        state.load(Ordering::Acquire)
     }
     pub(crate) fn headroom(&self) -> usize {
         self.state.headroom
@@ -133,16 +191,38 @@ impl Budget {
     // Only the pressure flush holding this guard may spend the protected part
     // of the global budget. Normal flushes remain concurrent. Both views charge
     // the same counters; neither global nor tenant hard limits are bypassed.
-    pub(crate) fn for_flush(&self, pressure: bool) -> Option<(Self, Option<MutexGuard<'_, ()>>)> {
-        if self.global.headroom() == 0
-            || (!pressure
-                && self
-                    .global
-                    .foreground_limit()
-                    .saturating_sub(self.global.used())
-                    >= self.global.headroom())
-        {
-            return Some((self.clone(), None));
+    pub(crate) fn for_flush(&self, pressure: bool) -> Option<(Self, FlushPermit<'_>)> {
+        if self.global.headroom() == 0 {
+            return Some((
+                self.clone(),
+                FlushPermit {
+                    _exclusive: None,
+                    prepaid: None,
+                },
+            ));
+        }
+        if !pressure && self.global.take(self.global.headroom()) {
+            // Charge workspace before admitting another flush. Temporary output
+            // allocations borrow it and refund it until publication finishes;
+            // live SST metadata remains charged after unused credit is released.
+            let counter = Arc::new(Counter {
+                state: self.global.state.clone(),
+                use_headroom: false,
+                allowance: Some(Arc::new(Mutex::new(FlushAllowance {
+                    available: self.global.headroom(),
+                    active: true,
+                }))),
+            });
+            return Some((
+                Self {
+                    global: counter.clone(),
+                    tenant: self.tenant.clone(),
+                },
+                FlushPermit {
+                    _exclusive: None,
+                    prepaid: Some(counter),
+                },
+            ));
         }
         let guard = self.global.state.reclaim.try_lock()?;
         Some((
@@ -150,20 +230,25 @@ impl Budget {
                 global: Arc::new(Counter {
                     state: self.global.state.clone(),
                     use_headroom: true,
+                    allowance: None,
                 }),
                 tenant: self.tenant.clone(),
             },
-            Some(guard),
+            FlushPermit {
+                _exclusive: Some(guard),
+                prepaid: None,
+            },
         ))
     }
     pub(crate) fn foreground(&self) -> Self {
-        if !self.global.use_headroom {
+        if !self.global.use_headroom && self.global.allowance.is_none() {
             return self.clone();
         }
         Self {
             global: Arc::new(Counter {
                 state: self.global.state.clone(),
                 use_headroom: false,
+                allowance: None,
             }),
             tenant: self.tenant.clone(),
         }
@@ -173,7 +258,7 @@ impl Budget {
             return Err(Error::limit("global memory budget exhausted"));
         }
         if !self.tenant.take(size) {
-            self.global.state.used.fetch_sub(size, Ordering::AcqRel);
+            self.global.give(size);
             return Err(Error::limit("tenant memory budget exhausted"));
         }
         Ok(Reservation {
@@ -194,32 +279,16 @@ impl Reservation {
     pub fn shrink(&mut self, size: usize) {
         if size < self.size {
             let released = self.size - size;
-            self.budget
-                .global
-                .state
-                .used
-                .fetch_sub(released, Ordering::AcqRel);
-            self.budget
-                .tenant
-                .state
-                .used
-                .fetch_sub(released, Ordering::AcqRel);
+            self.budget.global.give(released);
+            self.budget.tenant.give(released);
             self.size = size;
         }
     }
 }
 impl Drop for Reservation {
     fn drop(&mut self) {
-        self.budget
-            .global
-            .state
-            .used
-            .fetch_sub(self.size, Ordering::AcqRel);
-        self.budget
-            .tenant
-            .state
-            .used
-            .fetch_sub(self.size, Ordering::AcqRel);
+        self.budget.global.give(self.size);
+        self.budget.tenant.give(self.size);
     }
 }
 
@@ -547,6 +616,62 @@ struct TenantIo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn pressure_review_normal_flushes_cannot_admit_the_same_free_memory() {
+        let budget = Budget {
+            global: Counter::with_headroom(128, 16),
+            tenant: Counter::new(128),
+        };
+        let held = budget.reserve(80).unwrap();
+        let (_protected, _exclusive) = budget.for_flush(true).unwrap();
+        let flushes: Vec<_> = (0..4).filter_map(|_| budget.for_flush(false)).collect();
+        assert_eq!(
+            flushes.len(),
+            2,
+            "each admitted flush needs its own 16 bytes"
+        );
+        assert!(
+            budget.reserve(1).is_err(),
+            "foreground callers must not spend promised workspace"
+        );
+        let work: Vec<_> = flushes
+            .iter()
+            .map(|(flush, _)| flush.reserve(16).unwrap())
+            .collect();
+        assert!(flushes[0].0.foreground().reserve(1).is_err());
+        drop(work);
+        for (flush, _) in &flushes {
+            drop(flush.reserve(16).unwrap());
+        }
+        drop(flushes);
+        assert_eq!(budget.global.used(), 80);
+        drop(held);
+        assert_eq!(budget.global.used(), 0);
+    }
+    #[test]
+    fn flush_workspace_releases_only_unused_credit_and_keeps_published_memory_charged() {
+        let budget = Budget {
+            global: Counter::with_headroom(128, 16),
+            tenant: Counter::new(128),
+        };
+        let (flush, permit) = budget.for_flush(false).unwrap();
+        assert_eq!(budget.global.used(), 16);
+        let mut metadata = flush.reserve(12).unwrap();
+        assert_eq!(budget.global.used(), 16);
+        budget.tenant.set_limit(12).unwrap();
+        assert!(flush.reserve(1).is_err());
+        metadata.shrink(8);
+        assert_eq!(budget.tenant.used(), 8);
+        assert_eq!(budget.global.used(), 16);
+        drop(permit);
+        assert_eq!(budget.global.used(), 8);
+        assert_eq!(flush.foreground().global.used(), 8);
+        drop(metadata);
+        assert_eq!(budget.global.used(), 0);
+        assert_eq!(budget.tenant.used(), 0);
+        drop(flush.reserve(4).unwrap());
+        assert_eq!(budget.global.used(), 0);
+    }
     #[test]
     fn pressure_hysteresis_and_headroom_usage_follow_shared_reservations() {
         let budget = Budget {

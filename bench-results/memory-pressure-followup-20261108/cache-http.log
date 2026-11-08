@@ -1,0 +1,43 @@
+{
+  "binary_sha256": "f79041a964c77871c7db46daae58e50df99606786d42f4ebfe3fdd3a3ec59354",
+  "options": {
+    "global_memory_bytes": 67108864,
+    "tenant_memory_bytes": 67108864,
+    "memtable_bytes": 16777216,
+    "cache_bytes": 8388608,
+    "target_sst_bytes": 4194304,
+    "level_base_bytes": 16777216,
+    "l0_stop": 24,
+    "tenant_disk_bytes": 4294967296
+  },
+  "pressure_metrics_verified": true,
+  "light_write": {
+    "calls": 120,
+    "calls_per_second": 7.839,
+    "p50_ms": 5.145,
+    "p95_ms": 8.529,
+    "p99_ms": 15.193,
+    "errors": {}
+  },
+  "light_flush_bytes": 0,
+  "light_compaction_bytes": 0,
+  "memory_samples": [
+    52199338,
+    52212808,
+    52226328,
+    52239848,
+    52253368,
+    52266888,
+    52280408,
+    52293928,
+    52307448,
+    52320968,
+    52334498,
+    52348078
+  ],
+  "retry_errors": {},
+  "confirmed_writes": 3704,
+  "verified_after_crash": 3585,
+  "acknowledged_mismatches": 0,
+  "result": "passed"
+}

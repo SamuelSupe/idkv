@@ -1,0 +1,40 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.47s
+     Running unittests src/lib.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv-da4845942d3e9983)
+
+running 3 tests
+test resources::tests::pressure_review_normal_flushes_cannot_admit_the_same_free_memory ... FAILED
+test storage::engine::maintenance::tests::pressure_review_reads_remain_cached_while_flush_pressure_is_latched ... FAILED
+test storage::engine::maintenance::tests::pressure_review_short_readers_do_not_exclude_hot_memtables ... FAILED
+
+failures:
+
+---- resources::tests::pressure_review_normal_flushes_cannot_admit_the_same_free_memory stdout ----
+
+thread 'resources::tests::pressure_review_normal_flushes_cannot_admit_the_same_free_memory' panicked at src/resources.rs:556:9:
+assertion `left == right` failed: each admitted flush needs its own 16 bytes
+  left: 4
+ right: 2
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- storage::engine::maintenance::tests::pressure_review_reads_remain_cached_while_flush_pressure_is_latched stdout ----
+
+thread 'storage::engine::maintenance::tests::pressure_review_reads_remain_cached_while_flush_pressure_is_latched' panicked at src/storage/engine/maintenance.rs:884:9:
+assertion `left == right` failed: latched flush pressure must not disable warm reads
+  left: 2
+ right: 0
+
+---- storage::engine::maintenance::tests::pressure_review_short_readers_do_not_exclude_hot_memtables stdout ----
+
+thread 'storage::engine::maintenance::tests::pressure_review_short_readers_do_not_exclude_hot_memtables' panicked at src/storage/engine/maintenance.rs:865:9:
+assertion failed: engine.pressure_flush_bytes() > 0
+
+
+failures:
+    resources::tests::pressure_review_normal_flushes_cannot_admit_the_same_free_memory
+    storage::engine::maintenance::tests::pressure_review_reads_remain_cached_while_flush_pressure_is_latched
+    storage::engine::maintenance::tests::pressure_review_short_readers_do_not_exclude_hot_memtables
+
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 96 filtered out; finished in 0.05s
+
+error: test failed, to rerun pass `--lib`
