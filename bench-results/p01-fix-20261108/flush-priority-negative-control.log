@@ -1,0 +1,22 @@
+   Compiling tenant-kv v0.10.1 (/var/tmp/idkv-p01-before-source-20261108)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.59s
+     Running unittests src/lib.rs (/var/tmp/idkv-p01-before-target-20261108/debug/deps/tenant_kv-321137334cf1859a)
+
+running 1 test
+test storage::engine::maintenance::tests::flush_output_overtakes_a_read_backlog_and_keeps_confirmed_data ... FAILED
+
+failures:
+
+---- storage::engine::maintenance::tests::flush_output_overtakes_a_read_backlog_and_keeps_confirmed_data stdout ----
+
+thread 'storage::engine::maintenance::tests::flush_output_overtakes_a_read_backlog_and_keeps_confirmed_data' panicked at src/storage/engine/maintenance.rs:958:9:
+queued reads overtook the flush output
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    storage::engine::maintenance::tests::flush_output_overtakes_a_read_backlog_and_keeps_confirmed_data
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 86 filtered out; finished in 0.19s
+
+error: test failed, to rerun pass `--lib`

@@ -35,7 +35,7 @@ use uuid::Uuid;
 pub use write::Transaction;
 
 pub(crate) struct LogRetention {
-    engine: Arc<Engine>,
+    engine: Weak<Engine>,
     id: Uuid,
 }
 struct LogPin {
@@ -45,21 +45,27 @@ struct LogPin {
 }
 impl LogRetention {
     pub(crate) fn valid(&self) -> bool {
-        self.engine
-            .log_retention
-            .lock()
-            .get(&self.id)
-            .is_some_and(|pin| pin.expires.is_none_or(|expires| expires > Instant::now()))
+        self.engine.upgrade().is_some_and(|engine| {
+            !engine.recovery_required()
+                && engine
+                    .log_retention
+                    .lock()
+                    .get(&self.id)
+                    .is_some_and(|pin| pin.expires.is_none_or(|expires| expires > Instant::now()))
+        })
     }
     pub(crate) fn renew(&self, position: u64) -> bool {
         self.renew_at(position, Instant::now())
     }
     fn renew_at(&self, position: u64, now: Instant) -> bool {
-        let mut leases = self.engine.log_retention.lock();
+        let Some(engine) = self.engine.upgrade() else {
+            return false;
+        };
+        let mut leases = engine.log_retention.lock();
         let Some(pin) = leases.get_mut(&self.id) else {
             return false;
         };
-        if pin.expires.is_some_and(|expires| expires <= now) {
+        if engine.recovery_required() || pin.expires.is_some_and(|expires| expires <= now) {
             leases.remove(&self.id);
             return false;
         }
@@ -70,7 +76,9 @@ impl LogRetention {
 }
 impl Drop for LogRetention {
     fn drop(&mut self) {
-        self.engine.log_retention.lock().remove(&self.id);
+        if let Some(engine) = self.engine.upgrade() {
+            engine.log_retention.lock().remove(&self.id);
+        }
     }
 }
 
@@ -546,7 +554,7 @@ impl Engine {
     }
     pub(crate) fn retain_replication_log(self: &Arc<Self>) -> LogRetention {
         let lease = LogRetention {
-            engine: self.clone(),
+            engine: Arc::downgrade(self),
             id: Uuid::new_v4(),
         };
         let retention = self
@@ -568,6 +576,16 @@ impl Engine {
             },
         );
         lease
+    }
+    pub(crate) fn replication_pinned(&self) -> bool {
+        // Healthy pins keep WAL history open, but exports must not own a failed
+        // engine and prevent the manager from reopening it for recovery.
+        !self.recovery_required()
+            && self
+                .log_retention
+                .lock()
+                .values()
+                .any(|pin| pin.expires.is_none_or(|expires| expires > Instant::now()))
     }
     fn pin(self: &Arc<Self>, view: View, seq: u64, seconds: u64) -> Result<Snapshot> {
         let mut registry = self.snapshots.lock();

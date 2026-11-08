@@ -1,0 +1,29 @@
+{
+  "no-export": {
+    "blocked_s": 0.007793176977429539,
+    "recovery_after_release_ms": 0.5721260095015168,
+    "acknowledged_data_verified": true,
+    "post_heal_error_count": 0
+  },
+  "manual-export": {
+    "blocked_s": 6.0511287890258245,
+    "recovery_after_release_ms": 7.901136006694287,
+    "acknowledged_data_verified": true,
+    "post_heal_error_count": 111
+  },
+  "replica-repeat": {
+    "blocked_after_device_healed_s": 6.03810662595788,
+    "recovery_after_transfer_resumed_ms": 445.2018049778417,
+    "switchover_while_blocked": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'IO_ERROR: Input/output error (os error 5)'}}",
+    "acknowledged_data_verified_on_both_nodes": true,
+    "post_heal_error_count": 112
+  },
+  "replica-restart": {
+    "blocked_after_device_healed_s": 6.016233446949627,
+    "recovery_after_transfer_resumed_ms": 459.40228598192334,
+    "switchover_while_blocked": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'IO_ERROR: Input/output error (os error 5)'}}",
+    "acknowledged_data_verified_on_both_nodes": true,
+    "acknowledged_data_verified_after_sigkill_restart": true,
+    "post_heal_error_count": 112
+  }
+}

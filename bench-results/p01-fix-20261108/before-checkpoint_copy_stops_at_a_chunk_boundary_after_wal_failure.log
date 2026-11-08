@@ -1,0 +1,21 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running unittests src/lib.rs (/var/tmp/idkv-p01-before-target-20261108/debug/deps/tenant_kv-321137334cf1859a)
+
+running 1 test
+test storage::engine::maintenance::tests::checkpoint_copy_stops_at_a_chunk_boundary_after_wal_failure ... FAILED
+
+failures:
+
+---- storage::engine::maintenance::tests::checkpoint_copy_stops_at_a_chunk_boundary_after_wal_failure stdout ----
+
+thread 'storage::engine::maintenance::tests::checkpoint_copy_stops_at_a_chunk_boundary_after_wal_failure' panicked at src/storage/engine/maintenance.rs:828:41:
+called `Result::unwrap_err()` on an `Ok` value: ()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    storage::engine::maintenance::tests::checkpoint_copy_stops_at_a_chunk_boundary_after_wal_failure
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 86 filtered out; finished in 0.11s
+
+error: test failed, to rerun pass `--lib`

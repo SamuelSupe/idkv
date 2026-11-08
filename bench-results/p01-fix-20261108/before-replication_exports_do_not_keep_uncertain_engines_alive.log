@@ -1,0 +1,22 @@
+   Compiling tenant-kv v0.10.1 (/var/tmp/idkv-p01-before-source-20261108)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.42s
+     Running unittests src/lib.rs (/var/tmp/idkv-p01-before-target-20261108/debug/deps/tenant_kv-321137334cf1859a)
+
+running 1 test
+test storage::engine::write::tests::replication_exports_do_not_keep_uncertain_engines_alive ... FAILED
+
+failures:
+
+---- storage::engine::write::tests::replication_exports_do_not_keep_uncertain_engines_alive stdout ----
+
+thread 'storage::engine::write::tests::replication_exports_do_not_keep_uncertain_engines_alive' panicked at src/storage/engine/write.rs:873:35:
+export prevented WAL recovery: COMMIT_UNKNOWN: tenant is draining for WAL recovery
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    storage::engine::write::tests::replication_exports_do_not_keep_uncertain_engines_alive
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 86 filtered out; finished in 4.22s
+
+error: test failed, to rerun pass `--lib`

@@ -1,0 +1,461 @@
+{
+  "binary_sha256": "67dc2958814917b4d584abb88052c205a372a0880198976d1e83c353ee5840fa",
+  "errors": [],
+  "tenant": "a6f79214-2ed9-4f4f-859b-c6741896075c",
+  "injected_write_error": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'IO_ERROR: Input/output error (os error 5)'}}",
+  "recovered_while_transfer_paused": true,
+  "blocked_after_device_healed_s": 0.006802757969126105,
+  "source_status_while_blocked": {
+    "node": {
+      "version": 1,
+      "protocol": 3,
+      "node": "82f33360-9c52-4f36-812e-9f339469c65c",
+      "cluster": "6d580d61-b612-400e-a810-4b56a78e1a72",
+      "epoch": "05c18d70-930d-4907-ade0-5a5af1a8b9ca",
+      "enabled": true,
+      "role": "primary",
+      "source": null,
+      "fence": null,
+      "parent": null,
+      "forced": false,
+      "log_retention_bytes": 268435456
+    },
+    "tenants": [
+      {
+        "info": {
+          "id": "4575451b-246b-4c0c-ab2e-c0219fb60e09",
+          "name": "healthy-control",
+          "generation": "61252e9e-a14a-49a4-9a19-257dc93f3617",
+          "history": "7c350fe4-16ff-4254-94f9-bb53db200406",
+          "memory_bytes": 134217728,
+          "disk_bytes": 4294967296
+        },
+        "seq": 7
+      },
+      {
+        "info": {
+          "id": "a6f79214-2ed9-4f4f-859b-c6741896075c",
+          "name": "slow-bootstrap",
+          "generation": "661b0e1d-ed99-4c54-97c9-6563327e2921",
+          "history": "c5478280-3bf4-4a31-a9d6-b6fa0573acf7",
+          "memory_bytes": 134217728,
+          "disk_bytes": 4294967296
+        },
+        "seq": 9
+      }
+    ],
+    "unavailable": [],
+    "last_error": null,
+    "completed_cycles": 0,
+    "initialization_attempts": 0,
+    "initialization_failures": 0,
+    "reinitializations": 0,
+    "initializing": [],
+    "waiting_for_readers": [],
+    "initialization_errors": {}
+  },
+  "source_role_after_switchover_attempt": "primary",
+  "other_tenant_write_succeeded": true,
+  "recovery_after_transfer_resumed_ms": 0.6709590088576078,
+  "acknowledged_data_verified_on_both_nodes": true,
+  "replica_status_final": {
+    "node": {
+      "version": 1,
+      "protocol": 3,
+      "node": "f8c79780-43d3-47ac-97c2-69fcb8796d42",
+      "cluster": "6d580d61-b612-400e-a810-4b56a78e1a72",
+      "epoch": "05c18d70-930d-4907-ade0-5a5af1a8b9ca",
+      "enabled": true,
+      "role": "replica",
+      "source": {
+        "node": "82f33360-9c52-4f36-812e-9f339469c65c",
+        "epoch": "05c18d70-930d-4907-ade0-5a5af1a8b9ca"
+      },
+      "fence": null,
+      "parent": null,
+      "forced": false,
+      "log_retention_bytes": 268435456
+    },
+    "tenants": [
+      {
+        "info": {
+          "id": "4575451b-246b-4c0c-ab2e-c0219fb60e09",
+          "name": "healthy-control",
+          "generation": "61252e9e-a14a-49a4-9a19-257dc93f3617",
+          "history": "7c350fe4-16ff-4254-94f9-bb53db200406",
+          "memory_bytes": 134217728,
+          "disk_bytes": 4294967296
+        },
+        "seq": 8
+      },
+      {
+        "info": {
+          "id": "a6f79214-2ed9-4f4f-859b-c6741896075c",
+          "name": "slow-bootstrap",
+          "generation": "661b0e1d-ed99-4c54-97c9-6563327e2921",
+          "history": "c5478280-3bf4-4a31-a9d6-b6fa0573acf7",
+          "memory_bytes": 134217728,
+          "disk_bytes": 4294967296
+        },
+        "seq": 9
+      }
+    ],
+    "unavailable": [],
+    "last_error": null,
+    "completed_cycles": 46,
+    "initialization_attempts": 6,
+    "initialization_failures": 4,
+    "reinitializations": 0,
+    "initializing": [
+      "a6f79214-2ed9-4f4f-859b-c6741896075c"
+    ],
+    "waiting_for_readers": [],
+    "initialization_errors": {
+      "a6f79214-2ed9-4f4f-859b-c6741896075c": "NOT_FOUND: replication snapshot"
+    }
+  },
+  "acknowledged_data_verified_after_sigkill_restart": true,
+  "planned_switchover_verified": true,
+  "network_events": [
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381721.18040458
+    },
+    {
+      "path": "/v1/replication/snapshot",
+      "status": 409,
+      "time": 381721.183076917
+    },
+    {
+      "path": "/v1/replication/snapshot",
+      "status": 200,
+      "time": 381721.222249585
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 381721.266944592
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381721.290926494
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 381721.309826098
+    },
+    {
+      "path": "/v1/replication/snapshot",
+      "status": 409,
+      "time": 381721.342553717
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 381721.351681019
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381721.394937442
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 381721.396553193
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 381721.4408447
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 381721.484324415
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381721.50133435
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 381721.531713717
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 381721.575710099
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381721.612509139
+    },
+    {
+      "path": "/v1/replication/snapshot",
+      "status": 409,
+      "time": 381721.613289932
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 381721.626761905
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 381721.671278954
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381721.720618675
+    },
+    {
+      "path": "/v1/replication/log",
+      "status": 200,
+      "time": 381721.723125136
+    },
+    {
+      "path": "/v1/replication/log",
+      "status": 200,
+      "time": 381721.733322689
+    },
+    {
+      "path": "/v1/replication/log",
+      "status": 200,
+      "time": 381721.818103491
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381721.873281385
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381721.985036799
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381722.090045915
+    },
+    {
+      "path": "/v1/replication/snapshot",
+      "status": 200,
+      "time": 381722.13290617
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 381722.193907529
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381722.195368322
+    },
+    {
+      "path": "/v1/replication/log",
+      "status": 200,
+      "time": 381722.19632224
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 404,
+      "time": 381722.237094493
+    },
+    {
+      "path": "/v1/replication/snapshot/release",
+      "status": 200,
+      "time": 381722.281242
+    },
+    {
+      "path": "/v1/replication/log",
+      "status": 200,
+      "time": 381722.292661346
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381722.345126821
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381722.500772534
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381722.604323606
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381722.711907516
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381722.826478309
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381722.932026467
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381723.038577334
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381723.146606536
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381723.252753903
+    },
+    {
+      "path": "/v1/replication/snapshot",
+      "status": 200,
+      "time": 381723.253506987
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 381723.25459903
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 381723.299269621
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 381723.346382381
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381723.360022146
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 381723.391281514
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 381723.396550686
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 381723.442331653
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381723.463793718
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 381723.490928665
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 381723.53463138
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381723.569236834
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 381723.580272847
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 381723.626069897
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381723.676376036
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 381723.684490086
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 381723.686791672
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 381723.730925346
+    },
+    {
+      "path": "/v1/replication/log",
+      "status": 200,
+      "time": 381723.782844236
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381723.827546077
+    },
+    {
+      "path": "/v1/replication/log",
+      "status": 200,
+      "time": 381723.838561589
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381723.908942375
+    },
+    {
+      "path": "/v1/replication/log",
+      "status": 200,
+      "time": 381723.926433436
+    },
+    {
+      "path": "/v1/replication/log",
+      "status": 200,
+      "time": 381723.968750316
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381724.010113986
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 381724.052593366
+    }
+  ]
+}

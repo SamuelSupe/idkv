@@ -804,6 +804,106 @@ mod tests {
     }
 
     #[test]
+    fn replication_exports_do_not_keep_uncertain_engines_alive() {
+        use crate::replication::{Config, LogRequest, Role, Service};
+        for catching_up in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let store = crate::Store::open(dir.path(), Options::default()).unwrap();
+            let token = dir.path().join("peer-token");
+            fs::write(&token, "replication-recovery-test-secret").unwrap();
+            let service = Service::open(
+                store.clone(),
+                Config {
+                    cluster: Uuid::new_v4(),
+                    role: Role::Primary,
+                    peer_url: "http://127.0.0.1:1".into(),
+                    token_file: token,
+                    poll_ms: 10,
+                    log_retention_bytes: 1 << 20,
+                },
+            )
+            .unwrap();
+            let info = store.create_tenant("export-recovery").unwrap();
+            let tenant = store.tenant(info.id).unwrap();
+            tenant.create_collection("docs").unwrap();
+            tenant
+                .put("docs", serde_json::json!({"_key":"seed","value":1}), None)
+                .unwrap();
+            let state = store.replication_state();
+            let snapshot = service
+                .snapshot(state.cluster, state.epoch, info.id)
+                .unwrap();
+            let receipt = tenant
+                .put("docs", serde_json::json!({"_key":"ack","value":2}), None)
+                .unwrap();
+            let expected = tenant.get("docs", "ack").unwrap().unwrap();
+            let engine = Arc::downgrade(tenant.engine());
+            let old_runtime = tenant.engine().runtime_id;
+            let request = LogRequest {
+                protocol: crate::replication::PROTOCOL,
+                cluster: state.cluster,
+                epoch: state.epoch,
+                tenant: info.id,
+                generation: info.generation,
+                after: snapshot.position,
+                cursor: None,
+            };
+            if catching_up {
+                assert_eq!(service.export_log(&request).unwrap().through, receipt.rev);
+            }
+            // A healthy lease must still retain the engine and its WAL across
+            // both download and catch-up; a weak reference alone is insufficient.
+            drop(tenant);
+            assert_eq!(store.close_tenant(info.id).unwrap_err().code, "BUSY");
+            let tenant = store.tenant(info.id).unwrap();
+            tenant.engine().poison_writer(
+                &mut tenant.engine().writer.lock(),
+                Error::new("COMMIT_UNKNOWN", "injected failed sync"),
+            );
+            drop(tenant);
+            // No Service::start, expiry pass, release, or receiver progress is
+            // allowed to make recovery possible for this assertion.
+            let deadline = Instant::now() + Duration::from_secs(3);
+            let recovered = loop {
+                match store.tenant(info.id) {
+                    Ok(tenant) => break tenant,
+                    Err(error) if error.code == "COMMIT_UNKNOWN" && Instant::now() < deadline => {
+                        std::thread::sleep(Duration::from_millis(5));
+                    }
+                    Err(error) => panic!("export prevented WAL recovery: {error}"),
+                }
+            };
+            assert_ne!(recovered.engine().runtime_id, old_runtime);
+            assert!(engine.upgrade().is_none());
+            assert_eq!(recovered.get("docs", "ack").unwrap().unwrap(), expected);
+            let next = recovered
+                .put("docs", serde_json::json!({"_key":"after","value":3}), None)
+                .unwrap();
+            assert!(next.rev > receipt.rev);
+            if !catching_up {
+                assert_eq!(
+                    service.snapshot_chunk(snapshot.id, 0, 0).unwrap_err().code,
+                    "SNAPSHOT_EXPIRED"
+                );
+            }
+            let replacement = service
+                .snapshot(state.cluster, state.epoch, info.id)
+                .unwrap();
+            assert_eq!(replacement.position, next.rev);
+            assert!(
+                !service
+                    .snapshot_chunk(replacement.id, 0, 0)
+                    .unwrap()
+                    .is_empty()
+            );
+            service.release_snapshot(replacement.id).unwrap();
+            drop(recovered);
+            let fence = store.fence_primary(Uuid::new_v4()).unwrap();
+            assert_eq!(fence.tenants[0].seq, next.rev);
+        }
+    }
+
+    #[test]
     fn uncertain_wal_tail_cannot_be_fenced_or_cached_as_the_old_position() {
         let dir = tempfile::tempdir().unwrap();
         let store = crate::Store::open(dir.path(), Options::default()).unwrap();

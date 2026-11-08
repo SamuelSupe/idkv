@@ -1,0 +1,22 @@
+{
+  "binary_sha256": "67dc2958814917b4d584abb88052c205a372a0880198976d1e83c353ee5840fa",
+  "export_active": true,
+  "tenant": "5db7ede2-80a1-443e-97e8-7ad36b5fca58",
+  "snapshot": "42746466-bab0-4d61-b962-1465bf016baf",
+  "snapshot_bytes": 113885,
+  "injected_write_error": {
+    "error": {
+      "code": "COMMIT_UNKNOWN",
+      "message": "IO_ERROR: Input/output error (os error 5)"
+    }
+  },
+  "revoked_chunk_errors": [
+    "SNAPSHOT_EXPIRED"
+  ],
+  "first_phase_write_succeeded": true,
+  "blocked_s": 0.0070262569934129715,
+  "explicit_close": "ok",
+  "recovery_after_release_ms": 0.481792027130723,
+  "acknowledged_data_verified": true
+}
+error_counts {}

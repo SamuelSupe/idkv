@@ -1,0 +1,64 @@
+{
+  "manual-before": {
+    "binary_sha256": "e9fb9657f3ee523f096ab6220a160cc36571a610b90d13d6f2015f645cae3a2c",
+    "blocked_s": 6.050678458006587,
+    "explicit_close": "HTTP 409: {'error': {'code': 'BUSY', 'message': 'tenant handles did not drain within one second'}}",
+    "acknowledged_data_verified": true,
+    "post_heal_errors": 111
+  },
+  "manual-after": {
+    "binary_sha256": "67dc2958814917b4d584abb88052c205a372a0880198976d1e83c353ee5840fa",
+    "blocked_s": 0.0070262569934129715,
+    "first_phase_write_succeeded": true,
+    "explicit_close": "ok",
+    "acknowledged_data_verified": true,
+    "post_heal_errors": 0
+  },
+  "hash-before": {
+    "binary_sha256": "e9fb9657f3ee523f096ab6220a160cc36571a610b90d13d6f2015f645cae3a2c",
+    "recovery_observation_s": 6.046734915988054,
+    "acknowledged_data_verified_after_sigkill_restart": true,
+    "post_heal_errors": 114
+  },
+  "hash-after": {
+    "binary_sha256": "67dc2958814917b4d584abb88052c205a372a0880198976d1e83c353ee5840fa",
+    "recovery_observation_s": 0.004585596965625882,
+    "recovered_while_hash_paused": true,
+    "snapshot_error": "SNAPSHOT_EXPIRED",
+    "acknowledged_data_verified_after_sigkill_restart": true,
+    "post_heal_errors": 0
+  },
+  "replica-before": {
+    "binary_sha256": "e9fb9657f3ee523f096ab6220a160cc36571a610b90d13d6f2015f645cae3a2c",
+    "blocked_after_device_healed_s": 6.04532295599347,
+    "planned_switchover_verified": true,
+    "acknowledged_data_verified_on_both_nodes": true,
+    "acknowledged_data_verified_after_sigkill_restart": true,
+    "post_heal_errors": 115
+  },
+  "replica-after": {
+    "binary_sha256": "67dc2958814917b4d584abb88052c205a372a0880198976d1e83c353ee5840fa",
+    "blocked_after_device_healed_s": 0.006802757969126105,
+    "recovered_while_transfer_paused": true,
+    "planned_switchover_verified": true,
+    "acknowledged_data_verified_on_both_nodes": true,
+    "acknowledged_data_verified_after_sigkill_restart": true,
+    "post_heal_errors": 0
+  },
+  "healthy-before": {
+    "binary_sha256": "e9fb9657f3ee523f096ab6220a160cc36571a610b90d13d6f2015f645cae3a2c",
+    "acknowledged_data_verified": true,
+    "healthy_download_survived_idle": true,
+    "healthy_catchup_survived_idle": true,
+    "idle_eviction_after_release": true,
+    "post_heal_errors": 0
+  },
+  "healthy-after": {
+    "binary_sha256": "67dc2958814917b4d584abb88052c205a372a0880198976d1e83c353ee5840fa",
+    "acknowledged_data_verified": true,
+    "healthy_download_survived_idle": true,
+    "healthy_catchup_survived_idle": true,
+    "idle_eviction_after_release": true,
+    "post_heal_errors": 0
+  }
+}

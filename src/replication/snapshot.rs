@@ -253,8 +253,9 @@ impl Preparation {
             tenant.disk_bytes,
             store.options().maintenance_reserve_free_bytes,
         )?;
+        drop(handle);
         let mut files = Vec::new();
-        enumerate(&self.path, &self.path, &mut files)?;
+        enumerate(&self.path, &self.path, &mut files, &lease)?;
         if files.len() > 20_000 {
             return Err(Error::limit("replication snapshot file limit"));
         }
@@ -288,18 +289,29 @@ impl Preparation {
         ))
     }
 }
-fn enumerate(root: &Path, dir: &Path, files: &mut Vec<FileInfo>) -> Result<()> {
+fn enumerate(
+    root: &Path,
+    dir: &Path,
+    files: &mut Vec<FileInfo>,
+    lease: &crate::storage::LogRetention,
+) -> Result<()> {
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         reject_symlink(&entry.path())?;
         if entry.file_type()?.is_dir() {
-            enumerate(root, &entry.path(), files)?;
+            enumerate(root, &entry.path(), files, lease)?;
         } else {
             let path = entry.path();
             let mut file = File::open(&path)?;
             let mut hash = Sha256::new();
             let mut bytes = vec![0; super::PAGE_BYTES];
             loop {
+                if !lease.valid() {
+                    return Err(Error::new(
+                        "SNAPSHOT_EXPIRED",
+                        "checkpoint log lease revoked",
+                    ));
+                }
                 let n = file.read(&mut bytes)?;
                 if n == 0 {
                     break;

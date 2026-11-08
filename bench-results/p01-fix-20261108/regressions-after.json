@@ -1,0 +1,4 @@
+{
+  "replication_exports_do_not_keep_uncertain_engines_alive": 0,
+  "checkpoint_copy_stops_at_a_chunk_boundary_after_wal_failure": 0
+}

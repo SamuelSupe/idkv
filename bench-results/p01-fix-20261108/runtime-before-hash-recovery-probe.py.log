@@ -1,0 +1,9 @@
+{
+  "binary_sha256": "e9fb9657f3ee523f096ab6220a160cc36571a610b90d13d6f2015f645cae3a2c",
+  "injected_write_error": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'IO_ERROR: Input/output error (os error 5)'}}",
+  "recovery_observation_s": 6.046734915988054,
+  "hash_still_paused_at_recovery_observation": true,
+  "replacement_snapshot_created": true,
+  "acknowledged_data_verified_after_sigkill_restart": true
+}
+post_heal_errors 114

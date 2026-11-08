@@ -1,0 +1,1554 @@
+{
+  "binary_sha256": "e9fb9657f3ee523f096ab6220a160cc36571a610b90d13d6f2015f645cae3a2c",
+  "errors": [
+    {
+      "elapsed_s": 0.0,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 0.055,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 0.111,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 0.165,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 0.218,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 0.272,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 0.328,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 0.388,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 0.441,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 0.494,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 0.547,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 0.609,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 0.663,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 0.721,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 0.775,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 0.828,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 0.883,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 0.936,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 0.988,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 1.045,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 1.098,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 1.15,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 1.212,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 1.263,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 1.315,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 1.369,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 1.421,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 1.479,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 1.531,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 1.586,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 1.639,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 1.694,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 1.75,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 1.805,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 1.857,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 1.91,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 1.962,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 2.014,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 2.068,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 2.121,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 2.174,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 2.228,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 2.28,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 2.334,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 2.387,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 2.442,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 2.501,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 2.552,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 2.606,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 2.66,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 2.713,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 2.766,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 2.822,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 2.875,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 2.929,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 2.981,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 3.034,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 3.087,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 3.14,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 3.194,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 3.245,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 3.299,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 3.351,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 3.404,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 3.459,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 3.513,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 3.569,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 3.622,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 3.675,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 3.728,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 3.782,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 3.835,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 3.888,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 3.939,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 3.99,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 4.042,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 4.095,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 4.155,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 4.206,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 4.259,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 4.314,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 4.371,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 4.423,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 4.477,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 4.528,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 4.585,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 4.635,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 4.694,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 4.747,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 4.8,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 4.854,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 4.913,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 4.968,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 5.022,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 5.075,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 5.135,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 5.187,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 5.244,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 5.295,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 5.348,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 5.401,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 5.455,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 5.509,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 5.562,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 5.613,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 5.664,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 5.716,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 5.774,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 5.829,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 5.881,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 5.934,
+      "code": "COMMIT_UNKNOWN"
+    },
+    {
+      "elapsed_s": 5.986,
+      "code": "COMMIT_UNKNOWN"
+    }
+  ],
+  "tenant": "4a1364b3-f7aa-40c9-b243-bf12707165b7",
+  "injected_write_error": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'IO_ERROR: Input/output error (os error 5)'}}",
+  "blocked_after_device_healed_s": 6.03810662595788,
+  "source_status_while_blocked": {
+    "node": {
+      "version": 1,
+      "protocol": 3,
+      "node": "1c3510f4-feb8-4c19-ac67-6859348678b0",
+      "cluster": "c36bd749-93dc-41d4-8761-e9b4939118aa",
+      "epoch": "91816b77-9509-4ca7-93b2-2f3d1a27270e",
+      "enabled": true,
+      "role": "primary",
+      "source": null,
+      "fence": null,
+      "parent": null,
+      "forced": false,
+      "log_retention_bytes": 268435456
+    },
+    "tenants": [
+      {
+        "info": {
+          "id": "801389d3-0d9f-4c1b-8f62-24df139295e8",
+          "name": "healthy-control",
+          "generation": "4f04a619-772c-48b1-831c-d1f191999eb5",
+          "history": "b482cca3-d229-4220-b8d0-d18e4ccf1236",
+          "memory_bytes": 134217728,
+          "disk_bytes": 4294967296
+        },
+        "seq": 7
+      }
+    ],
+    "unavailable": [
+      {
+        "info": {
+          "id": "4a1364b3-f7aa-40c9-b243-bf12707165b7",
+          "name": "slow-bootstrap",
+          "generation": "82a38d9f-15af-4980-a947-8f4911a90ead",
+          "history": "34bd0eb5-9a55-4ee2-8d4a-6632e4602705",
+          "memory_bytes": 134217728,
+          "disk_bytes": 4294967296
+        },
+        "error": "COMMIT_UNKNOWN: IO_ERROR: Input/output error (os error 5)"
+      }
+    ],
+    "last_error": null,
+    "completed_cycles": 0,
+    "initialization_attempts": 0,
+    "initialization_failures": 0,
+    "reinitializations": 0,
+    "initializing": [],
+    "waiting_for_readers": [],
+    "initialization_errors": {}
+  },
+  "switchover_while_blocked": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'IO_ERROR: Input/output error (os error 5)'}}",
+  "source_role_after_switchover_attempt": "primary",
+  "other_tenant_write_succeeded": true,
+  "recovery_after_transfer_resumed_ms": 445.2018049778417,
+  "acknowledged_data_verified_on_both_nodes": true,
+  "replica_status_final": {
+    "node": {
+      "version": 1,
+      "protocol": 3,
+      "node": "982dac2c-90e2-4fb0-a508-12296713196d",
+      "cluster": "c36bd749-93dc-41d4-8761-e9b4939118aa",
+      "epoch": "91816b77-9509-4ca7-93b2-2f3d1a27270e",
+      "enabled": true,
+      "role": "replica",
+      "source": {
+        "node": "1c3510f4-feb8-4c19-ac67-6859348678b0",
+        "epoch": "91816b77-9509-4ca7-93b2-2f3d1a27270e"
+      },
+      "fence": null,
+      "parent": null,
+      "forced": false,
+      "log_retention_bytes": 268435456
+    },
+    "tenants": [
+      {
+        "info": {
+          "id": "4a1364b3-f7aa-40c9-b243-bf12707165b7",
+          "name": "slow-bootstrap",
+          "generation": "82a38d9f-15af-4980-a947-8f4911a90ead",
+          "history": "34bd0eb5-9a55-4ee2-8d4a-6632e4602705",
+          "memory_bytes": 134217728,
+          "disk_bytes": 4294967296
+        },
+        "seq": 9
+      },
+      {
+        "info": {
+          "id": "801389d3-0d9f-4c1b-8f62-24df139295e8",
+          "name": "healthy-control",
+          "generation": "4f04a619-772c-48b1-831c-d1f191999eb5",
+          "history": "b482cca3-d229-4220-b8d0-d18e4ccf1236",
+          "memory_bytes": 134217728,
+          "disk_bytes": 4294967296
+        },
+        "seq": 8
+      }
+    ],
+    "unavailable": [],
+    "last_error": null,
+    "completed_cycles": 256,
+    "initialization_attempts": 10,
+    "initialization_failures": 8,
+    "reinitializations": 0,
+    "initializing": [
+      "801389d3-0d9f-4c1b-8f62-24df139295e8"
+    ],
+    "waiting_for_readers": [],
+    "initialization_errors": {
+      "801389d3-0d9f-4c1b-8f62-24df139295e8": "BUSY: another replica checkpoint transfer is active"
+    }
+  },
+  "network_events": [
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379657.274771632
+    },
+    {
+      "path": "/v1/replication/snapshot",
+      "status": 409,
+      "time": 379657.277974214
+    },
+    {
+      "path": "/v1/replication/snapshot",
+      "status": 200,
+      "time": 379657.327223072
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379657.38676026
+    },
+    {
+      "path": "/v1/replication/snapshot",
+      "status": 409,
+      "time": 379657.443148115
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379657.500217471
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379657.618128263
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379657.730937516
+    },
+    {
+      "path": "/v1/replication/snapshot",
+      "status": 409,
+      "time": 379657.732047099
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379657.836158522
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379657.945894484
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379658.048294282
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379658.156150953
+    },
+    {
+      "path": "/v1/replication/snapshot",
+      "status": 409,
+      "time": 379658.211116392
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379658.262077625
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379658.367225755
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379658.471138469
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379658.575740308
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379658.68299673
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379658.790823817
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379658.896713573
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379659.002938994
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379659.116757247
+    },
+    {
+      "path": "/v1/replication/snapshot",
+      "status": 409,
+      "time": 379659.11765308
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379659.221431711
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379659.326044383
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379659.433712888
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379659.540872351
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379659.644576148
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379659.753716111
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379659.865674697
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379659.971442285
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379660.081518456
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379660.187270753
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379660.292991091
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379660.398154847
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379660.514345182
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379660.619772687
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379660.724480234
+    },
+    {
+      "path": "/v1/replication/snapshot",
+      "status": 409,
+      "time": 379660.778951507
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379660.831158656
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379660.937279786
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379661.048912289
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379661.165175666
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379661.277540877
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379661.384861882
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379661.490986553
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379661.595611684
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379661.701707856
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379661.806782819
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379661.910704409
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379662.016767455
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379662.121035419
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379662.227650383
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379662.331723222
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379662.438485102
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379662.548301814
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379662.653108986
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379662.758413033
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379662.871447244
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379662.977493082
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379663.083349129
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379663.187636218
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379663.289917975
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379663.39653948
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379663.417530056
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379663.460882541
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379663.503515609
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379663.5062119
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379663.551369385
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379663.595528411
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379663.609041781
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379663.639191313
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379663.68234784
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379663.712875871
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379663.724951658
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379663.727975449
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379663.770619101
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379663.821672416
+    },
+    {
+      "path": "/v1/replication/log",
+      "status": 500,
+      "time": 379663.830573872
+    },
+    {
+      "path": "/v1/replication/snapshot/release",
+      "status": 200,
+      "time": 379663.831034705
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379663.968437574
+    },
+    {
+      "path": "/v1/replication/snapshot",
+      "status": 200,
+      "time": 379664.070370122
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379664.071218372
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379664.07303133
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379664.075931745
+    },
+    {
+      "path": "/v1/replication/snapshot",
+      "status": 409,
+      "time": 379664.118608189
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379664.120195147
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379664.167438922
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379664.212502948
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379664.220568112
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379664.259759557
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379664.304507875
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379664.325955951
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379664.34840811
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379664.393480011
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379664.435369247
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379664.437056329
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379664.440493786
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379664.445174993
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379664.490718311
+    },
+    {
+      "path": "/v1/replication/log",
+      "status": 200,
+      "time": 379664.555180247
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379664.582057904
+    },
+    {
+      "path": "/v1/replication/log",
+      "status": 200,
+      "time": 379664.610517395
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379664.687403576
+    },
+    {
+      "path": "/v1/replication/log",
+      "status": 200,
+      "time": 379664.730834645
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379664.879591927
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379664.991877055
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379665.098016768
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379665.202629107
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379665.318533192
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379665.422661448
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379665.532510618
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379665.636945707
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379665.739469505
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379665.848720218
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379665.957924263
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379666.066945101
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379666.173949522
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379666.279411319
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379666.385899532
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379666.491924371
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379666.600652167
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379666.709490963
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379666.819727008
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379666.924508388
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379667.036075183
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379667.145333562
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379667.250675109
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379667.356700031
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379667.462975953
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379667.570618124
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379667.685181668
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379667.798041504
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379667.904701967
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379668.011113056
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379668.116166978
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379668.226828981
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379668.340198317
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379668.453602945
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379668.558081117
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379668.669662223
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379668.774697729
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379668.884560866
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379668.99048179
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379669.103135263
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379669.221221119
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379669.333275134
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379669.440814684
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379669.546287607
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379669.651930489
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379669.756785578
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379669.860644249
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379669.965224129
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379670.072562804
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379670.179352604
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379670.284029859
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379670.390703159
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379670.502839882
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379670.613460644
+    },
+    {
+      "path": "/v1/replication/snapshot",
+      "status": 200,
+      "time": 379670.652615735
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379670.695342163
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379670.706465385
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379670.717123815
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379670.751629733
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379670.796524206
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379670.823873865
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379670.841301136
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379670.88459694
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379670.928468911
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379670.929951538
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379670.975405095
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379671.018964774
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379671.036221254
+    },
+    {
+      "path": "/v1/replication/snapshot/chunk",
+      "status": 200,
+      "time": 379671.064708498
+    },
+    {
+      "path": "/v1/replication/log",
+      "status": 200,
+      "time": 379671.122658903
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379671.141261968
+    },
+    {
+      "path": "/v1/replication/log",
+      "status": 200,
+      "time": 379671.183064395
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379671.248902477
+    },
+    {
+      "path": "/v1/replication/log",
+      "status": 200,
+      "time": 379671.294575784
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379671.44520568
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379671.550379102
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379671.656124526
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379671.764193244
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379671.871602586
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379671.982387807
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379672.086138269
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379672.192734527
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379672.297338324
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379672.406499127
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379672.51386301
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379672.617651515
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379672.724220772
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379672.82931282
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379672.938357622
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379673.05063372
+    },
+    {
+      "path": "/v1/replication/status",
+      "status": 200,
+      "time": 379673.159494356
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "base_commit": "6bd18f30a656d4a65c8cc065df0ffbcfac80c9b4",
+  "platform": "Linux-7.2.12-orbstack-00394-gbecdd6130068-aarch64-with-glibc2.42",
+  "architecture": "aarch64",
+  "runtime_filesystem": "btrfs",
+  "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)",
+  "verified_rust_cargo_files": 94,
+  "binaries": {
+    "tenant-kv": "67dc2958814917b4d584abb88052c205a372a0880198976d1e83c353ee5840fa",
+    "tenant-kv-restore": "0bff1ae0cfd1eecde6b3d6c41c454673d37179347a1cf40ffc4f0d0bac20a5e8"
+  },
+  "before_binary_sha256": "e9fb9657f3ee523f096ab6220a160cc36571a610b90d13d6f2015f645cae3a2c",
+  "helpers": {
+    "scripts/qualification.py": "95b06478ffbec39d71c880daf3aaf488c23d8caedb90a570c28a6b39c609e786",
+    "scripts/recovery_drill.py": "d4ec78b4cc4b816087bec7d9f388810cd2bfed050a98f94dd800dbe0fe8160c9",
+    "scripts/wal_io_fault.c": "6e8fc64226454eb176e1b83983207345ccdc82d16cf59ad16e7417d747c2392f"
+  },
+  "target": "/var/tmp/idkv-p01-target-20261108",
+  "baseline_target": "/var/tmp/idkv-p01-before-target-20261108",
+  "TMPDIR": "/var/tmp/idkv-p01-tmp-20261108",
+  "scope": "Isolated local HTTP services; WAL-only syscall EIO and a gated private export SST read; process SIGKILL/restart; no physical-device power failure."
+}

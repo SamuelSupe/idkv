@@ -1,0 +1,14 @@
+{
+  "binary_sha256": "67dc2958814917b4d584abb88052c205a372a0880198976d1e83c353ee5840fa",
+  "tenant": "a6f79214-2ed9-4f4f-859b-c6741896075c",
+  "injected_write_error": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'IO_ERROR: Input/output error (os error 5)'}}",
+  "recovered_while_transfer_paused": true,
+  "blocked_after_device_healed_s": 0.006802757969126105,
+  "source_role_after_switchover_attempt": "primary",
+  "other_tenant_write_succeeded": true,
+  "recovery_after_transfer_resumed_ms": 0.6709590088576078,
+  "acknowledged_data_verified_on_both_nodes": true,
+  "acknowledged_data_verified_after_sigkill_restart": true,
+  "planned_switchover_verified": true
+}
+error_counts {}

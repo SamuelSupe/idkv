@@ -1,0 +1,71 @@
+{
+  "binary_sha256": "67dc2958814917b4d584abb88052c205a372a0880198976d1e83c353ee5840fa",
+  "errors": [],
+  "export_active": true,
+  "tenant": "5db7ede2-80a1-443e-97e8-7ad36b5fca58",
+  "snapshot": "42746466-bab0-4d61-b962-1465bf016baf",
+  "snapshot_bytes": 113885,
+  "injected_write_error": {
+    "error": {
+      "code": "COMMIT_UNKNOWN",
+      "message": "IO_ERROR: Input/output error (os error 5)"
+    }
+  },
+  "revoked_chunk_errors": [
+    "SNAPSHOT_EXPIRED"
+  ],
+  "first_phase_write_succeeded": true,
+  "blocked_s": 0.0070262569934129715,
+  "status_before_release": {
+    "node": {
+      "version": 1,
+      "protocol": 3,
+      "node": "f2392cae-97fb-46c7-8513-504f4de906ee",
+      "cluster": "efc28226-707e-42f1-b212-8fdfae0d32ff",
+      "epoch": "bf167883-deeb-4b44-8a60-a9b1711c96de",
+      "enabled": true,
+      "role": "primary",
+      "source": null,
+      "fence": null,
+      "parent": null,
+      "forced": false,
+      "log_retention_bytes": 268435456
+    },
+    "tenants": [
+      {
+        "info": {
+          "id": "5db7ede2-80a1-443e-97e8-7ad36b5fca58",
+          "name": "export-pin",
+          "generation": "57a3d109-24b5-48c5-99c9-a5cbbe6a00b4",
+          "history": "9695f079-5a7e-4fc4-a2fd-592795c89a4e",
+          "memory_bytes": 134217728,
+          "disk_bytes": 4294967296
+        },
+        "seq": 9
+      },
+      {
+        "info": {
+          "id": "fd1491ac-7e08-4fb1-90ac-622efab31413",
+          "name": "healthy-control",
+          "generation": "c0cfdb22-f2a7-4b0d-9eee-e0794e102276",
+          "history": "fc725d20-e15d-4b34-98aa-9b0ae101a3da",
+          "memory_bytes": 134217728,
+          "disk_bytes": 4294967296
+        },
+        "seq": 7
+      }
+    ],
+    "unavailable": [],
+    "last_error": null,
+    "completed_cycles": 0,
+    "initialization_attempts": 0,
+    "initialization_failures": 0,
+    "reinitializations": 0,
+    "initializing": [],
+    "waiting_for_readers": [],
+    "initialization_errors": {}
+  },
+  "explicit_close": "ok",
+  "recovery_after_release_ms": 0.481792027130723,
+  "acknowledged_data_verified": true
+}

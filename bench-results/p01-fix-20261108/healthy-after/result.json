@@ -1,0 +1,8 @@
+{
+  "binary_sha256": "67dc2958814917b4d584abb88052c205a372a0880198976d1e83c353ee5840fa",
+  "idle_seconds": 1,
+  "healthy_download_survived_idle": true,
+  "healthy_catchup_survived_idle": true,
+  "idle_eviction_after_release": true,
+  "acknowledged_data_verified": true
+}

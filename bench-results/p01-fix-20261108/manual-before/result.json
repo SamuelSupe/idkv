@@ -1,0 +1,624 @@
+{
+  "binary_sha256": "e9fb9657f3ee523f096ab6220a160cc36571a610b90d13d6f2015f645cae3a2c",
+  "errors": [
+    {
+      "elapsed_s": 0.0,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 0.056,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 0.111,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 0.165,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 0.219,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 0.274,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 0.33,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 0.393,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 0.454,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 0.508,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 0.563,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 0.625,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 0.68,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 0.743,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 0.806,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 0.858,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 0.913,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 0.967,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 1.025,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 1.088,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 1.144,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 1.198,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 1.252,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 1.304,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 1.357,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 1.408,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 1.461,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 1.512,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 1.565,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 1.619,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 1.671,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 1.724,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 1.778,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 1.832,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 1.887,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 1.941,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 1.996,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 2.054,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 2.109,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 2.162,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 2.217,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 2.27,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 2.324,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 2.381,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 2.434,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 2.489,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 2.543,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 2.597,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 2.653,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 2.715,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 2.768,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 2.826,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 2.881,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 2.936,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 2.991,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 3.044,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 3.097,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 3.151,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 3.205,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 3.259,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 3.311,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 3.365,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 3.416,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 3.467,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 3.519,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 3.571,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 3.623,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 3.673,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 3.726,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 3.777,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 3.83,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 3.882,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 3.935,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 3.991,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 4.046,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 4.101,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 4.155,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 4.21,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 4.263,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 4.315,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 4.366,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 4.417,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 4.468,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 4.52,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 4.573,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 4.625,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 4.677,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 4.73,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 4.784,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 4.836,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 4.89,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 4.943,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 4.996,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 5.051,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 5.108,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 5.163,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 5.222,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 5.277,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 5.331,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 5.384,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 5.437,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 5.493,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 5.549,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 5.605,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 5.659,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 5.713,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 5.774,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 5.833,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 5.888,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 5.941,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    },
+    {
+      "elapsed_s": 5.998,
+      "code": "COMMIT_UNKNOWN",
+      "message": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'tenant is draining for WAL recovery'}}"
+    }
+  ],
+  "export_active": true,
+  "tenant": "bdecab13-5d0f-4ce2-9465-5a7955067dc1",
+  "snapshot": "a1a06c4c-c644-4be8-bd2a-db00ed56d93c",
+  "snapshot_bytes": 113876,
+  "injected_write_error": {
+    "error": {
+      "code": "COMMIT_UNKNOWN",
+      "message": "IO_ERROR: Input/output error (os error 5)"
+    }
+  },
+  "blocked_s": 6.050678458006587,
+  "status_before_release": {
+    "node": {
+      "version": 1,
+      "protocol": 3,
+      "node": "6bf0073c-f326-4fca-9077-d43c37263c5b",
+      "cluster": "0fcdfc2b-631e-4da8-86cb-33d754db1ab1",
+      "epoch": "635b52c5-a4ad-48ac-bf67-aafd27cafd28",
+      "enabled": true,
+      "role": "primary",
+      "source": null,
+      "fence": null,
+      "parent": null,
+      "forced": false,
+      "log_retention_bytes": 268435456
+    },
+    "tenants": [
+      {
+        "info": {
+          "id": "c0122c88-5a00-4b77-8757-ede5c7f389fe",
+          "name": "healthy-control",
+          "generation": "38789cdc-4d69-4d5b-9b99-6ca076f66eaa",
+          "history": "807adbb5-f7f0-43ea-987e-ee82816c51e5",
+          "memory_bytes": 134217728,
+          "disk_bytes": 4294967296
+        },
+        "seq": 7
+      }
+    ],
+    "unavailable": [
+      {
+        "info": {
+          "id": "bdecab13-5d0f-4ce2-9465-5a7955067dc1",
+          "name": "export-pin",
+          "generation": "ac8573b9-02bf-4dc6-bd0c-11826e7501ea",
+          "history": "178fa121-abc1-4dba-87d1-2f918fa4a337",
+          "memory_bytes": 134217728,
+          "disk_bytes": 4294967296
+        },
+        "error": "COMMIT_UNKNOWN: IO_ERROR: Input/output error (os error 5)"
+      }
+    ],
+    "last_error": null,
+    "completed_cycles": 0,
+    "initialization_attempts": 0,
+    "initialization_failures": 0,
+    "reinitializations": 0,
+    "initializing": [],
+    "waiting_for_readers": [],
+    "initialization_errors": {}
+  },
+  "explicit_close": "HTTP 409: {'error': {'code': 'BUSY', 'message': 'tenant handles did not drain within one second'}}",
+  "recovery_after_release_ms": 16.604227013885975,
+  "acknowledged_data_verified": true
+}

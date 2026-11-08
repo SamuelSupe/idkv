@@ -1,0 +1,43 @@
+{
+  "lib": {
+    "passed": 87,
+    "failed": 0
+  },
+  "backup": {
+    "passed": 11,
+    "failed": 0
+  },
+  "dsl": {
+    "passed": 7,
+    "failed": 0
+  },
+  "engine": {
+    "passed": 28,
+    "failed": 0
+  },
+  "http": {
+    "passed": 13,
+    "failed": 0
+  },
+  "identity": {
+    "passed": 5,
+    "failed": 0
+  },
+  "middleware": {
+    "passed": 14,
+    "failed": 0
+  },
+  "recovery": {
+    "passed": 15,
+    "failed": 0
+  },
+  "reliability": {
+    "passed": 4,
+    "failed": 0
+  },
+  "replication": {
+    "passed": 31,
+    "failed": 0
+  },
+  "total_passed": 215
+}

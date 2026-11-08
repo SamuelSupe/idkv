@@ -677,6 +677,17 @@ impl Engine {
         max_bytes: u64,
         reserve_free: u64,
     ) -> Result<u64> {
+        let check = || {
+            if self.recovery_required() {
+                Err(Error::new(
+                    "COMMIT_UNKNOWN",
+                    "checkpoint cancelled for WAL recovery",
+                ))
+            } else {
+                Ok(())
+            }
+        };
+        check()?;
         let parent = destination
             .parent()
             .ok_or_else(|| Error::invalid("checkpoint parent"))?;
@@ -735,8 +746,10 @@ impl Engine {
                 &self.budget,
                 &self.io,
                 reserve_free,
+                check,
             )?;
         }
+        check()?;
         let new_wal = Wal::create(
             &destination.join("wal"),
             self.info.id,
@@ -750,6 +763,7 @@ impl Engine {
         sync_dir(&destination.join("sst"))?;
         sync_dir(destination)?;
         sync_dir(parent)?;
+        check()?;
         Ok(backup.checkpoint)
     }
     pub fn metrics(&self) -> serde_json::Value {
@@ -769,6 +783,91 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn checkpoint_copy_stops_at_a_chunk_boundary_after_wal_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::Store::open(
+            dir.path(),
+            Options {
+                io_workers: 1,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let info = store.create_tenant("checkpoint-cancel").unwrap();
+        let tenant = store.tenant(info.id).unwrap();
+        let engine = tenant.engine().clone();
+        let mut random = 0x12345678_u64;
+        let expected: Vec<u8> = (0..2 << 20)
+            .map(|_| {
+                random ^= random << 13;
+                random ^= random >> 7;
+                random ^= random << 17;
+                random as u8
+            })
+            .collect();
+        engine
+            .transact(|tx| tx.put(b"ack".to_vec(), expected.clone()))
+            .unwrap();
+        engine.flush().unwrap();
+        let (entered, ready) = std::sync::mpsc::channel();
+        let (release, wait) = std::sync::mpsc::channel();
+        let blocker = engine
+            .io
+            .submit(info.id, move || {
+                entered.send(()).unwrap();
+                wait.recv().unwrap();
+                Ok(())
+            })
+            .unwrap();
+        ready.recv().unwrap();
+        let copying = engine.clone();
+        let path = dir.path().join("checkpoint");
+        let destination = path.clone();
+        let copy = std::thread::spawn(move || copying.checkpoint(&destination));
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while engine.io.stats(info.id)["queued_jobs"].as_u64().unwrap() == 0 {
+            assert!(
+                Instant::now() < deadline,
+                "checkpoint did not reach its copy job"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        engine.poison_writer(
+            &mut engine.writer.lock(),
+            Error::new("COMMIT_UNKNOWN", "injected failed sync"),
+        );
+        release.send(()).unwrap();
+        blocker.wait().unwrap();
+        assert_eq!(copy.join().unwrap().unwrap_err().code, "COMMIT_UNKNOWN");
+        let copied: u64 = fs::read_dir(path.join("sst"))
+            .unwrap()
+            .map(|e| e.unwrap().metadata().unwrap().len())
+            .sum();
+        assert!(
+            copied <= 256 << 10,
+            "failed checkpoint kept copying: {copied}"
+        );
+        drop(engine);
+        drop(tenant);
+        let recovered = store.tenant(info.id).unwrap();
+        assert_eq!(
+            recovered
+                .engine()
+                .snapshot()
+                .unwrap()
+                .get(b"ack", &mut ReadStats::default())
+                .unwrap()
+                .unwrap()
+                .as_slice(),
+            expected
+        );
+        recovered
+            .engine()
+            .transact(|tx| tx.put(b"after".to_vec(), b"recovered".to_vec()))
+            .unwrap();
+    }
+
     #[test]
     fn flush_output_overtakes_a_read_backlog_and_keeps_confirmed_data() {
         let dir = tempfile::tempdir().unwrap();
@@ -826,25 +925,6 @@ mod tests {
                 Ok(())
             })
             .unwrap();
-        let early = Arc::new(AtomicBool::new(false));
-        let mut reads = Vec::new();
-        for _ in 0..31 {
-            let early = early.clone();
-            let path = engine.path.join("sst");
-            reads.push(
-                engine
-                    .io
-                    .submit_read(engine.info.id, None, false, move || {
-                        let output_written = fs::read_dir(path)?
-                            .any(|p| p.is_ok_and(|p| p.metadata().is_ok_and(|m| m.len() > 64)));
-                        if !output_written {
-                            early.store(true, Ordering::Release);
-                        }
-                        Ok(())
-                    })
-                    .unwrap(),
-            );
-        }
         release.send(()).unwrap();
         blocker.wait().unwrap();
         read_ready.recv().unwrap();
@@ -852,10 +932,36 @@ mod tests {
         while engine.io.stats(engine.info.id)["queued_jobs"]
             .as_u64()
             .unwrap()
-            < 32
+            == 0
         {
             assert!(Instant::now() < deadline);
             std::thread::sleep(Duration::from_millis(1));
+        }
+        // Keep the descriptor across the builder's rename; inspecting directory
+        // entries can observe a vanished .building path after a successful write.
+        let path = fs::read_dir(engine.path.join("sst"))
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        let file = Arc::new(File::open(path).unwrap());
+        let early = Arc::new(AtomicBool::new(false));
+        let mut reads = Vec::new();
+        for _ in 0..31 {
+            let early = early.clone();
+            let file = file.clone();
+            reads.push(
+                engine
+                    .io
+                    .submit_read(engine.info.id, None, false, move || {
+                        if file.metadata()?.len() <= 64 {
+                            early.store(true, Ordering::Release);
+                        }
+                        Ok(())
+                    })
+                    .unwrap(),
+            );
         }
         read_release.send(()).unwrap();
         first_read.wait().unwrap();

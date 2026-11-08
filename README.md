@@ -182,3 +182,5 @@ python3 scripts/replication_demo.py --binary target/release/tenant-kv --root /va
 慢速备份哈希和私有副本校验阻塞在线管理操作的问题，见[备份排空边界实测与修复](docs/special-stability3-20261107.md)。
 
 备份元信息发布失败导致重启退出、慢速写盘的跨租户阻塞，以及忘记任务失败后的重试，见[后续控制元信息审查](docs/special-stability4-20261107.md)。
+
+复制检查点租约阻塞 WAL 故障恢复的 P1，以及慢传输、哈希暂停、重启和切换的前后对照，见[修复与验证](docs/p01-fix-20261108.md)。

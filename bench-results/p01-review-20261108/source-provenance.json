@@ -1,0 +1,12 @@
+{
+  "commit": "6bd18f30a656d4a65c8cc065df0ffbcfac80c9b4",
+  "production_source_changed": false,
+  "matched_source_files": 94,
+  "source_reference": "bench-results/special-stability4-20261107/validated-source.json",
+  "binary_sha256": "e9fb9657f3ee523f096ab6220a160cc36571a610b90d13d6f2015f645cae3a2c",
+  "platform": "Linux-7.2.12-orbstack-00394-gbecdd6130068-aarch64-with-glibc2.42",
+  "machine": "aarch64",
+  "runtime_filesystem": "btrfs",
+  "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)",
+  "scope": "WAL-specific syscall EIO on owned local fixtures, standard HTTP replica bootstrap with gated test link; no physical device writeback or power-loss simulation"
+}

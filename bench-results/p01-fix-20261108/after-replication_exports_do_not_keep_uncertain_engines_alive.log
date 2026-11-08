@@ -1,0 +1,26 @@
+   Compiling http v1.5.0
+   Compiling http-body v1.1.0
+   Compiling http-body-util v0.1.5
+   Compiling hyper v1.12.0
+   Compiling tower-http v0.6.11
+   Compiling tonic v0.14.9
+   Compiling axum-core v0.5.6
+   Compiling hyper-util v0.1.21
+   Compiling tonic-prost v0.14.9
+   Compiling opentelemetry-proto v0.31.0
+   Compiling hyper-rustls v0.27.10
+   Compiling axum v0.8.9
+   Compiling reqwest v0.12.28
+   Compiling reqsign v0.16.5
+   Compiling opentelemetry-http v0.31.0
+   Compiling opentelemetry-otlp v0.31.1
+   Compiling opendal v0.55.0
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 10.75s
+     Running unittests src/lib.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv-321137334cf1859a)
+
+running 1 test
+test storage::engine::write::tests::replication_exports_do_not_keep_uncertain_engines_alive ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 86 filtered out; finished in 2.58s
+

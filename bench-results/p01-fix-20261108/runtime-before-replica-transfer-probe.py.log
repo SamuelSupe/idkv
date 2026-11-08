@@ -1,0 +1,14 @@
+{
+  "binary_sha256": "e9fb9657f3ee523f096ab6220a160cc36571a610b90d13d6f2015f645cae3a2c",
+  "tenant": "40e17f6d-4332-4409-8ed7-b80a053a0efd",
+  "injected_write_error": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'IO_ERROR: Input/output error (os error 5)'}}",
+  "blocked_after_device_healed_s": 6.04532295599347,
+  "switchover_while_blocked": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'IO_ERROR: Input/output error (os error 5)'}}",
+  "source_role_after_switchover_attempt": "primary",
+  "other_tenant_write_succeeded": true,
+  "recovery_after_transfer_resumed_ms": 469.7273249621503,
+  "acknowledged_data_verified_on_both_nodes": true,
+  "acknowledged_data_verified_after_sigkill_restart": true,
+  "planned_switchover_verified": true
+}
+error_counts {'COMMIT_UNKNOWN': 115}

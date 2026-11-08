@@ -1,0 +1,68 @@
+{
+  "binary_sha256": "e9fb9657f3ee523f096ab6220a160cc36571a610b90d13d6f2015f645cae3a2c",
+  "errors": [],
+  "export_active": false,
+  "tenant": "f023db43-01d9-4084-a537-de0ba19eac7b",
+  "snapshot": "34f394c2-c23b-4a7a-b5a7-33e8b21b96ee",
+  "snapshot_bytes": 113877,
+  "injected_write_error": {
+    "error": {
+      "code": "COMMIT_UNKNOWN",
+      "message": "IO_ERROR: Input/output error (os error 5)"
+    }
+  },
+  "first_phase_write_succeeded": true,
+  "blocked_s": 0.007793176977429539,
+  "status_before_release": {
+    "node": {
+      "version": 1,
+      "protocol": 3,
+      "node": "211b3aa8-d5e6-4f81-9913-3f653b1fe358",
+      "cluster": "801cd4f0-686c-4dd6-98af-4a2c8d99cd63",
+      "epoch": "a8fcac0b-b3d2-4967-aec2-824f04c59f3a",
+      "enabled": true,
+      "role": "primary",
+      "source": null,
+      "fence": null,
+      "parent": null,
+      "forced": false,
+      "log_retention_bytes": 268435456
+    },
+    "tenants": [
+      {
+        "info": {
+          "id": "cd99a5fe-c77e-4656-b2c8-c1a8e6a30321",
+          "name": "healthy-control",
+          "generation": "9c7bb276-5d0a-4488-b6a6-6a23116b3bb4",
+          "history": "28680897-eca8-46c6-8367-53972a2fa6f3",
+          "memory_bytes": 134217728,
+          "disk_bytes": 4294967296
+        },
+        "seq": 7
+      },
+      {
+        "info": {
+          "id": "f023db43-01d9-4084-a537-de0ba19eac7b",
+          "name": "export-pin",
+          "generation": "bc2140b9-6e3d-4cc5-ba19-75a550e2fe4f",
+          "history": "68a0c806-bf15-4576-b387-7a3cc6fe60eb",
+          "memory_bytes": 134217728,
+          "disk_bytes": 4294967296
+        },
+        "seq": 9
+      }
+    ],
+    "unavailable": [],
+    "last_error": null,
+    "completed_cycles": 0,
+    "initialization_attempts": 0,
+    "initialization_failures": 0,
+    "reinitializations": 0,
+    "initializing": [],
+    "waiting_for_readers": [],
+    "initialization_errors": {}
+  },
+  "explicit_close": "ok",
+  "recovery_after_release_ms": 0.5721260095015168,
+  "acknowledged_data_verified": true
+}

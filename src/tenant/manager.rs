@@ -570,6 +570,7 @@ impl Store {
             core.cursors.lock().retain(|_, c| c.valid());
             if Arc::strong_count(core) != 1
                 || Arc::strong_count(&core.engine) != 1
+                || core.engine.replication_pinned()
                 || core.engine.active_snapshots() != 0
             {
                 return Err(Error::new(
@@ -782,6 +783,7 @@ fn maintain_tenant(inner: &Arc<Inner>, slot: &Arc<Mutex<Slot>>) {
         if slot.core.as_ref().is_some_and(|core| {
             Arc::strong_count(core) == 1
                 && Arc::strong_count(&core.engine) == 1
+                && !core.engine.replication_pinned()
                 && core.last_used.lock().elapsed()
                     >= Duration::from_secs(inner.options.idle_seconds)
         }) {
