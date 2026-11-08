@@ -70,11 +70,25 @@ pub struct Store {
 }
 
 impl Store {
+    /// Global accounted memory pressure and protected flush capacity, in bytes
+    /// except for `active` (0 or 1). Retained snapshots may prevent reclamation.
+    pub fn memory_pressure(&self) -> BTreeMap<&'static str, u64> {
+        let memory = &self.owner.inner.memory;
+        BTreeMap::from([
+            ("active", u64::from(memory.under_pressure())),
+            ("foreground_limit_bytes", memory.foreground_limit() as u64),
+            ("headroom_bytes", memory.headroom() as u64),
+            ("headroom_in_use_bytes", memory.headroom_in_use() as u64),
+        ])
+    }
     /// Registry and open-engine gauges. Engine cumulative values can decrease
     /// when an idle tenant closes, so these are deliberately not counters.
     pub fn open_engine_metrics(&self) -> BTreeMap<String, u64> {
         let slots: Vec<_> = self.owner.inner.slots.lock().values().cloned().collect();
         let mut out = BTreeMap::new();
+        for (name, value) in self.memory_pressure() {
+            out.insert(format!("memory_pressure_{name}"), value);
+        }
         {
             let registry = self.owner.inner.registry.read();
             out.insert(
@@ -189,7 +203,8 @@ impl Store {
             io: IoScheduler::new(options.io_workers),
         });
         let stop = Arc::new(AtomicBool::new(false));
-        let (sender, receiver) = std::sync::mpsc::sync_channel::<Arc<Mutex<Slot>>>(128);
+        let (sender, receiver) =
+            std::sync::mpsc::sync_channel::<(Arc<Mutex<Slot>>, Option<usize>)>(128);
         let receiver = Arc::new(Mutex::new(receiver));
         let mut workers = Vec::new();
         for _ in 0..options.io_workers.min(4) {
@@ -199,13 +214,13 @@ impl Store {
             workers.push(thread::spawn(move || {
                 loop {
                     let job = receiver.lock().recv();
-                    let Ok(slot) = job else {
+                    let Ok((slot, pressure_minimum)) = job else {
                         break;
                     };
                     if !stop.load(Ordering::Acquire)
                         && let Some(inner) = weak.upgrade()
                     {
-                        maintain_tenant(&inner, &slot);
+                        maintain_tenant(&inner, &slot, pressure_minimum);
                     }
                     slot.lock().queued = false;
                 }
@@ -712,16 +727,58 @@ impl Store {
 
 fn enqueue_maintenance(
     inner: &Inner,
-    sender: &std::sync::mpsc::SyncSender<Arc<Mutex<Slot>>>,
+    sender: &std::sync::mpsc::SyncSender<(Arc<Mutex<Slot>>, Option<usize>)>,
     next: &mut usize,
 ) -> bool {
     let slots: Vec<_> = inner.slots.lock().values().cloned().collect();
     if slots.is_empty() {
         return true;
     }
+    let mut candidate = None;
+    if inner.memory.under_pressure() {
+        // Cache reclamation does no disk I/O and must precede selecting dirty
+        // data. Otherwise warm readers make every tiny writer rotate its WAL.
+        for slot in &slots {
+            if let Some(guard) = slot.try_lock()
+                && let Some(core) = &guard.core
+            {
+                core.engine.reclaim_cache();
+            }
+        }
+        if inner.memory.under_pressure() {
+            let mut open = 0;
+            let mut largest = (0, 0);
+            for (index, slot) in slots.iter().enumerate() {
+                let Some(guard) = slot.try_lock() else {
+                    continue;
+                };
+                let Some(core) = &guard.core else { continue };
+                open += 1;
+                if guard.queued || guard.installing.is_some() || core.engine.needs_flush() {
+                    continue;
+                }
+                let bytes = core.engine.pressure_flush_bytes();
+                if bytes > largest.1 {
+                    largest = (index, bytes);
+                }
+            }
+            // Scale the floor with tenant count: a fixed floor alone can leave
+            // thousands of small memtables stuck below it at the global limit.
+            let minimum = (inner.options.memtable_bytes / 8)
+                .min(inner.memory.foreground_limit() / open.max(1) / 8)
+                .max(1);
+            if largest.1 >= minimum {
+                candidate = Some((largest.0, minimum));
+            }
+        }
+    }
     let start = *next % slots.len();
-    for offset in 0..slots.len() {
-        let index = (start + offset) % slots.len();
+    let pressure_index = candidate.map(|(index, _)| index);
+    for index in pressure_index.into_iter().chain(
+        (0..slots.len())
+            .map(|offset| (start + offset) % slots.len())
+            .filter(|index| Some(*index) != pressure_index),
+    ) {
         let slot = &slots[index];
         let Some(mut guard) = slot.try_lock() else {
             continue;
@@ -730,7 +787,10 @@ fn enqueue_maintenance(
             continue;
         }
         guard.queued = true;
-        match sender.try_send(slot.clone()) {
+        let minimum = candidate
+            .filter(|(chosen, _)| *chosen == index)
+            .map(|(_, minimum)| minimum);
+        match sender.try_send((slot.clone(), minimum)) {
             Ok(()) => *next = (index + 1) % slots.len(),
             Err(error) => {
                 guard.queued = false;
@@ -744,7 +804,7 @@ fn enqueue_maintenance(
     true
 }
 
-fn maintain_tenant(inner: &Arc<Inner>, slot: &Arc<Mutex<Slot>>) {
+fn maintain_tenant(inner: &Arc<Inner>, slot: &Arc<Mutex<Slot>>, pressure_minimum: Option<usize>) {
     let Some(mut guard) = slot.try_lock() else {
         return;
     };
@@ -774,6 +834,9 @@ fn maintain_tenant(inner: &Arc<Inner>, slot: &Arc<Mutex<Slot>>) {
         let result = core
             .engine
             .ensure_durable()
+            .and_then(|_| {
+                pressure_minimum.map_or(Ok(()), |minimum| core.engine.flush_under_pressure(minimum))
+            })
             .and_then(|_| core.engine.maintain())
             .and_then(|_| {
                 if inner.node.writable() {
@@ -1056,6 +1119,90 @@ mod tests {
     }
 
     #[test]
+    fn pressure_maintenance_selects_large_unpinned_tenants_and_scales_its_floor() {
+        for (count, value_bytes, rows) in [(2, 512 << 10, 4), (64, 128 << 10, 1)] {
+            let dir = tempfile::tempdir().unwrap();
+            let store = Store::open(
+                dir.path(),
+                Options {
+                    global_memory_bytes: 64 << 20,
+                    tenant_memory_bytes: 64 << 20,
+                    memtable_bytes: 16 << 20,
+                    cache_bytes: 0,
+                    ..Options::default()
+                },
+            )
+            .unwrap();
+            store.owner.stop.store(true, Ordering::Release);
+            for worker in store.owner.workers.lock().drain(..) {
+                worker.join().unwrap();
+            }
+            let mut tenants = Vec::new();
+            for n in 0..count {
+                let id = store.create_tenant(&format!("dirty-{n}")).unwrap().id;
+                let tenant = store.tenant(id).unwrap();
+                tenant
+                    .engine()
+                    .transact(|tx| tx.put(b"confirmed".to_vec(), vec![n as u8; value_bytes]))
+                    .unwrap();
+                for row in 1..rows {
+                    tenant
+                        .engine()
+                        .transact(|tx| {
+                            tx.put(
+                                format!("extra-{row}").into_bytes(),
+                                vec![n as u8; value_bytes],
+                            )
+                        })
+                        .unwrap();
+                }
+                tenants.push(tenant);
+            }
+            let light_id = store.create_tenant("light").unwrap().id;
+            let light = store.tenant(light_id).unwrap();
+            light
+                .engine()
+                .transact(|tx| tx.put(b"small".to_vec(), vec![1; 128]))
+                .unwrap();
+            let pinned = tenants[0].engine().snapshot().unwrap();
+            let padding = Budget {
+                global: store.owner.inner.memory.clone(),
+                tenant: Counter::new(64 << 20),
+            };
+            let _held = padding
+                .reserve(padding.global.foreground_limit() - padding.global.used())
+                .unwrap();
+            let (sender, receiver) = std::sync::mpsc::sync_channel(128);
+            assert!(enqueue_maintenance(&store.owner.inner, &sender, &mut 0));
+            let jobs: Vec<_> = receiver.try_iter().collect();
+            assert_eq!(
+                jobs.iter().filter(|(_, minimum)| minimum.is_some()).count(),
+                1
+            );
+            let (slot, minimum) = &jobs[0];
+            assert!(minimum.is_some());
+            let selected = slot.lock().core.as_ref().unwrap().engine.info.id;
+            assert_ne!(selected, light_id);
+            assert_ne!(selected, tenants[0].engine().info.id);
+            maintain_tenant(&store.owner.inner, slot, *minimum);
+            let flushed = slot.lock().core.as_ref().unwrap().engine.metrics()["flush_bytes"]
+                .as_u64()
+                .unwrap();
+            assert!(flushed > 0, "{}", store.status(selected).unwrap());
+            assert_eq!(light.engine().metrics()["flush_bytes"], 0);
+            assert_eq!(tenants[0].engine().metrics()["flush_bytes"], 0);
+            assert_eq!(
+                pinned
+                    .get(b"confirmed", &mut Default::default())
+                    .unwrap()
+                    .unwrap()
+                    .len(),
+                value_bytes
+            );
+        }
+    }
+
+    #[test]
     fn a_full_maintenance_queue_keeps_scheduling_later_tenants() {
         let dir = tempfile::tempdir().unwrap();
         let store = Store::open(dir.path(), Options::default()).unwrap();
@@ -1073,7 +1220,7 @@ mod tests {
         for _ in 0..64 {
             assert!(enqueue_maintenance(&store.owner.inner, &sender, &mut next));
             for _ in 0..5 {
-                let slot = receiver.try_recv().unwrap();
+                let (slot, _) = receiver.try_recv().unwrap();
                 let mut slot = slot.lock();
                 served.insert(slot.core.as_ref().unwrap().engine.info.id);
                 slot.queued = false;

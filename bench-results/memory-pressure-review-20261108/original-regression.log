@@ -1,0 +1,8 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.76s
+     Running tests/engine.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/engine-981d405c4bf85dae)
+
+running 1 test
+test shared_memory_pressure_flushes_small_tenants_and_preserves_confirmed_data ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 28 filtered out; finished in 21.64s

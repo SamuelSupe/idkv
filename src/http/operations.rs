@@ -111,7 +111,7 @@ pub(super) fn dispatch(
     }
     if route == "/v1/metrics" {
         return Ok(
-            json!({"memory_bytes":store.memory_bytes(),"tenants":store.tenants().iter().map(|t|store.status(t.id)).collect::<Result<Vec<_>>>()?}),
+            json!({"memory_bytes":store.memory_bytes(),"memory_pressure":store.memory_pressure(),"tenants":store.tenants().iter().map(|t|store.status(t.id)).collect::<Result<Vec<_>>>()?}),
         );
     }
     let id = tenant_id.ok_or_else(|| Error::invalid("tenant required"))?;

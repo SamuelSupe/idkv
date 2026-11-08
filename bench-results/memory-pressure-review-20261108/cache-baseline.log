@@ -1,0 +1,9 @@
+Traceback (most recent call last):
+  File "/Users/livesite/Documents/ChatGPT/idkv/bench-results/memory-pressure-review-20261108/cache-pressure.py", line 60, in <module>
+    actual = lab.retry(0, f'/v1/tenants/{tenant}/collections/docs/multi_get', {'keys': keys})
+  File "/Users/livesite/Documents/ChatGPT/idkv/scripts/qualification.py", line 92, in retry
+    return self.call(node, path, body, method)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/livesite/Documents/ChatGPT/idkv/scripts/qualification.py", line 85, in call
+    raise RequestError(response.status, value)
+qualification.RequestError: HTTP 429: {'error': {'code': 'RESOURCE_EXHAUSTED', 'message': 'global memory budget exhausted'}}

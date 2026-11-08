@@ -4,12 +4,32 @@ impl Engine {
         let view = self.view.read();
         !view.frozen.is_empty()
             || view.mem.bytes.load(Ordering::Acquire) >= self.options.memtable_bytes
-            || (view.mem.bytes.load(Ordering::Acquire) != 0 && self.budget.global.under_pressure())
+    }
+    pub(crate) fn reclaim_cache(&self) {
+        self.cache.reclaim(&self.budget.global);
+    }
+    pub(crate) fn pressure_flush_bytes(&self) -> usize {
+        let Some(view) = self.view.try_read() else {
+            return 0;
+        };
+        // A snapshot or in-flight transaction keeps the old view alive after
+        // publication. Flushing it would spend memory without reclaiming it.
+        if !view.frozen.is_empty() || Arc::strong_count(&view.mem) != 1 {
+            return 0;
+        }
+        view.mem.bytes.load(Ordering::Acquire)
+    }
+    pub(crate) fn flush_under_pressure(&self, minimum: usize) -> Result<()> {
+        if !self.budget.global.under_pressure() || self.pressure_flush_bytes() < minimum.max(1) {
+            return Ok(());
+        }
+        self.flush_inner(true, Some(minimum.max(1)))
     }
     pub(crate) fn write_buffer_full(&self) -> bool {
         self.view.read().mem.bytes.load(Ordering::Acquire) >= self.options.memtable_bytes * 3
     }
     pub fn maintain(&self) -> Result<()> {
+        self.reclaim_cache();
         let started = Instant::now();
         // Small domain-local merges/promotions must not each wait for the next
         // coordinator tick. Bound the burst so another tenant can make progress;
@@ -58,12 +78,12 @@ impl Engine {
         Ok(())
     }
     pub fn flush(&self) -> Result<()> {
-        self.flush_inner(false)
+        self.flush_inner(false, None)
     }
     pub fn flush_if_needed(&self) -> Result<()> {
-        self.flush_inner(true)
+        self.flush_inner(true, None)
     }
-    fn flush_inner(&self, only_if_needed: bool) -> Result<()> {
+    fn flush_inner(&self, only_if_needed: bool, pressure_minimum: Option<usize>) -> Result<()> {
         self.ensure_durable()?;
         let _maintenance = if only_if_needed {
             let Some(guard) = self.maintenance.try_lock() else {
@@ -75,16 +95,26 @@ impl Engine {
         } else {
             self.maintenance.lock()
         };
-        if only_if_needed && !self.needs_flush() {
+        if let Some(minimum) = pressure_minimum {
+            if !self.budget.global.under_pressure() || self.pressure_flush_bytes() < minimum {
+                return Ok(());
+            }
+        } else if only_if_needed && !self.needs_flush() {
             return Ok(());
         }
-        let result = self.flush_locked();
+        let pressure_only = pressure_minimum.is_some() && !self.needs_flush();
+        let Some((budget, _reclaim)) = self.budget.for_flush(pressure_only) else {
+            return if only_if_needed {
+                Ok(())
+            } else {
+                Err(Error::new(
+                    "BUSY",
+                    "another tenant is reclaiming global memory",
+                ))
+            };
+        };
+        let result = self.flush_locked(&budget);
         if let Err(error) = &result {
-            // Admission/rotation retries have not produced SST output. Scanning
-            // every file here would amplify cross-tenant memory contention.
-            if error.code == "BUSY" {
-                return result;
-            }
             *self.maintenance_error.lock() = Some(error.to_string());
             let writer = self.writer.lock();
             if writer.poison.is_none() {
@@ -98,8 +128,7 @@ impl Engine {
         }
         result
     }
-    fn flush_locked(&self) -> Result<()> {
-        let (budget, _reclaim) = self.budget.for_flush()?;
+    fn flush_locked(&self, budget: &Budget) -> Result<()> {
         let rotate = {
             let view = self.view.read();
             view.frozen.is_empty() && view.mem.bytes.load(Ordering::Acquire) != 0
@@ -260,7 +289,7 @@ impl Engine {
             }
             let mut all = self.view.read().tables.files.clone();
             all.extend(tables);
-            let versions = VersionSet::new(all, &budget)?;
+            let versions = VersionSet::new(all, budget)?;
             let mut manifest = self.writer.lock().manifest.clone();
             manifest.checkpoint = checkpoint;
             self.metrics
@@ -538,16 +567,17 @@ impl Engine {
             let mut processed = 0usize;
             while let Some(item) = heap.pop() {
                 processed += 1;
-                if processed.is_multiple_of(256)
-                    && (self.write_buffer_full()
-                        || (self.budget.global.under_pressure() && self.needs_flush()))
-                {
+                if processed.is_multiple_of(256) {
+                    let pressure = self.budget.global.under_pressure()
+                        && self.pressure_flush_bytes() >= (self.options.memtable_bytes / 8).max(1);
                     // Flush under the maintenance ownership already held by this
                     // merge. The merge's selected SSTs remain immutable and pinned.
-                    match self.flush_locked() {
-                        Ok(()) => self.reserve_disk(METADATA_RESERVE, true)?,
-                        Err(error) if error.code == "BUSY" => {}
-                        Err(error) => return Err(error),
+                    if (self.write_buffer_full() || pressure)
+                        && let Some((budget, _reclaim)) =
+                            self.budget.for_flush(pressure && !self.needs_flush())
+                    {
+                        self.flush_locked(&budget)?;
+                        self.reserve_disk(METADATA_RESERVE, true)?;
                     }
                 }
                 let record = item.record;
@@ -797,6 +827,142 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn pressure_engine(memtable_bytes: usize) -> (tempfile::TempDir, Arc<Engine>, Budget) {
+        use crate::resources::Counter;
+        let dir = tempfile::tempdir().unwrap();
+        let options = Options {
+            global_memory_bytes: 64 << 20,
+            tenant_memory_bytes: 64 << 20,
+            cache_bytes: 8 << 20,
+            memtable_bytes,
+            ..Options::default()
+        };
+        let info = TenantInfo {
+            id: Uuid::new_v4(),
+            name: "pressure-review".into(),
+            generation: Uuid::new_v4(),
+            history: Uuid::new_v4(),
+            memory_bytes: options.tenant_memory_bytes,
+            disk_bytes: options.tenant_disk_bytes,
+        };
+        let budget = Budget {
+            global: Counter::with_headroom(options.global_memory_bytes, 8 << 20),
+            tenant: Counter::new(options.tenant_memory_bytes),
+        };
+        let path = dir.path().join("database");
+        Engine::create(&path, &info).unwrap();
+        let engine =
+            Engine::open(path, info, options, budget.clone(), IoScheduler::new(2)).unwrap();
+        (dir, engine, budget)
+    }
+
+    #[test]
+    fn pressure_does_not_rotate_snapshot_pinned_memtable() {
+        let (_dir, engine, budget) = pressure_engine(16 << 20);
+        engine
+            .transact(|tx| tx.put(b"confirmed".to_vec(), vec![7; 128 << 10]))
+            .unwrap();
+        let snapshot = engine.snapshot().unwrap();
+        let _pressure = budget
+            .reserve(budget.global.foreground_limit() - budget.global.used())
+            .unwrap();
+        engine.flush_under_pressure(1).unwrap();
+        engine.maintain().unwrap();
+        assert_eq!(engine.metrics()["flush_bytes"], 0);
+        assert_eq!(
+            snapshot
+                .get(b"confirmed", &mut ReadStats::default())
+                .unwrap()
+                .unwrap()
+                .len(),
+            128 << 10
+        );
+        drop(snapshot);
+        engine.flush_under_pressure(1).unwrap();
+        assert!(engine.metrics()["flush_bytes"].as_u64().unwrap() > 0);
+    }
+
+    #[test]
+    fn pressure_flush_contention_does_not_abort_maintenance() {
+        let (_dir, engine, budget) = pressure_engine(128 << 10);
+        engine
+            .transact(|tx| tx.put(b"confirmed".to_vec(), vec![7; 128 << 10]))
+            .unwrap();
+        let _pressure = budget
+            .reserve(budget.global.foreground_limit() - budget.global.used())
+            .unwrap();
+        let (_flush, _guard) = budget.for_flush(true).unwrap();
+        assert!(engine.needs_flush());
+        engine.flush_if_needed().unwrap();
+        engine.maintain().unwrap();
+        assert!(engine.maintenance_error.lock().is_none());
+        assert_eq!(engine.metrics()["flush_bytes"], 0);
+        drop(_guard);
+        engine.flush_if_needed().unwrap();
+        assert!(engine.metrics()["flush_bytes"].as_u64().unwrap() > 0);
+    }
+
+    #[test]
+    fn ordinary_flush_does_not_wait_for_another_tenants_pressure_flush() {
+        let (_dir, engine, budget) = pressure_engine(128 << 10);
+        engine
+            .transact(|tx| tx.put(b"confirmed".to_vec(), vec![7; 128 << 10]))
+            .unwrap();
+        let mut pressure = budget.reserve((50 << 20) - budget.global.used()).unwrap();
+        assert!(budget.global.under_pressure());
+        pressure.shrink(pressure.size() - (5 << 20));
+        assert!(budget.global.under_pressure());
+        let (_flush, _guard) = budget.for_flush(true).unwrap();
+        engine.flush().unwrap();
+        assert!(engine.metrics()["flush_bytes"].as_u64().unwrap() > 0);
+        assert_eq!(budget.global.headroom_in_use(), 0);
+        engine.verify().unwrap();
+    }
+
+    #[test]
+    fn cache_pressure_does_not_flush_each_small_write() {
+        let (_dir, engine, budget) = pressure_engine(16 << 20);
+        for n in 0..32_u32 {
+            engine
+                .transact(|tx| tx.put(n.to_be_bytes().to_vec(), vec![7; 128 << 10]))
+                .unwrap();
+        }
+        engine.flush().unwrap();
+        let before_cache = budget.global.used();
+        for n in 0..32_u32 {
+            assert!(
+                engine
+                    .snapshot()
+                    .unwrap()
+                    .get(&n.to_be_bytes(), &mut ReadStats::default())
+                    .unwrap()
+                    .is_some()
+            );
+        }
+        let cached = budget.global.used() - before_cache;
+        assert!(cached > 1 << 20);
+        let before = engine.metrics()["flush_bytes"].as_u64().unwrap();
+        let _pressure = budget.reserve((50 << 20) - budget.global.used()).unwrap();
+        for n in 0..12_u32 {
+            engine
+                .transact(|tx| tx.put(b"small".to_vec(), n.to_be_bytes().to_vec()))
+                .unwrap();
+            engine.maintain().unwrap();
+        }
+        assert_eq!(engine.metrics()["flush_bytes"].as_u64().unwrap(), before);
+        assert!(budget.global.used() < 50 << 20);
+        assert_eq!(
+            engine
+                .snapshot()
+                .unwrap()
+                .get(b"small", &mut ReadStats::default())
+                .unwrap()
+                .unwrap()
+                .as_slice(),
+            11_u32.to_be_bytes()
+        );
+    }
+
     #[test]
     fn pressure_flush_progresses_without_lending_headroom_to_reads() {
         use crate::resources::Counter;
@@ -837,8 +1003,8 @@ mod tests {
         let pressure = other
             .reserve(budget.global.foreground_limit() - budget.global.used())
             .unwrap();
-        assert!(engine.needs_flush());
-        engine.flush_if_needed().unwrap();
+        assert!(engine.pressure_flush_bytes() > 0);
+        engine.flush_under_pressure(1).unwrap();
         assert_eq!(engine.seq(), seq);
         assert!(engine.metrics()["flush_bytes"].as_u64().unwrap() > 0);
         assert!(budget.global.used() <= budget.global.limit());

@@ -45,6 +45,7 @@ struct CounterState {
     limit: AtomicUsize,
     quota: RwLock<()>,
     headroom: usize,
+    pressure: AtomicBool,
     reclaim: Mutex<()>,
 }
 impl Counter {
@@ -58,6 +59,7 @@ impl Counter {
                 limit: AtomicUsize::new(limit),
                 quota: RwLock::new(()),
                 headroom: headroom.min(limit / 8),
+                pressure: AtomicBool::new(false),
                 reclaim: Mutex::new(()),
             }),
             use_headroom: false,
@@ -85,7 +87,26 @@ impl Counter {
     }
     pub(crate) fn under_pressure(&self) -> bool {
         let limit = self.foreground_limit();
-        self.state.headroom != 0 && self.used() >= limit - limit / 8
+        let _ = self
+            .state
+            .pressure
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |active| {
+                let used = self.used();
+                let next = self.state.headroom != 0
+                    && if active {
+                        used > limit - limit / 4
+                    } else {
+                        used >= limit - limit / 8
+                    };
+                (next != active).then_some(next)
+            });
+        self.state.pressure.load(Ordering::Acquire)
+    }
+    pub(crate) fn headroom(&self) -> usize {
+        self.state.headroom
+    }
+    pub(crate) fn headroom_in_use(&self) -> usize {
+        self.used().saturating_sub(self.foreground_limit())
     }
     pub fn used(&self) -> usize {
         self.state.used.load(Ordering::Acquire)
@@ -112,17 +133,19 @@ impl Budget {
     // Only the pressure flush holding this guard may spend the protected part
     // of the global budget. Normal flushes remain concurrent. Both views charge
     // the same counters; neither global nor tenant hard limits are bypassed.
-    pub(crate) fn for_flush(&self) -> Result<(Self, Option<MutexGuard<'_, ()>>)> {
-        if !self.global.under_pressure() {
-            return Ok((self.clone(), None));
+    pub(crate) fn for_flush(&self, pressure: bool) -> Option<(Self, Option<MutexGuard<'_, ()>>)> {
+        if self.global.headroom() == 0
+            || (!pressure
+                && self
+                    .global
+                    .foreground_limit()
+                    .saturating_sub(self.global.used())
+                    >= self.global.headroom())
+        {
+            return Some((self.clone(), None));
         }
-        let guard = self
-            .global
-            .state
-            .reclaim
-            .try_lock()
-            .ok_or_else(|| Error::new("BUSY", "another tenant is reclaiming global memory"))?;
-        Ok((
+        let guard = self.global.state.reclaim.try_lock()?;
+        Some((
             Self {
                 global: Arc::new(Counter {
                     state: self.global.state.clone(),
@@ -525,6 +548,26 @@ struct TenantIo {
 mod tests {
     use super::*;
     #[test]
+    fn pressure_hysteresis_and_headroom_usage_follow_shared_reservations() {
+        let budget = Budget {
+            global: Counter::with_headroom(128, 16),
+            tenant: Counter::new(128),
+        };
+        let mut memory = budget.reserve(98).unwrap();
+        assert!(budget.global.under_pressure());
+        memory.shrink(90);
+        assert!(budget.global.under_pressure());
+        memory.shrink(84);
+        assert!(!budget.global.under_pressure());
+        let (flush, _guard) = budget.for_flush(true).unwrap();
+        let work = flush.reserve(36).unwrap();
+        assert_eq!(budget.global.headroom_in_use(), 8);
+        assert!(budget.global.under_pressure());
+        drop(work);
+        assert_eq!(budget.global.headroom_in_use(), 0);
+        assert!(!budget.global.under_pressure());
+    }
+    #[test]
     fn reclamation_headroom_is_exclusive_and_respects_hard_limits() {
         let budget = Budget {
             global: Counter::with_headroom(128, 16),
@@ -533,8 +576,8 @@ mod tests {
         let normal = budget.reserve(112).unwrap();
         assert!(budget.reserve(1).is_err());
         {
-            let (flush, _guard) = budget.for_flush().unwrap();
-            assert_eq!(budget.for_flush().unwrap_err().code, "BUSY");
+            let (flush, _guard) = budget.for_flush(true).unwrap();
+            assert!(budget.for_flush(true).is_none());
             assert!(flush.foreground().reserve(1).is_err());
             let mut work = flush.reserve(16).unwrap();
             assert_eq!(budget.global.used(), 128);
@@ -544,7 +587,7 @@ mod tests {
             assert_eq!(budget.global.used(), 120);
             assert_eq!(budget.tenant.used(), 120);
         }
-        let (flush, _guard) = budget.for_flush().unwrap();
+        let (flush, _guard) = budget.for_flush(true).unwrap();
         budget.tenant.set_limit(112).unwrap();
         assert!(flush.reserve(1).is_err());
         assert_eq!(budget.global.used(), 112);

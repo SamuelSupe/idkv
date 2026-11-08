@@ -1,0 +1,42 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.94s
+     Running unittests src/lib.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv-da4845942d3e9983)
+
+running 5 tests
+test storage::engine::maintenance::tests::cache_pressure_does_not_flush_each_small_write ... FAILED
+test storage::engine::maintenance::tests::pressure_does_not_rotate_snapshot_pinned_memtable ... FAILED
+test storage::engine::maintenance::tests::pressure_flush_contention_does_not_abort_maintenance ... FAILED
+test storage::engine::maintenance::tests::pressure_flush_progresses_without_lending_headroom_to_reads ... ok
+test tenant::manager::admission::tests::management_interrupts_index_backpressure_and_preserves_recoverable_builds ... ok
+
+failures:
+
+---- storage::engine::maintenance::tests::cache_pressure_does_not_flush_each_small_write stdout ----
+
+thread 'storage::engine::maintenance::tests::cache_pressure_does_not_flush_each_small_write' panicked at src/storage/engine/maintenance.rs:868:9:
+assertion `left == right` failed
+  left: 21453
+ right: 18885
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- storage::engine::maintenance::tests::pressure_does_not_rotate_snapshot_pinned_memtable stdout ----
+
+thread 'storage::engine::maintenance::tests::pressure_does_not_rotate_snapshot_pinned_memtable' panicked at src/storage/engine/maintenance.rs:834:9:
+assertion `left == right` failed
+  left: Number(748)
+ right: 0
+
+---- storage::engine::maintenance::tests::pressure_flush_contention_does_not_abort_maintenance stdout ----
+
+thread 'storage::engine::maintenance::tests::pressure_flush_contention_does_not_abort_maintenance' panicked at src/storage/engine/maintenance.rs:844:27:
+called `Result::unwrap()` on an `Err` value: Error { code: "BUSY", message: "another tenant is reclaiming global memory", location: None }
+
+
+failures:
+    storage::engine::maintenance::tests::cache_pressure_does_not_flush_each_small_write
+    storage::engine::maintenance::tests::pressure_does_not_rotate_snapshot_pinned_memtable
+    storage::engine::maintenance::tests::pressure_flush_contention_does_not_abort_maintenance
+
+test result: FAILED. 2 passed; 3 failed; 0 ignored; 0 measured; 88 filtered out; finished in 3.99s
+
+error: test failed, to rerun pass `--lib`

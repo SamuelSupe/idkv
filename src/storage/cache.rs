@@ -32,11 +32,37 @@ pub struct Cache {
     capacity: usize,
 }
 impl Cache {
+    pub(crate) fn reclaim(&self, global: &crate::resources::Counter) {
+        for shard in &self.shards {
+            if !global.under_pressure() {
+                return;
+            }
+            let Some(mut shard) = shard.try_lock() else {
+                continue;
+            };
+            for _ in 0..shard.clock.len().saturating_mul(2) {
+                if !global.under_pressure() {
+                    return;
+                }
+                let Some(key) = shard.clock.pop_front() else {
+                    break;
+                };
+                let frame = shard.entries.get(&key).unwrap();
+                if frame.referenced.swap(false, Ordering::Relaxed) {
+                    shard.clock.push_back(key);
+                    continue;
+                }
+                let frame = shard.entries.remove(&key).unwrap();
+                shard.bytes -= frame.reservation.size();
+            }
+        }
+    }
     pub(crate) fn reserve(
         &self,
         budget: &crate::resources::Budget,
         bytes: usize,
     ) -> crate::Result<Reservation> {
+        self.reclaim(&budget.global);
         let mut result = budget.reserve(bytes);
         if result.is_ok() {
             return result;

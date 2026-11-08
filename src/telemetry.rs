@@ -290,7 +290,7 @@ impl Telemetry {
             ));
         }
         for (name, value) in store.open_engine_metrics() {
-            let family = if name.starts_with("registry_") {
+            let family = if name.starts_with("registry_") || name.starts_with("memory_pressure_") {
                 format!("tkv_{name}")
             } else {
                 format!("tkv_open_engines_{name}")

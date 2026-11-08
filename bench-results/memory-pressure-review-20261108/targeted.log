@@ -1,0 +1,15 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.59s
+     Running unittests src/lib.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv-da4845942d3e9983)
+
+running 8 tests
+test resources::tests::pressure_hysteresis_and_headroom_usage_follow_shared_reservations ... ok
+test storage::engine::maintenance::tests::cache_pressure_does_not_flush_each_small_write ... ok
+test storage::engine::maintenance::tests::ordinary_flush_does_not_wait_for_another_tenants_pressure_flush ... ok
+test storage::engine::maintenance::tests::pressure_does_not_rotate_snapshot_pinned_memtable ... ok
+test storage::engine::maintenance::tests::pressure_flush_contention_does_not_abort_maintenance ... ok
+test storage::engine::maintenance::tests::pressure_flush_progresses_without_lending_headroom_to_reads ... ok
+test tenant::manager::admission::tests::management_interrupts_index_backpressure_and_preserves_recoverable_builds ... ok
+test tenant::manager::tests::pressure_maintenance_selects_large_unpinned_tenants_and_scales_its_floor ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 88 filtered out; finished in 10.85s

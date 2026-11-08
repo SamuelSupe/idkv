@@ -62,7 +62,7 @@ HTTP 所有数据接口以 `/v1/tenants/{tenant_uuid}` 开头。`GET /openapi.js
 | `POST T/resources/{resource}/query` | 按发布版本查询与续页，游标固定原资源和版本 |
 | `GET /ready`、`GET /ready/write` | 无认证的读/写就绪检查，排空或角色不可用时 503 |
 | `GET /v1/capabilities` | 无认证的软件/协议能力 |
-| `GET /v1/metrics` | 全局内存与各租户统计，仅全局管理员 |
+| `GET /v1/metrics` | 全局内存、memory_pressure 回收状态与各租户统计，仅全局管理员；字段见[运维说明](operations.md) |
 | `GET /v1/replication/status` | 全局管理员或复制凭证读取节点角色与租户位置 |
 | `POST /v1/replication/switchover` | `{}`；全局管理员向当前主库发起计划切换 |
 | `POST /v1/replication/fence` | `{"target":"node UUID"}`；全局管理员持久停写 |

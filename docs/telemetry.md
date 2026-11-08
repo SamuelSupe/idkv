@@ -31,6 +31,8 @@ tenant-kv serve --root data --auth auth.json --telemetry-config examples/telemet
 
 两个指标接口都要求全局 admin；不接受租户 token 或复制 token。指标使用路由模板，不使用文档键、原始 URL、subject 或租户名作为标签。HTTP 请求数、错误数、耗时直方图和在途数可用于速率、P95/P99 与错误率；查询/Lookup 的读块、扫描量、正文回读等为进程累计计数。`tkv_open_engines_*` 汇总当前打开引擎的提交、WAL、刷盘、合并、fsync、锁等待、磁盘、快照与 L0 文件数据，使用 gauge：冷租户关闭后这些值可能下降。详细租户统计保留在 JSON 接口；不把累计提交序号误报为复制延迟。
 
+全局回收指标为 `tkv_memory_pressure_active`（0/1）、`tkv_memory_pressure_foreground_limit_bytes`、`tkv_memory_pressure_headroom_bytes`、`tkv_memory_pressure_headroom_in_use_bytes`。JSON 对应 `/v1/metrics` 的 `memory_pressure` 对象。headroom_in_use_bytes 是 `max(memory_bytes - foreground_limit_bytes, 0)`，包括仍由 SST 元数据或快照引用保留的计费内存；它不是历史分配量。可对保护容量占用持续五分钟且压力仍激活设置告警，结合 RESOURCE_EXHAUSTED、维护错误、快照数、复制延迟判断是否需要释放引用或扩容。短暂占用属于正常回收，不应每次刷盘就告警。
+
 v0.10.1 的详细引擎统计 `scheduler.cancelled_jobs` 记录出队时跳过的过期、取消或被放弃的读取任务；`completed_jobs` 只统计实际执行的任务。取消项仍占据有界队列，直到被取出；已开始执行的 I/O 不计入跳过数。`queue_wait_ns` 包含这些跳过任务的排队时间。这组嵌套统计可通过引擎 metrics / 详细 JSON 查看，目前不汇总为 Prometheus 指标。
 
 启用复制时，`/metrics` 增加下列服务实例累计计数，不随冷租户关闭而重置，进程/Service 重建后归零；不使用租户标签。`/v1/replication/status` 提供去掉前缀及 `_total` 的同名字段。计数直接从服务状态读取，Prometheus 抓取不额外获取租户位置。

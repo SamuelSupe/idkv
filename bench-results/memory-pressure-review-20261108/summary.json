@@ -1,0 +1,278 @@
+{
+  "native_roots": [
+    "/var/tmp/idkv-cache-review-baseline-20261108",
+    "/var/tmp/idkv-cache-review-fixed-20261108",
+    "/var/tmp/idkv-memory-review-progress-20261108",
+    "/var/tmp/idkv-memory-review-faults-20261108"
+  ],
+  "journals": {
+    "/var/tmp/idkv-cache-review-baseline-20261108/acknowledgements.jsonl": {
+      "rows": 3584,
+      "sha256": "b02aceda06b8b06f4bcbbd20449beae655f53a961edc70b410a242508778c398"
+    },
+    "/var/tmp/idkv-cache-review-fixed-20261108/acknowledgements.jsonl": {
+      "rows": 3704,
+      "sha256": "53914239e7ff53009de52d157f21bd0d7e00110278016c9f7d3427e48ebc740a"
+    },
+    "/var/tmp/idkv-memory-review-progress-20261108/acknowledgements.jsonl": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/var/tmp/idkv-memory-review-progress-20261108/confirmed.jsonl": {
+      "rows": 5000,
+      "sha256": "b417b5a682852a0ee7d4b2848d7c8321ed0485d7b66d00d629bb77ce23f0bb9c"
+    },
+    "/var/tmp/idkv-memory-review-faults-20261108/enospc/acknowledgements.jsonl": {
+      "rows": 21,
+      "sha256": "d80779f29381642834dd27b8232828e1e25990dc4864db6ca0a7523a7a120ca2"
+    },
+    "/var/tmp/idkv-memory-review-faults-20261108/wal-write-eio/acknowledgements.jsonl": {
+      "rows": 21,
+      "sha256": "55fbf80bf82794e76369e817aefd25f48daab25a5fd09e2e5a1584d726c76201"
+    },
+    "/var/tmp/idkv-memory-review-faults-20261108/wal-sync-eio/acknowledgements.jsonl": {
+      "rows": 21,
+      "sha256": "451ff58e21d15a8d3742c446d7100b5c04c1e503c57580dd8866aec5ab8ab6c2"
+    }
+  },
+  "cache": {
+    "binary_sha256": "43e3aedeb94ef118bd284108ed02d985c3ecfd7c08750ee07cc07d561ba0c967",
+    "options": {
+      "global_memory_bytes": 67108864,
+      "tenant_memory_bytes": 67108864,
+      "memtable_bytes": 16777216,
+      "cache_bytes": 8388608,
+      "target_sst_bytes": 4194304,
+      "level_base_bytes": 16777216,
+      "l0_stop": 24,
+      "tenant_disk_bytes": 4294967296
+    },
+    "after_warming": {
+      "memory_bytes": 52343012,
+      "memory_pressure": {
+        "active": 1,
+        "foreground_limit_bytes": 60751872,
+        "headroom_bytes": 6356992,
+        "headroom_in_use_bytes": 0
+      }
+    },
+    "pressure_metrics_verified": true,
+    "light_write": {
+      "calls": 120,
+      "calls_per_second": 7.705,
+      "p50_ms": 5.672,
+      "p95_ms": 10.267,
+      "p99_ms": 67.271,
+      "errors": {}
+    },
+    "light_flush_bytes": 0,
+    "light_compaction_bytes": 0,
+    "memory_samples": [
+      45560119,
+      45573589,
+      45587109,
+      45600629,
+      45614149,
+      45627669,
+      45641189,
+      45654709,
+      45668229,
+      45681749,
+      45695279,
+      45708859
+    ],
+    "retry_errors": {},
+    "confirmed_writes": 3704,
+    "verified_after_crash": 3585,
+    "acknowledged_mismatches": 0,
+    "result": "passed",
+    "raw_result_path": "/var/tmp/idkv-cache-review-fixed-20261108/result.json"
+  },
+  "original_pressure": {
+    "binary_sha256": "43e3aedeb94ef118bd284108ed02d985c3ecfd7c08750ee07cc07d561ba0c967",
+    "options": {
+      "global_memory_bytes": 67108864,
+      "tenant_memory_bytes": 67108864,
+      "memtable_bytes": 16777216,
+      "cache_bytes": 0,
+      "target_sst_bytes": 4194304,
+      "level_base_bytes": 16777216,
+      "l0_stop": 24,
+      "tenant_disk_bytes": 4294967296
+    },
+    "elapsed_s": 26.89765758998692,
+    "operations": {
+      "heavy": {
+        "calls": 2500,
+        "calls_per_second": 92.945,
+        "p50_ms": 5.317,
+        "p95_ms": 8.914,
+        "p99_ms": 17.874,
+        "errors": {}
+      },
+      "light": {
+        "calls": 2500,
+        "calls_per_second": 92.945,
+        "p50_ms": 4.524,
+        "p95_ms": 7.461,
+        "p99_ms": 13.576,
+        "errors": {}
+      }
+    },
+    "retry_errors": {
+      "RESPONSE_UNAVAILABLE": 1
+    },
+    "maximum_write_ms": {
+      "heavy": 147.12061098543927,
+      "light": 149.6215360239148
+    },
+    "verified_online": 2501,
+    "verified_after_restart": 2501,
+    "acknowledged_mismatches": 0,
+    "result": "passed"
+  },
+  "faults": [
+    {
+      "case": "enospc",
+      "result": "passed",
+      "tenant": "3f080d13-c409-4c08-9225-66472057566d",
+      "before": {
+        "node": 0,
+        "tenant": "3f080d13-c409-4c08-9225-66472057566d",
+        "documents": 2000,
+        "sha256": "982e513df21fb5971d7ab40a97768152f222e52bf1b9acb919aa0e32c4adf612",
+        "acknowledged_mismatches": 0
+      },
+      "disk_full": {
+        "available_before": 220516352,
+        "available_after": 0,
+        "filler_bytes": 220512256,
+        "mount": "TARGET                                                    SOURCE     FSTYPE OPTIONS\n/var/tmp/idkv-memory-review-faults-20261108/enospc/volume /dev/loop0 ext4   rw,relatime\n"
+      },
+      "fault_response": {
+        "status": 500,
+        "body": {
+          "error": {
+            "code": "COMMIT_UNKNOWN",
+            "message": "IO_ERROR: No space left on device (os error 28)"
+          }
+        }
+      },
+      "poisoned_response": {
+        "status": 429,
+        "body": {
+          "error": {
+            "code": "RESOURCE_EXHAUSTED",
+            "message": "WAL recovery needs free disk space; read-only until closed and reopened"
+          }
+        }
+      },
+      "uncertain_batch_visible_before_retry": 0,
+      "restart_to_safe_retry_ms": 40.73127097217366,
+      "after": {
+        "node": 0,
+        "tenant": "3f080d13-c409-4c08-9225-66472057566d",
+        "documents": 2008,
+        "sha256": "1aaa210c39c8e38123dcf85fa7fa56209fb46f224665b75cbecb6c405006eed1",
+        "acknowledged_mismatches": 0
+      },
+      "failure_through_validation_ms": 118.38109098607674,
+      "confirmed_documents_preserved": 2000,
+      "confirmed_documents_missing": 0
+    },
+    {
+      "case": "wal-write-eio",
+      "result": "passed",
+      "tenant": "bb74e061-782a-4d03-bec5-7c5eafd35ece",
+      "before": {
+        "node": 0,
+        "tenant": "bb74e061-782a-4d03-bec5-7c5eafd35ece",
+        "documents": 2000,
+        "sha256": "982e513df21fb5971d7ab40a97768152f222e52bf1b9acb919aa0e32c4adf612",
+        "acknowledged_mismatches": 0
+      },
+      "fault_response": {
+        "status": 500,
+        "body": {
+          "error": {
+            "code": "COMMIT_UNKNOWN",
+            "message": "IO_ERROR: Input/output error (os error 5)"
+          }
+        }
+      },
+      "poisoned_response": {
+        "status": 500,
+        "body": {
+          "error": {
+            "code": "IO_ERROR",
+            "message": "Input/output error (os error 5)"
+          }
+        }
+      },
+      "uncertain_batch_visible_before_retry": 0,
+      "restart_to_safe_retry_ms": 35.436294041574,
+      "after": {
+        "node": 0,
+        "tenant": "bb74e061-782a-4d03-bec5-7c5eafd35ece",
+        "documents": 2008,
+        "sha256": "1aaa210c39c8e38123dcf85fa7fa56209fb46f224665b75cbecb6c405006eed1",
+        "acknowledged_mismatches": 0
+      },
+      "failure_through_validation_ms": 110.66643899539486,
+      "confirmed_documents_preserved": 2000,
+      "confirmed_documents_missing": 0
+    },
+    {
+      "case": "wal-sync-eio",
+      "result": "passed",
+      "tenant": "c8d67d81-5c1a-4f87-bc76-08e7bb9d9fa0",
+      "before": {
+        "node": 0,
+        "tenant": "c8d67d81-5c1a-4f87-bc76-08e7bb9d9fa0",
+        "documents": 2000,
+        "sha256": "982e513df21fb5971d7ab40a97768152f222e52bf1b9acb919aa0e32c4adf612",
+        "acknowledged_mismatches": 0
+      },
+      "fault_response": {
+        "status": 500,
+        "body": {
+          "error": {
+            "code": "COMMIT_UNKNOWN",
+            "message": "IO_ERROR: Input/output error (os error 5)"
+          }
+        }
+      },
+      "poisoned_response": {
+        "status": 500,
+        "body": {
+          "error": {
+            "code": "IO_ERROR",
+            "message": "Input/output error (os error 5)"
+          }
+        }
+      },
+      "uncertain_batch_visible_before_retry": 8,
+      "restart_to_safe_retry_ms": 32.87632600404322,
+      "after": {
+        "node": 0,
+        "tenant": "c8d67d81-5c1a-4f87-bc76-08e7bb9d9fa0",
+        "documents": 2008,
+        "sha256": "1aaa210c39c8e38123dcf85fa7fa56209fb46f224665b75cbecb6c405006eed1",
+        "acknowledged_mismatches": 0
+      },
+      "failure_through_validation_ms": 120.22722297115251,
+      "confirmed_documents_preserved": 2000,
+      "confirmed_documents_missing": 0
+    }
+  ],
+  "final_tests": {
+    "passed": 225,
+    "failed": 0,
+    "command": "cargo test --locked --features failpoints --lib --tests -- --test-threads=1"
+  },
+  "static_checks": {
+    "clippy": "passed, all targets with failpoints and -D warnings",
+    "format": "passed",
+    "diff_check": "passed"
+  }
+}
