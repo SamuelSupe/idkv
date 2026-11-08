@@ -658,8 +658,77 @@ async fn review0732_trickling_response_releases_cycle_at_total_deadline() {
     server.abort();
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn reviewc3b_log_snapshot_fallback_requires_full_budget_and_successful_body() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    for (remaining_ms, header_delay_ms, success, expected) in [
+        (100, 0, true, "DEADLINE_EXCEEDED"),
+        (500, 400, true, "DEADLINE_EXCEEDED"),
+        (500, 0, true, "REPLICA_SNAPSHOT_REQUIRED"),
+        (500, 0, false, "DEADLINE_EXCEEDED"),
+    ] {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut headers = Vec::new();
+            while !headers.ends_with(b"\r\n\r\n") {
+                headers.push(socket.read_u8().await.unwrap());
+                assert!(headers.len() < 4096);
+            }
+            tokio::time::sleep(Duration::from_millis(header_delay_ms)).await;
+            let status = if success { "200 OK" } else { "502 Bad Gateway" };
+            if socket
+                .write_all(
+                    format!("HTTP/1.1 {status}\r\nContent-Length: 4096\r\n\r\n\"").as_bytes(),
+                )
+                .await
+                .is_err()
+            {
+                return;
+            }
+            loop {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+                if socket.write_all(b"a").await.is_err() {
+                    break;
+                }
+            }
+        });
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        let token = dir.path().join("token");
+        fs::write(&token, "replication-unit-test-secret").unwrap();
+        fs::set_permissions(&token, fs::Permissions::from_mode(0o600)).unwrap();
+        let service = Service::open(
+            store,
+            Config {
+                cluster: Uuid::new_v4(),
+                role: Role::Replica,
+                peer_url: url,
+                token_file: token,
+                poll_ms: 10,
+                log_retention_bytes: 1 << 20,
+            },
+        )
+        .unwrap();
+        let error = service
+            .request_with_deadlines::<Value>(
+                "/v1/replication/log",
+                None,
+                Duration::from_millis(remaining_ms),
+                Duration::from_millis(200),
+            )
+            .await
+            .err()
+            .unwrap();
+        assert_eq!(error.code, expected);
+        server.abort();
+        let _ = server.await;
+    }
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn reviewf647_cycle_budget_rotates_slow_tenants_and_bootstraps_timed_out_logs() {
+async fn reviewc3b_cycle_deadlines_rotate_without_checkpoint_rebuilds() {
     use crate::http::{self, AuthConfig, Role as HttpRole, Token};
     use axum::{
         body::{Body, to_bytes},
@@ -684,7 +753,7 @@ async fn reviewf647_cycle_budget_rotates_slow_tenants_and_bootstraps_timed_out_l
         let bytes = to_bytes(body, 16384).await.unwrap();
         let log: LogRequest = serde_json::from_slice(&bytes).unwrap();
         state.tenants.lock().push(log.tenant);
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        tokio::time::sleep(Duration::from_millis(600)).await;
         next.run(Request::from_parts(parts, Body::from(bytes)))
             .await
     }
@@ -726,7 +795,7 @@ async fn reviewf647_cycle_budget_rotates_slow_tenants_and_bootstraps_timed_out_l
     }
     let delayed = Arc::new(Delayed::default());
     let app = http::app_with_replication(
-        source_store,
+        source_store.clone(),
         AuthConfig {
             tokens: vec![Token {
                 subject: "replica".into(),
@@ -743,12 +812,17 @@ async fn reviewf647_cycle_budget_rotates_slow_tenants_and_bootstraps_timed_out_l
     let server = tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
     });
+    let _ = replica
+        .sync_until(false, Instant::now() + Duration::from_millis(50))
+        .await;
+    assert!(delayed.tenants.lock().is_empty());
+    assert_eq!(replica.status().unwrap().reinitializations, 0);
     for _ in 0..2 {
         let started = Instant::now();
         {
             let _cycle = replica.inner.cycle.lock().await;
             let _ = replica
-                .sync_until(false, Instant::now() + Duration::from_millis(100))
+                .sync_until(false, Instant::now() + Duration::from_millis(300))
                 .await;
         }
         assert!(
@@ -767,7 +841,7 @@ async fn reviewf647_cycle_budget_rotates_slow_tenants_and_bootstraps_timed_out_l
             .len()
             >= 2
     );
-    assert!(replica.status().unwrap().reinitializations > 0);
+    assert_eq!(replica.status().unwrap().reinitializations, 0);
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
         let _ = replica.sync_once().await;
@@ -785,8 +859,39 @@ async fn reviewf647_cycle_budget_rotates_slow_tenants_and_bootstraps_timed_out_l
         );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    assert!(delayed.snapshots.load(Ordering::Relaxed) > 0);
+    assert_eq!(delayed.snapshots.load(Ordering::Relaxed), 0);
+    let id = expected[0].0;
+    let handle = source_store.tenant(id).unwrap();
+    handle
+        .put("docs", json!({"_key":"before-fence","value":42}), None)
+        .unwrap();
+    let confirmed = handle.get("docs", "before-fence").unwrap();
+    drop(handle);
+    let fence = source_store
+        .fence_primary(replica_store.replication_state().node)
+        .unwrap();
+    replica.inner.progress.lock().status_cache = None;
+    let error = replica
+        .promote_bounded(fence.id, Duration::from_millis(300))
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, "DEADLINE_EXCEEDED");
+    assert_eq!(replica.status().unwrap().reinitializations, 0);
+    assert_eq!(delayed.snapshots.load(Ordering::Relaxed), 0);
+    replica
+        .promote_bounded(fence.id, Duration::from_secs(10))
+        .await
+        .unwrap();
+    assert_eq!(
+        replica_store
+            .tenant(id)
+            .unwrap()
+            .get("docs", "before-fence")
+            .unwrap(),
+        confirmed
+    );
     server.abort();
+    let _ = server.await;
 }
 
 #[tokio::test]

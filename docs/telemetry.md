@@ -63,3 +63,5 @@ v0.10.1 的详细引擎统计 `scheduler.cancelled_jobs` 记录出队时跳过�
 读取计数和 `db.read` trace 事件只接收执行器返回的类型化 ReadStats（查询、Lookup、组合/发布读取及身份解析），不再从响应 JSON 推断。普通 Get/MultiGet 与 DSL Get 返回的用户 `stats` 或 `result.stats` 字段仅作为业务数据返回。累计读取计数使用饱和加法，达到 u64 上限后不回绕。
 
 `tkv_wal_corrupt_recoveries_total` 统计拒绝恢复的 WAL 帧校验错误；`tkv_wal_torn_tail_recoveries_total` 统计成功重写不完整尾部的次数。两者为进程累计计数，错误日志带 WAL UUID、偏移及证据位置；长度残缺恢复保留一份 TORN-TAIL 后缀，CRC 错误仍保留完整 .corrupt 原件。查询/Lookup 读取计数表示已发生的查询工作，即使最后因 history 变化拒绝响应仍计入；成功/失败响应数量使用 HTTP 指标区分。
+
+启用远端备份服务时，`/metrics` 提供 `tkv_backup_prune_clock_unsafe_total`：因异常清单时间拒绝 prune 的任务累计数，BackupService 重建后归零，无租户标签。可对 `increase(tkv_backup_prune_clock_unsafe_total[15m]) > 0` 告警；日志包含 tenant/job UUID，任务保留 `BACKUP_CLOCK_UNSAFE` 错误。核对恢复主机时间与清单后再重试，不能为消除告警盲目删除备份；verify/restore 不受此保护性拒绝影响。

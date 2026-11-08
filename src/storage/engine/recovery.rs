@@ -42,8 +42,10 @@ impl Engine {
         let wal = path.join("wal").join(format!("{id}.wal"));
         reject_symlink(&wal)?;
         let file = OpenOptions::new().write(true).open(&wal)?;
-        if offset < wal::HEADER as u64 || offset > file.metadata()?.len() {
-            return Err(Error::invalid("truncate offset outside WAL"));
+        if offset < wal::HEADER as u64 || offset >= file.metadata()?.len() {
+            return Err(Error::invalid(
+                "truncate offset must discard a nonempty WAL suffix",
+            ));
         }
         file.set_len(offset)?;
         file.sync_all()?;

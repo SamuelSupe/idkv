@@ -186,3 +186,5 @@ python3 scripts/replication_demo.py --binary target/release/tenant-kv --root /va
 复制检查点租约阻塞 WAL 故障恢复的 P1，以及慢传输、哈希暂停、重启和切换的前后对照，见[修复与验证](docs/p01-fix-20261108.md)。
 
 [f6470ac 后续修复](docs/reviewf647-20261108.md)提供离线 WAL 前缀修复命令，隔离旧复制 epoch，并修复备份时钟、复制周期期限、GC 并发推进和小配额缩容边界。
+
+[c3b4c98 后续修复](docs/reviewc3b-20261108.md)区分复制整轮截止与单页传输超时，并补齐离线修复的完整原库归档、持久阶段记录和清理失败报告。

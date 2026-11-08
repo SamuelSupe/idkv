@@ -27,7 +27,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         mpsc,
     },
     thread,
@@ -56,6 +56,7 @@ struct Inner {
     bandwidth: Mutex<Instant>,
     staging: Mutex<HashMap<Uuid, (Uuid, u64)>>,
     clock_checked: Mutex<HashSet<Uuid>>,
+    prune_clock_unsafe: AtomicU64,
 }
 struct Owner {
     inner: Arc<Inner>,
@@ -84,6 +85,12 @@ pub struct BackupService {
 }
 
 impl BackupService {
+    pub(crate) fn render_metrics(&self) -> String {
+        format!(
+            "# HELP tkv_backup_prune_clock_unsafe_total Prune jobs blocked by unsafe backup timestamps.\n# TYPE tkv_backup_prune_clock_unsafe_total counter\ntkv_backup_prune_clock_unsafe_total {}\n",
+            self.owner.inner.prune_clock_unsafe.load(Ordering::Relaxed)
+        )
+    }
     pub(crate) fn store_root(&self) -> &Path {
         self.owner.inner.store.root()
     }
@@ -274,6 +281,7 @@ impl BackupService {
             bandwidth: Mutex::new(Instant::now()),
             staging: Mutex::new(HashMap::new()),
             clock_checked: Mutex::new(HashSet::new()),
+            prune_clock_unsafe: AtomicU64::new(0),
             config,
         });
         let mut workers = Vec::new();

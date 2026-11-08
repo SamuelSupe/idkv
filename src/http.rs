@@ -404,6 +404,9 @@ async fn dispatch_async(
             if let Some(replication) = &state.replication {
                 rendered.push_str(&replication.render_metrics());
             }
+            if let Some(backups) = &state.backups {
+                rendered.push_str(&backups.render_metrics());
+            }
             let bytes = rendered.into_bytes();
             memory.shrink(bytes.capacity());
             Ok(Response::builder()

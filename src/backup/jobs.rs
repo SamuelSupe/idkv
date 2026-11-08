@@ -13,6 +13,15 @@ impl Inner {
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.execute(job.clone())))
                 .unwrap_or_else(|_| Err(Error::new("INTERNAL", "backup worker panicked")));
         let completed = result.is_ok();
+        if let Err(error) = &result
+            && error.code == "BACKUP_CLOCK_UNSAFE"
+        {
+            self.prune_clock_unsafe.fetch_add(1, Ordering::Relaxed);
+            eprintln!(
+                "backup prune blocked: tenant={} job={id}: {error}",
+                job.tenant
+            );
+        }
         let persisted = self.persist_update(id, |j| match result {
             Ok(result) => {
                 j.state = JobState::Completed;

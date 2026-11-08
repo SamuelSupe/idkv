@@ -1153,6 +1153,64 @@ fn reviewf647_future_timestamp_does_not_prevent_disaster_restore() {
         },
     );
     assert_eq!(list(&service, id)[0].checkpoint_ms, u64::MAX);
+    let prune = wait(
+        &service,
+        &start(&service, id, BackupOperation::Prune { keep_last: 1 }),
+    );
+    assert_eq!(prune.state, JobState::Failed);
+    assert!(
+        prune
+            .error
+            .as_deref()
+            .unwrap()
+            .starts_with("BACKUP_CLOCK_UNSAFE:")
+    );
+    // Check the operational alert at the actual authenticated metrics endpoint.
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(async {
+        use axum::{body::Body, http::Request};
+        use http_body_util::BodyExt;
+        use tower::ServiceExt;
+        let secret = "backup-metrics-global-admin-token";
+        let app = http::app_with_backups(
+            store.clone(),
+            http::AuthConfig {
+                tokens: vec![http::Token {
+                    subject: "admin".into(),
+                    sha256: http::token_hash(secret),
+                    tenant: None,
+                    role: http::Role::Admin,
+                }],
+            },
+            Some(service.clone()),
+        )
+        .unwrap();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/metrics")
+                    .header("authorization", format!("Bearer {secret}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(response.status().is_success());
+        let text = String::from_utf8(
+            response
+                .into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes()
+                .to_vec(),
+        )
+        .unwrap();
+        assert!(
+            text.lines()
+                .any(|line| line == "tkv_backup_prune_clock_unsafe_total 1")
+        );
+    });
     store
         .tenant(id)
         .unwrap()

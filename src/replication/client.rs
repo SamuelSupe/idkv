@@ -323,23 +323,53 @@ impl Service {
         body: Option<Value>,
         timeout: Duration,
     ) -> Result<Received<T>> {
-        tokio::time::timeout(timeout, self.receive_response(path, body))
+        self.request_with_deadlines(path, body, timeout, Duration::from_secs(120))
             .await
-            .map_err(|_| {
-                Error::new(
-                    if path == "/v1/replication/log" {
-                        "REPLICA_SNAPSHOT_REQUIRED"
-                    } else {
-                        "REPLICATION_UNAVAILABLE"
-                    },
-                    "peer request total deadline exceeded",
-                )
-            })?
+    }
+    async fn request_with_deadlines<T: DeserializeOwned>(
+        &self,
+        path: &str,
+        body: Option<Value>,
+        remaining: Duration,
+        log_timeout: Duration,
+    ) -> Result<Received<T>> {
+        let log = path == "/v1/replication/log";
+        let timeout = if log {
+            remaining.min(log_timeout)
+        } else {
+            remaining
+        };
+        let mut received_log_body = false;
+        tokio::time::timeout(
+            timeout,
+            self.receive_response(path, body, &mut received_log_body),
+        )
+        .await
+        .map_err(|_| {
+            // A shortened cycle budget or a server that has not sent a
+            // successful body says nothing about whether this page can fit.
+            let snapshot = log && remaining >= log_timeout && received_log_body;
+            Error::new(
+                if snapshot {
+                    "REPLICA_SNAPSHOT_REQUIRED"
+                } else if log {
+                    "DEADLINE_EXCEEDED"
+                } else {
+                    "REPLICATION_UNAVAILABLE"
+                },
+                if snapshot {
+                    "log body exceeded full request deadline"
+                } else {
+                    "peer request deadline exceeded"
+                },
+            )
+        })?
     }
     async fn receive_response<T: DeserializeOwned>(
         &self,
         path: &str,
         body: Option<Value>,
+        received_log_body: &mut bool,
     ) -> Result<Received<T>> {
         let url = format!(
             "{}{}",
@@ -417,6 +447,9 @@ impl Service {
                 bytes.reserve_exact(capacity - bytes.len());
                 input_memory = next_memory;
             }
+            if success && path == "/v1/replication/log" && !chunk.is_empty() {
+                *received_log_body = true;
+            }
             bytes.extend_from_slice(&chunk);
         }
         let decoded = crate::json::allocation_bound(&bytes);
@@ -470,7 +503,7 @@ impl Service {
         self.sync_inner(true).await.map(|_| ())
     }
     async fn sync_inner(&self, report_error: bool) -> Result<bool> {
-        self.sync_until(report_error, Instant::now() + Duration::from_secs(120))
+        self.sync_until(report_error, Instant::now() + Duration::from_secs(150))
             .await
     }
     async fn sync_until(&self, report_error: bool, deadline: Instant) -> Result<bool> {
@@ -605,7 +638,7 @@ impl Service {
         for round in 0..8 {
             let mut next = Vec::new();
             for mut position in positions {
-                if Instant::now() >= deadline {
+                if deadline.saturating_duration_since(Instant::now()) < Duration::from_millis(100) {
                     let error =
                         Error::new("DEADLINE_EXCEEDED", "replication cycle network deadline");
                     self.inner.progress.lock().error = Some(error.to_string());
@@ -732,11 +765,18 @@ impl Service {
                 .get(&position.info.id)
                 .cloned(),
         };
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining < Duration::from_millis(100) {
+            return Err(Error::new(
+                "DEADLINE_EXCEEDED",
+                "insufficient cycle budget for log request",
+            ));
+        }
         let page: Result<Received<LogPage>> = self
             .request_bounded(
                 "/v1/replication/log",
                 Some(serde_json::to_value(&request)?),
-                deadline.saturating_duration_since(Instant::now()),
+                remaining,
             )
             .await;
         match page {

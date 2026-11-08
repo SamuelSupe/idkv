@@ -174,8 +174,12 @@ tenant-kv-repair /var/lib/idkv TENANT_UUID WAL_UUID \
   --accept-data-loss
 ```
 
-`--at` 是最后一个活跃 WAL 的精确帧边界；它及之后的字节将被舍弃，可能包含已确认数据。应先核对备份、副本及业务回执，不能把日志偏移视为“必然没有确认”。自定义 Options 可通过 `--options OPTIONS_JSON` 提供。命令要求独占 Store 和租户目录锁，只允许 primary/未启用复制的根；从库或已 fence 的旧主不允许借此恢复写入。
+`--at` 是最后一个活跃 WAL 的精确帧边界，必须小于文件长度；零字节截断会被拒绝且不更换 history/epoch。它及之后的字节将被舍弃，可能包含已确认数据。命令不把指定范围当成已证明损坏；管理员仍可显式舍弃健康帧。应先核对备份、副本及业务回执，不能把日志偏移视为“必然没有确认”。自定义 Options 可通过 `--options OPTIONS_JSON` 提供。命令要求独占 Store 和租户目录锁，只允许 primary/未启用复制的根；从库或已 fence 的旧主不允许借此恢复写入。
 
-修复先构造并验证私有数据库副本，将原始 WAL、已有诊断证据和 repair.json 复制到指定的全新目录并同步。归档目录的父目录须已存在，且位于 Store 根外；需要一份数据库暂存及证据的额外磁盘空间。随后更换节点 epoch、清空旧 parent fence，沿用持久恢复 journal 发布新的租户 history。输出包含保留序号、丢弃字节数、新 history/epoch 和证据位置。失败时应检查持久状态与归档；发布中的崩溃由重启 Store 完成恢复，不盲目重复截断。
+修复先构造并验证私有数据库副本，再将完整原租户目录（含 SST、所有 WAL、MANIFEST、CURRENT、TENANT.meta、水位及诊断证据）独立复制到归档的 `database/` 并同步，不使用会被后续写入改变的硬链接。归档目录以 0700 创建，父目录须已存在且位于 Store 根外；`--archive evidence` 相对当前工作目录解析。需要数据库暂存和完整归档这两份额外空间，已有诊断副本另计。归档不足或复制失败不会进入 epoch 变更。修复后可清理 Store 内的旧 trash，完整原库留在外部归档；不要在保留的唯一归档上直接修改或启动引擎。
+
+节点 epoch 先持久化，随后才由租户 lifecycle journal 发布新 history 和数据库；这两份状态不是同一个原子事务。`repair.json` 在写 epoch 前保存 `phase: changing_epoch` 意图，后续依次记录 `epoch_changed`、`publishing_tenant`、`published`。崩溃时记录可能落后一步，必须结合节点状态与租户 journal 判断，不能仅凭未看到 `published` 就重跑。普通失败尽力保存 `failed`、`failed_phase`、`error`，错误输出带新 epoch、报告路径及失败阶段；报告落盘失败也会说明。epoch 已变更而租户未发布的情况下，原库仍在，但旧从库关系已经失效。
+
+如果新库已发布、仅旧目录清理失败，命令成功输出 `published_cleanup_pending` 和 `warning`，不再 panic 或要求重复截断；处理文件系统权限/空间后重开 Store 清理即可。最终报告包含保留序号、丢弃字节数、新 history/epoch、完整归档和 WAL 路径。若选错边界，先从完整归档制作工作副本、核对正确前缀再实施恢复；不能直接把旧 history/epoch 覆盖回正在运行的节点。
 
 旧 epoch 的复制请求会被拒绝。**修复后须按新 Store 初始化流程重建所有旧从库**，不会把可能已分叉的尾部直接接回；其他租户数据不被截断，但节点 epoch 的变化同样要求重建复制关系。业务旧 history 的重试令牌不能授权新操作。这是显式的数据损失修复工具，不是自动断电容错或介质修复。

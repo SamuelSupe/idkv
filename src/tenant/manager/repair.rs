@@ -4,7 +4,7 @@ use super::*;
 impl Store {
     /// Offline, explicitly destructive repair of the final WAL at an exact frame
     /// boundary. The root must not be served by another Store. Archives the original
-    /// WAL outside the root before publishing a new tenant history and node epoch.
+    /// database outside the root before publishing a new tenant history and node epoch.
     /// Replicas of the old epoch must be rebuilt; this is not automatic recovery.
     pub fn repair_wal(
         root: impl AsRef<Path>,
@@ -38,13 +38,25 @@ impl Store {
         let original = inner.root.join("tenants").join(tenant.to_string());
         let owner = store.offline_lock(tenant)?;
         let archive = archive.as_ref();
+        let name = archive
+            .file_name()
+            .ok_or_else(|| Error::invalid("archive directory name"))?;
         let parent = archive
             .parent()
-            .ok_or_else(|| Error::invalid("archive parent"))?
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."))
             .canonicalize()?;
         if parent.starts_with(&inner.root) {
             return Err(Error::invalid(
                 "repair archive must be outside the Store root",
+            ));
+        }
+        let archive = parent.join(name);
+        let original_wal = original.join("wal").join(format!("{wal}.wal"));
+        let original_bytes = fs::metadata(&original_wal)?.len();
+        if offset >= original_bytes {
+            return Err(Error::invalid(
+                "truncate offset must discard a nonempty WAL suffix",
             ));
         }
         let slot = store.slot(tenant);
@@ -112,45 +124,70 @@ impl Store {
         let seq = check.replication_position()?;
         drop(check);
         // No serving state is changed until both the valid replacement and the
-        // independent evidence copy have been synchronized successfully.
-        fs::create_dir(archive)?;
-        let evidence = archive.join(format!("{wal}.corrupt"));
-        let original_wal = original.join("wal").join(format!("{wal}.wal"));
-        crate::storage::copy_file(&original_wal, &evidence, tenant, &budget, &inner.io)?;
-        for entry in fs::read_dir(original.join("wal"))? {
-            let entry = entry?;
-            if entry.path().extension().is_some_and(|ext| ext == "corrupt")
-                || entry.file_name() == "TORN-TAIL"
-            {
-                crate::storage::copy_file(
-                    &entry.path(),
-                    &archive.join(entry.file_name()),
-                    tenant,
-                    &budget,
-                    &inner.io,
-                )?;
-            }
-        }
+        // independent full archive have been synchronized successfully. Keeping
+        // only WAL bytes is insufficient if the chosen boundary was too early.
+        use std::os::unix::fs::DirBuilderExt;
+        fs::DirBuilder::new().mode(0o700).create(&archive)?;
+        let database = archive.join("database");
+        lifecycle::copy_tree(&original, &database, tenant, &budget, &inner.io)?;
+        let evidence = database.join("wal").join(format!("{wal}.wal"));
         let new_epoch = Uuid::new_v4();
-        let report = serde_json::json!({"tenant":tenant,"wal":wal,"truncate_at":offset,
-            "original_bytes":fs::metadata(&original_wal)?.len(),"discarded_bytes":fs::metadata(&original_wal)?.len() - offset,"retained_seq":seq,"new_epoch":new_epoch,
+        let mut report = serde_json::json!({"tenant":tenant,"wal":wal,"truncate_at":offset,
+            "original_bytes":original_bytes,"discarded_bytes":original_bytes - offset,"retained_seq":seq,"new_epoch":new_epoch,
             "old_history":original_history,"new_history":registration.info.history,
-            "evidence":evidence,"replicas_require_rebuild":true});
-        atomic_json(&archive.join("repair.json"), &report)?;
-        sync_dir(archive)?;
+            "database_archive":database,"evidence":evidence,"replicas_require_rebuild":true,
+            "phase":"prepared"});
+        let report_path = archive.join("repair.json");
+        atomic_json(&report_path, &report)?;
+        sync_dir(&archive)?;
         sync_dir(&parent)?;
         sync_dir(&inner.root.join("staging"))?;
         drop(permission);
-        {
-            let _barrier = inner.node.barrier.write();
-            let mut state = store.replication_state();
-            state.epoch = new_epoch;
-            state.parent = None;
-            state.forced = true;
-            inner.node.save(state)?;
+        let result = (|| -> Result<()> {
+            // This is a durable intent, not an atomic transaction with the
+            // separate node state and tenant lifecycle journals.
+            report["phase"] = "changing_epoch".into();
+            atomic_json(&report_path, &report)?;
+            {
+                let _barrier = inner.node.barrier.write();
+                let mut state = store.replication_state();
+                state.epoch = new_epoch;
+                state.parent = None;
+                state.forced = true;
+                inner.node.save(state)?;
+            }
+            report["phase"] = "epoch_changed".into();
+            atomic_json(&report_path, &report)?;
+            crate::storage::failpoint("repair_epoch_changed");
+            crate::storage::errorpoint("repair_epoch_changed")?;
+            drop(owner);
+            report["phase"] = "publishing_tenant".into();
+            atomic_json(&report_path, &report)?;
+            match store.publish_ready_restore(registration, None, &mut preparation, seq, true) {
+                Err(error) if error.code == "RESTORE_CLEANUP_FAILED" => {
+                    report["phase"] = "published_cleanup_pending".into();
+                    report["warning"] = error.to_string().into();
+                }
+                Err(error) => return Err(error),
+                Ok(()) => report["phase"] = "published".into(),
+            }
+            atomic_json(&report_path, &report)
+        })();
+        if let Err(error) = result {
+            let phase = report["phase"].as_str().unwrap_or("unknown").to_owned();
+            report["failed_phase"] = phase.clone().into();
+            report["phase"] = "failed".into();
+            report["error"] = error.to_string().into();
+            let saved = atomic_json(&report_path, &report);
+            return Err(Error::new(
+                &error.code,
+                format!(
+                    "repair failed during {phase}: {error}; epoch change may be durable (new_epoch={new_epoch}); inspect {} and node/lifecycle state before retry; failure report persisted={}",
+                    report_path.display(),
+                    saved.is_ok()
+                ),
+            ));
         }
-        drop(owner);
-        store.publish_ready_restore(registration, None, &mut preparation, seq, true)?;
         Ok(report)
     }
 }

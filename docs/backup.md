@@ -187,3 +187,5 @@ v0.8 租户 retention_seconds 及回收任务、凭据、截止时间均进入�
 配置要求 `max_staging_bytes >= 2×max_backup_bytes+1 MiB`，否则启动返回明确的配置错误；旧的 100/200 GiB 配置应补足 1 MiB。默认容量能承载一份最大恢复，此时不能承诺另一租户同时创建；若需一份最大恢复加一份最大创建，应至少配置 `3×max_backup_bytes+1 MiB`，并提供相应物理空间。单租户串行和全局容量限制继续生效。
 
 每进程每租户首次创建时全量核对远端清单是保留的恢复成本，用来发现旧磁盘镜像带回的 CLOCK；后续创建复用本地水位。prune 的两遍扫描要求仓库遵守单 Store 写入者契约，外部程序不得并行写入清单/对象。显式 Delete 对不存在 ID 返回成功属于幂等删除契约。
+
+异常时间导致 prune 返回 BACKUP_CLOCK_UNSAFE 时，服务日志记录 tenant/job UUID，并增加 `/metrics` 的 `tkv_backup_prune_clock_unsafe_total`。建议按 [遥测说明](telemetry.md) 对增长告警，避免保留策略长期停止而无人察觉；该计数不改变备份的可恢复性。

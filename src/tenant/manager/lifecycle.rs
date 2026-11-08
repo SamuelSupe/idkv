@@ -387,17 +387,20 @@ impl Store {
         // Large obsolete directories are reclaimed after publication, without
         // holding the shared registry or this tenant's lifecycle lock.
         drop(_permission);
-        let cleanup = remove_lifecycle_debris(&inner.root, result?);
+        let debris = result?;
+        let cleanup = crate::storage::errorpoint("restore_cleanup")
+            .and_then(|()| remove_lifecycle_debris(&inner.root, debris));
         if let Err(error) = &cleanup {
-            preparation
-                .slot
-                .as_ref()
-                .unwrap()
-                .lock()
-                .record_failure(Error::new(
+            if let Some(slot) = &preparation.slot {
+                slot.lock().record_failure(Error::new(
                     "UNAVAILABLE",
                     format!("restore cleanup failed; reopen Store to recover: {error}"),
                 ));
+            }
+            return Err(Error::new(
+                "RESTORE_CLEANUP_FAILED",
+                format!("restore published, obsolete directory cleanup pending: {error}"),
+            ));
         }
         cleanup
     }
