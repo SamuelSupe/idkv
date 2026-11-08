@@ -1,0 +1,18 @@
+{
+  "tests": {
+    "exit_code": 0,
+    "elapsed_s": 278.022
+  },
+  "clippy": {
+    "exit_code": 0,
+    "elapsed_s": 3.801
+  },
+  "fmt": {
+    "exit_code": 0,
+    "elapsed_s": 0.317
+  },
+  "release": {
+    "exit_code": 0,
+    "elapsed_s": 50.56
+  }
+}

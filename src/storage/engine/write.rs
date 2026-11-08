@@ -563,6 +563,66 @@ impl Transaction<'_> {
 mod tests {
     use super::*;
     #[test]
+    fn replication_lease_operations_do_not_acquire_engine_ownership() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::Store::open(dir.path(), Options::default()).unwrap();
+        let tenant = store
+            .tenant(store.create_tenant("lease-ownership").unwrap().id)
+            .unwrap();
+        let engine = tenant.engine().clone();
+        engine
+            .transact(|tx| tx.put(b"ack".to_vec(), b"confirmed".to_vec()))
+            .unwrap();
+        drop(tenant);
+        drop(store);
+        assert_eq!(Arc::strong_count(&engine), 1);
+        let mut owners = Vec::new();
+        for operation in ["valid", "renew", "drop"] {
+            let lease = engine.retain_replication_log();
+            let pins = engine.log_retention.pins.lock();
+            let (entered, ready) = std::sync::mpsc::channel();
+            let (finished, done) = std::sync::mpsc::channel();
+            let checking = std::thread::spawn(move || {
+                entered.send(()).unwrap();
+                match operation {
+                    "valid" => assert!(lease.valid()),
+                    "renew" => assert!(lease.renew(1)),
+                    _ => drop(lease),
+                }
+                finished.send(()).unwrap();
+            });
+            ready.recv_timeout(Duration::from_secs(3)).unwrap();
+            // Pause inside the lease operation, as when another export or a
+            // flush is using the pin map during the manager's close check.
+            assert!(done.recv_timeout(Duration::from_millis(100)).is_err());
+            owners.push((operation, Arc::strong_count(&engine)));
+            drop(pins);
+            checking.join().unwrap();
+        }
+        assert_eq!(owners, vec![("valid", 1), ("renew", 1), ("drop", 1)]);
+
+        let lease = engine.retain_replication_log();
+        let path = engine.path.clone();
+        let info = engine.info.clone();
+        let budget = engine.budget.clone();
+        let io = engine.io.clone();
+        drop(engine);
+        assert!(!lease.valid());
+        assert!(!lease.renew(1));
+        let reopened = Engine::open(path, info, Options::default(), budget, io).unwrap();
+        assert_eq!(
+            reopened
+                .snapshot()
+                .unwrap()
+                .get(b"ack", &mut ReadStats::default())
+                .unwrap()
+                .unwrap()
+                .as_slice(),
+            b"confirmed"
+        );
+    }
+
+    #[test]
     fn query_deadline_does_not_become_a_total_write_or_maintenance_deadline() {
         let dir = tempfile::tempdir().unwrap();
         let store = crate::Store::open(
@@ -852,7 +912,7 @@ mod tests {
                 assert_eq!(service.export_log(&request).unwrap().through, receipt.rev);
             }
             // A healthy lease must still retain the engine and its WAL across
-            // both download and catch-up; a weak reference alone is insufficient.
+            // both download and catch-up without the lease owning the engine.
             drop(tenant);
             assert_eq!(store.close_tenant(info.id).unwrap_err().code, "BUSY");
             let tenant = store.tenant(info.id).unwrap();
@@ -860,6 +920,10 @@ mod tests {
                 &mut tenant.engine().writer.lock(),
                 Error::new("COMMIT_UNKNOWN", "injected failed sync"),
             );
+            assert!(!tenant.engine().replication_pinned());
+            let failed_lease = tenant.engine().retain_replication_log();
+            assert!(!failed_lease.valid());
+            assert!(!failed_lease.renew(receipt.rev));
             drop(tenant);
             // No Service::start, expiry pass, release, or receiver progress is
             // allowed to make recovery possible for this assertion.
@@ -880,7 +944,28 @@ mod tests {
                 .put("docs", serde_json::json!({"_key":"after","value":3}), None)
                 .unwrap();
             assert!(next.rev > receipt.rev);
-            if !catching_up {
+            if catching_up {
+                // Recovery revokes the old catch-up pin. Retained history can
+                // still be read, but progress cannot resurrect the old lease.
+                assert!(!recovered.engine().replication_pinned());
+                let page = service.export_log(&request).unwrap();
+                assert_eq!(page.through, next.rev);
+                assert!(!page.frames.is_empty());
+                assert!(!recovered.engine().replication_pinned());
+                assert_eq!(
+                    service.snapshot_chunk(snapshot.id, 0, 0).unwrap_err().code,
+                    "NOT_FOUND"
+                );
+                for value in [1, 2] {
+                    recovered
+                        .engine()
+                        .transact(|tx| tx.put(b"Zpadding".to_vec(), vec![value; 700 << 10]))
+                        .unwrap();
+                    recovered.engine().flush().unwrap();
+                }
+                assert_eq!(service.export_log(&request).err().unwrap().code, "LOG_GONE");
+                assert_eq!(recovered.get("docs", "ack").unwrap().unwrap(), expected);
+            } else {
                 assert_eq!(
                     service.snapshot_chunk(snapshot.id, 0, 0).unwrap_err().code,
                     "SNAPSHOT_EXPIRED"
@@ -889,7 +974,8 @@ mod tests {
             let replacement = service
                 .snapshot(state.cluster, state.epoch, info.id)
                 .unwrap();
-            assert_eq!(replacement.position, next.rev);
+            let head = recovered.engine().seq();
+            assert_eq!(replacement.position, head);
             assert!(
                 !service
                     .snapshot_chunk(replacement.id, 0, 0)
@@ -899,7 +985,7 @@ mod tests {
             service.release_snapshot(replacement.id).unwrap();
             drop(recovered);
             let fence = store.fence_primary(Uuid::new_v4()).unwrap();
-            assert_eq!(fence.tenants[0].seq, next.rev);
+            assert_eq!(fence.tenants[0].seq, head);
         }
     }
 

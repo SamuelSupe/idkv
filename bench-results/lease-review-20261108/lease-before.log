@@ -1,0 +1,21 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.56s
+     Running unittests src/lib.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv-da4845942d3e9983)
+
+running 1 test
+
+thread 'storage::engine::write::tests::replication_lease_operations_do_not_acquire_engine_ownership' panicked at src/storage/engine/write.rs:602:9:
+assertion `left == right` failed
+  left: [("valid", 2), ("renew", 2), ("drop", 2)]
+ right: [("valid", 1), ("renew", 1), ("drop", 1)]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test storage::engine::write::tests::replication_lease_operations_do_not_acquire_engine_ownership ... FAILED
+
+failures:
+
+failures:
+    storage::engine::write::tests::replication_lease_operations_do_not_acquire_engine_ownership
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 87 filtered out; finished in 0.44s
+
+error: test failed, to rerun pass `--lib`

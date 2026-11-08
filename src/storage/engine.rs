@@ -35,8 +35,13 @@ use uuid::Uuid;
 pub use write::Transaction;
 
 pub(crate) struct LogRetention {
-    engine: Weak<Engine>,
+    state: Arc<RetentionState>,
     id: Uuid,
+}
+#[derive(Default)]
+struct RetentionState {
+    pins: Mutex<BTreeMap<Uuid, LogPin>>,
+    recovery_required: AtomicBool,
 }
 struct LogPin {
     position: u64,
@@ -45,27 +50,21 @@ struct LogPin {
 }
 impl LogRetention {
     pub(crate) fn valid(&self) -> bool {
-        self.engine.upgrade().is_some_and(|engine| {
-            !engine.recovery_required()
-                && engine
-                    .log_retention
-                    .lock()
-                    .get(&self.id)
-                    .is_some_and(|pin| pin.expires.is_none_or(|expires| expires > Instant::now()))
-        })
+        self.state
+            .pins
+            .lock()
+            .get(&self.id)
+            .is_some_and(|pin| pin.expires.is_none_or(|expires| expires > Instant::now()))
     }
     pub(crate) fn renew(&self, position: u64) -> bool {
         self.renew_at(position, Instant::now())
     }
     fn renew_at(&self, position: u64, now: Instant) -> bool {
-        let Some(engine) = self.engine.upgrade() else {
-            return false;
-        };
-        let mut leases = engine.log_retention.lock();
+        let mut leases = self.state.pins.lock();
         let Some(pin) = leases.get_mut(&self.id) else {
             return false;
         };
-        if engine.recovery_required() || pin.expires.is_some_and(|expires| expires <= now) {
+        if pin.expires.is_some_and(|expires| expires <= now) {
             leases.remove(&self.id);
             return false;
         }
@@ -76,9 +75,7 @@ impl LogRetention {
 }
 impl Drop for LogRetention {
     fn drop(&mut self) {
-        if let Some(engine) = self.engine.upgrade() {
-            engine.log_retention.lock().remove(&self.id);
-        }
+        self.state.pins.lock().remove(&self.id);
     }
 }
 
@@ -274,12 +271,11 @@ pub struct Engine {
     maintenance: Mutex<()>,
     cache: Arc<Cache>,
     snapshots: Mutex<BTreeMap<Uuid, Weak<Lease>>>,
-    log_retention: Mutex<BTreeMap<Uuid, LogPin>>,
+    log_retention: Arc<RetentionState>,
     disk: AtomicU64,
     disk_inventory: Mutex<DiskInventory>,
     metrics: Metrics,
     closed: AtomicBool,
-    recovery_required: AtomicBool,
     recovery_read_only: bool,
     draining: AtomicBool,
     pub maintenance_error: Mutex<Option<String>>,
@@ -431,7 +427,7 @@ impl Engine {
             maintenance: Mutex::new(()),
             cache,
             snapshots: Mutex::new(BTreeMap::new()),
-            log_retention: Mutex::new(BTreeMap::new()),
+            log_retention: Arc::new(RetentionState::default()),
             disk: AtomicU64::new(disk),
             disk_inventory: Mutex::new(DiskInventory {
                 checked: Instant::now(),
@@ -439,7 +435,6 @@ impl Engine {
             }),
             metrics: Metrics::default(),
             closed: AtomicBool::new(false),
-            recovery_required: AtomicBool::new(false),
             recovery_read_only,
             draining: AtomicBool::new(false),
             maintenance_error: Mutex::new(None),
@@ -488,11 +483,17 @@ impl Engine {
         Ok(self.seq())
     }
     fn poison_writer(&self, writer: &mut Writer, error: Error) {
-        self.recovery_required.store(true, Ordering::Release);
+        // Invalidation and creation/renewal share the pin lock. No lease may
+        // survive recovery or obtain ownership of the engine being closed.
+        let mut pins = self.log_retention.pins.lock();
+        self.log_retention
+            .recovery_required
+            .store(true, Ordering::Release);
+        pins.clear();
         writer.poison = Some(error);
     }
     pub(crate) fn recovery_required(&self) -> bool {
-        self.recovery_required.load(Ordering::Acquire)
+        self.log_retention.recovery_required.load(Ordering::Acquire)
     }
     pub(crate) fn invalidate_snapshots(&self) {
         for lease in self.snapshots.lock().values().filter_map(Weak::upgrade) {
@@ -552,9 +553,9 @@ impl Engine {
         let view = self.view.read();
         self.pin(view.clone(), self.seq(), self.options.snapshot_seconds)
     }
-    pub(crate) fn retain_replication_log(self: &Arc<Self>) -> LogRetention {
+    pub(crate) fn retain_replication_log(&self) -> LogRetention {
         let lease = LogRetention {
-            engine: Arc::downgrade(self),
+            state: self.log_retention.clone(),
             id: Uuid::new_v4(),
         };
         let retention = self
@@ -567,25 +568,25 @@ impl Engine {
         let max_bytes = retention
             .saturating_mul(2)
             .max(self.disk_bytes().min(self.info.disk_bytes / 4));
-        self.log_retention.lock().insert(
-            lease.id,
-            LogPin {
-                position: self.seq(),
-                expires: None,
-                max_bytes,
-            },
-        );
+        let mut pins = self.log_retention.pins.lock();
+        if !self.recovery_required() {
+            pins.insert(
+                lease.id,
+                LogPin {
+                    position: self.seq(),
+                    expires: None,
+                    max_bytes,
+                },
+            );
+        }
         lease
     }
     pub(crate) fn replication_pinned(&self) -> bool {
-        // Healthy pins keep WAL history open, but exports must not own a failed
-        // engine and prevent the manager from reopening it for recovery.
-        !self.recovery_required()
-            && self
-                .log_retention
-                .lock()
-                .values()
-                .any(|pin| pin.expires.is_none_or(|expires| expires > Instant::now()))
+        self.log_retention
+            .pins
+            .lock()
+            .values()
+            .any(|pin| pin.expires.is_none_or(|expires| expires > Instant::now()))
     }
     fn pin(self: &Arc<Self>, view: View, seq: u64, seconds: u64) -> Result<Snapshot> {
         let mut registry = self.snapshots.lock();

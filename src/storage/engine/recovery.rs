@@ -63,6 +63,7 @@ impl Engine {
 
 impl Drop for Engine {
     fn drop(&mut self) {
+        self.log_retention.pins.lock().clear();
         let writer = self.writer.get_mut();
         if self.recovery_read_only || writer.poison.is_some() {
             return;

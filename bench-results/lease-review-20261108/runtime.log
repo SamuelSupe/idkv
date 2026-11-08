@@ -1,0 +1,117 @@
+
+CASE checkpoint
+{
+  "binary_sha256": "3ae4a3d1b6fec42bc37b4045efe79c65b358d2584f77a04fe0e560f9c1f4b451",
+  "paused_after_durable_publication": true,
+  "source_write_error": "COMMIT_UNKNOWN",
+  "backup_result": "success",
+  "live_verified": [
+    {
+      "node": 0,
+      "tenant": "bf150007-77c6-4ece-9d67-1dd9e42eba17",
+      "documents": 100,
+      "sha256": "2f07148354f44536c4dacc89d6383969855261a5ecacc14ecfb4447a1874f5aa",
+      "acknowledged_mismatches": 0
+    },
+    {
+      "node": 0,
+      "tenant": "d8fbca3e-a4c3-4ae1-b677-4a1f5d2222a0",
+      "documents": 10,
+      "sha256": "871ff4527a2711c18d177bd2cf1f1fc6c415790979fc8b270cce3540c6f38e37",
+      "acknowledged_mismatches": 0
+    }
+  ],
+  "restart_verified": [
+    {
+      "node": 0,
+      "tenant": "bf150007-77c6-4ece-9d67-1dd9e42eba17",
+      "documents": 100,
+      "sha256": "2f07148354f44536c4dacc89d6383969855261a5ecacc14ecfb4447a1874f5aa",
+      "acknowledged_mismatches": 0
+    },
+    {
+      "node": 0,
+      "tenant": "d8fbca3e-a4c3-4ae1-b677-4a1f5d2222a0",
+      "documents": 10,
+      "sha256": "871ff4527a2711c18d177bd2cf1f1fc6c415790979fc8b270cce3540c6f38e37",
+      "acknowledged_mismatches": 0
+    }
+  ],
+  "backup_restore_verified": {
+    "node": 0,
+    "tenant": "bf150007-77c6-4ece-9d67-1dd9e42eba17",
+    "documents": 100,
+    "sha256": "3637e11aaffbec8679488a5c0fb6130da5bc4298ed806d6b73aa05213afbfc1c",
+    "acknowledged_mismatches": 0
+  },
+  "restored_restart_verified": {
+    "node": 0,
+    "tenant": "bf150007-77c6-4ece-9d67-1dd9e42eba17",
+    "documents": 100,
+    "sha256": "3637e11aaffbec8679488a5c0fb6130da5bc4298ed806d6b73aa05213afbfc1c",
+    "acknowledged_mismatches": 0
+  }
+}
+
+CASE manual
+{
+  "binary_sha256": "3ae4a3d1b6fec42bc37b4045efe79c65b358d2584f77a04fe0e560f9c1f4b451",
+  "export_active": true,
+  "tenant": "6ac0496c-4055-4914-a1f5-61b054d88e59",
+  "snapshot": "a2b9277c-d8c8-4ebd-afd0-5a724aa57b55",
+  "snapshot_bytes": 113901,
+  "injected_write_error": {
+    "error": {
+      "code": "COMMIT_UNKNOWN",
+      "message": "IO_ERROR: Input/output error (os error 5)"
+    }
+  },
+  "revoked_chunk_errors": [
+    "SNAPSHOT_EXPIRED"
+  ],
+  "first_phase_write_succeeded": true,
+  "blocked_s": 0.0071885050274431705,
+  "explicit_close": "ok",
+  "recovery_after_release_ms": 0.4830420366488397,
+  "acknowledged_data_verified": true
+}
+error_counts {}
+
+CASE hash
+{
+  "binary_sha256": "3ae4a3d1b6fec42bc37b4045efe79c65b358d2584f77a04fe0e560f9c1f4b451",
+  "injected_write_error": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'IO_ERROR: Input/output error (os error 5)'}}",
+  "recovered_while_hash_paused": true,
+  "recovery_observation_s": 0.007534005038905889,
+  "hash_still_paused_at_recovery_observation": true,
+  "snapshot_error": "SNAPSHOT_EXPIRED",
+  "replacement_snapshot_created": true,
+  "acknowledged_data_verified_after_sigkill_restart": true
+}
+post_heal_errors 0
+
+CASE replica
+{
+  "binary_sha256": "3ae4a3d1b6fec42bc37b4045efe79c65b358d2584f77a04fe0e560f9c1f4b451",
+  "tenant": "988f99db-f921-4440-8aa4-f5c088ae1889",
+  "injected_write_error": "HTTP 500: {'error': {'code': 'COMMIT_UNKNOWN', 'message': 'IO_ERROR: Input/output error (os error 5)'}}",
+  "recovered_while_transfer_paused": true,
+  "blocked_after_device_healed_s": 0.008176296949386597,
+  "source_role_after_switchover_attempt": "primary",
+  "other_tenant_write_succeeded": true,
+  "recovery_after_transfer_resumed_ms": 0.24200003826990724,
+  "acknowledged_data_verified_on_both_nodes": true,
+  "acknowledged_data_verified_after_sigkill_restart": true,
+  "planned_switchover_verified": true
+}
+error_counts {}
+
+CASE healthy
+{
+  "binary_sha256": "3ae4a3d1b6fec42bc37b4045efe79c65b358d2584f77a04fe0e560f9c1f4b451",
+  "idle_seconds": 1,
+  "healthy_download_survived_idle": true,
+  "healthy_catchup_survived_idle": true,
+  "idle_eviction_after_release": true,
+  "acknowledged_data_verified": true
+}

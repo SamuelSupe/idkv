@@ -170,6 +170,7 @@ v0.9.1 的查询定位规则：
 | NOT_FOUND | 404 | 资源不存在 |
 | REVISION_CONFLICT / UNIQUE_CONFLICT | 409 | 读取当前状态后重新决策 |
 | BUSY / INDEX_NOT_READY / CONFLICT | 409 | 等待活动请求或修改定义 |
+| CANCELLED | 409 | 操作已取消；检查点复制因源 WAL 故障取消时，等待恢复后重试备份 |
 | READ_ONLY | 409 | 连接当前可写主库；不能通过重启旧配置解锁 |
 | REPLICATION_CONFLICT / REPLICA_LAG | 409 | 核对历史和来源 / 等待追平；禁止跳过日志 |
 | LOG_GONE / SNAPSHOT_EXPIRED | 410 | 复制服务重新取得检查点 |

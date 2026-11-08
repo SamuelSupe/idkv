@@ -286,14 +286,14 @@ impl Engine {
                     Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                         // Only checkpointed history is optional. Invalidate old
                         // exports so LOG_GONE cannot reinstall the same stale copy.
-                        self.log_retention.lock().clear();
+                        self.log_retention.pins.lock().clear();
                     }
                     Err(error) => return Err(error.into()),
                 }
             }
             let mut retained_bytes: u64 = retained_sizes.values().sum();
             let mut floor = {
-                let mut leases = self.log_retention.lock();
+                let mut leases = self.log_retention.pins.lock();
                 leases.retain(|_, pin| pin.expires.is_none_or(|expires| expires > Instant::now()));
                 leases.values().map(|pin| pin.position).min()
             };
@@ -305,7 +305,7 @@ impl Engine {
                     .unwrap()
                     .start_seq;
                 if floor.is_some_and(|floor| next > floor.saturating_add(1)) {
-                    let mut leases = self.log_retention.lock();
+                    let mut leases = self.log_retention.pins.lock();
                     leases.retain(|_, pin| {
                         next <= pin.position.saturating_add(1) || retained_bytes <= pin.max_bytes
                     });
@@ -671,6 +671,8 @@ impl Engine {
     /// Copy a consistent durable checkpoint without holding the maintenance lock
     /// during file I/O. Open descriptors remain readable even after compaction
     /// unlinks an old file; publication always uses the captured Manifest.
+    /// Source WAL failure cancels copying with CANCELLED. A completed checkpoint
+    /// remains valid after later source writes or failures.
     pub fn checkpoint_limited(
         &self,
         destination: &Path,
@@ -680,7 +682,7 @@ impl Engine {
         let check = || {
             if self.recovery_required() {
                 Err(Error::new(
-                    "COMMIT_UNKNOWN",
+                    "CANCELLED",
                     "checkpoint cancelled for WAL recovery",
                 ))
             } else {
@@ -763,7 +765,6 @@ impl Engine {
         sync_dir(&destination.join("sst"))?;
         sync_dir(destination)?;
         sync_dir(parent)?;
-        check()?;
         Ok(backup.checkpoint)
     }
     pub fn metrics(&self) -> serde_json::Value {
@@ -839,7 +840,7 @@ mod tests {
         );
         release.send(()).unwrap();
         blocker.wait().unwrap();
-        assert_eq!(copy.join().unwrap().unwrap_err().code, "COMMIT_UNKNOWN");
+        assert_eq!(copy.join().unwrap().unwrap_err().code, "CANCELLED");
         let copied: u64 = fs::read_dir(path.join("sst"))
             .unwrap()
             .map(|e| e.unwrap().metadata().unwrap().len())

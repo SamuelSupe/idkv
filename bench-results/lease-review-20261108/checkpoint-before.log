@@ -1,0 +1,38 @@
+{
+  "binary_sha256": "67dc2958814917b4d584abb88052c205a372a0880198976d1e83c353ee5840fa",
+  "paused_after_durable_publication": true,
+  "source_write_error": "COMMIT_UNKNOWN",
+  "backup_result": "COMMIT_UNKNOWN",
+  "live_verified": [
+    {
+      "node": 0,
+      "tenant": "75299a11-f832-4ef5-be3c-580aaf71dd5d",
+      "documents": 100,
+      "sha256": "2f07148354f44536c4dacc89d6383969855261a5ecacc14ecfb4447a1874f5aa",
+      "acknowledged_mismatches": 0
+    },
+    {
+      "node": 0,
+      "tenant": "adac23f4-4251-497c-b9d3-bf1abf433f82",
+      "documents": 10,
+      "sha256": "871ff4527a2711c18d177bd2cf1f1fc6c415790979fc8b270cce3540c6f38e37",
+      "acknowledged_mismatches": 0
+    }
+  ],
+  "restart_verified": [
+    {
+      "node": 0,
+      "tenant": "75299a11-f832-4ef5-be3c-580aaf71dd5d",
+      "documents": 100,
+      "sha256": "2f07148354f44536c4dacc89d6383969855261a5ecacc14ecfb4447a1874f5aa",
+      "acknowledged_mismatches": 0
+    },
+    {
+      "node": 0,
+      "tenant": "adac23f4-4251-497c-b9d3-bf1abf433f82",
+      "documents": 10,
+      "sha256": "871ff4527a2711c18d177bd2cf1f1fc6c415790979fc8b270cce3540c6f38e37",
+      "acknowledged_mismatches": 0
+    }
+  ]
+}
