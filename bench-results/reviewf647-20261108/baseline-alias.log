@@ -1,0 +1,22 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.17s
+     Running unittests src/lib.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv-2393aa090e8f705f)
+
+running 1 test
+test tenant::retention::tests::review0732_receipt_alias_gc_does_not_miss_a_new_receipt_behind_its_cursor ... FAILED
+
+failures:
+
+---- tenant::retention::tests::review0732_receipt_alias_gc_does_not_miss_a_new_receipt_behind_its_cursor stdout ----
+
+thread 'tenant::retention::tests::review0732_receipt_alias_gc_does_not_miss_a_new_receipt_behind_its_cursor' panicked at src/tenant/retention/tests.rs:939:5:
+assertion failed: t.engine().snapshot().unwrap().get(&alias,
+            &mut ReadStats::default()).unwrap().is_none()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tenant::retention::tests::review0732_receipt_alias_gc_does_not_miss_a_new_receipt_behind_its_cursor
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 116 filtered out; finished in 0.19s
+
+error: test failed, to rerun pass `--lib`

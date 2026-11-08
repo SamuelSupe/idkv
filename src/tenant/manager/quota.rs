@@ -70,6 +70,7 @@ impl Store {
         if !shrinking_memory && !shrinking_disk {
             return self.publish_quota(&mut guard, info);
         }
+        let mut position = guard.last_seq;
         let memory = guard.memory.clone();
         let gate = Uuid::new_v4();
         guard.installing = Some(gate);
@@ -95,12 +96,13 @@ impl Store {
             serving.attach_manager(inner._lock.clone(), inner.node.clone());
             // A replica can retain WAL already checkpointed by its source.
             serving.flush()?;
+            position = Some(serving.replication_position()?);
             drop(serving);
         }
         let used = crate::storage::directory_size(&path)?;
         // Keep enough foreground space for a bounded delete batch, in addition
         // to the maintenance reserve. Larger requests can still be split/retried.
-        let delete_headroom = (inner.options.max_batch_bytes as u64).saturating_add(4096);
+        let delete_headroom = (info.disk_bytes / 20).clamp(64 << 10, 1 << 20);
         if shrinking_disk
             && used.saturating_add(delete_headroom) > info.disk_bytes - info.disk_bytes / 5
         {
@@ -108,7 +110,7 @@ impl Store {
                 "new disk quota leaves insufficient foreground delete headroom",
             ));
         }
-        let position = if shrinking_memory {
+        position = if shrinking_memory {
             let available = info
                 .memory_bytes
                 .checked_sub(memory.used())
@@ -143,7 +145,7 @@ impl Store {
             drop(check);
             Some(position)
         } else {
-            None
+            position
         };
         // Reacquire in node-before-slot order. A fence must not wait behind this
         // full storage scan while blocking all other writers.
@@ -209,6 +211,33 @@ impl Store {
 mod tests {
     use super::*;
     #[test]
+    fn reviewf647_small_disk_shrink_keeps_cached_position_and_delete_space() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        let info = store.create_tenant("small-quota").unwrap();
+        let tenant = store.tenant(info.id).unwrap();
+        tenant.create_collection("docs").unwrap();
+        tenant
+            .put(
+                "docs",
+                serde_json::json!({"_key":"ack","value":"x".repeat(8192)}),
+                None,
+            )
+            .unwrap();
+        let expected = tenant.get("docs", "ack").unwrap();
+        let seq = tenant.engine().seq();
+        drop(tenant);
+        store
+            .set_quota(info.id, info.memory_bytes, 2 << 20)
+            .unwrap();
+        assert_eq!(store.slot(info.id).lock().last_seq, Some(seq));
+        let tenant = store.tenant(info.id).unwrap();
+        assert_eq!(tenant.get("docs", "ack").unwrap(), expected);
+        tenant.delete("docs", "ack", None).unwrap();
+        assert!(tenant.get("docs", "ack").unwrap().is_none());
+    }
+
+    #[test]
     fn review0732_replica_disk_shrink_flushes_source_checkpointed_wal_first() {
         use crate::replication::{Config, LogRequest, PROTOCOL, Role, TenantPosition};
         let dirs = [tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap()];
@@ -217,7 +246,14 @@ mod tests {
             ..Options::default()
         };
         let primary = Store::open(dirs[0].path(), options.clone()).unwrap();
-        let replica = Store::open(dirs[1].path(), options).unwrap();
+        let replica = Store::open(
+            dirs[1].path(),
+            Options {
+                max_batch_bytes: 32 << 20,
+                ..options
+            },
+        )
+        .unwrap();
         let cluster = Uuid::new_v4();
         for (store, role) in [(&primary, Role::Primary), (&replica, Role::Replica)] {
             store.owner.stop.store(true, Ordering::Release);

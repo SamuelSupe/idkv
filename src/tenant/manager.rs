@@ -24,6 +24,7 @@ mod admission;
 mod lifecycle;
 mod quota;
 mod registry;
+mod repair;
 mod replication;
 use lifecycle::{
     clean_lifecycle_debris, collect_lifecycle_debris, recover_lifecycle, remove_lifecycle_debris,
@@ -622,9 +623,14 @@ impl Store {
             .cloned()
             .ok_or_else(|| Error::missing("tenant"))?;
         let path = inner.root.join("tenants").join(id.to_string()).join("LOCK");
-        if !path.parent().unwrap().try_exists()?
-            || (!path.exists() && matches!(registration.lifecycle, Lifecycle::Deleted))
-        {
+        if !path.parent().unwrap().try_exists()? {
+            return if matches!(registration.lifecycle, Lifecycle::Active) {
+                Err(Error::corrupt("active tenant directory is missing"))
+            } else {
+                Ok(None)
+            };
+        }
+        if !path.exists() && matches!(registration.lifecycle, Lifecycle::Deleted) {
             return Ok(None);
         }
         if path.exists() {
@@ -681,6 +687,18 @@ impl Store {
             .ok_or_else(|| Error::missing("tenant"))?;
         if matches!(registration.lifecycle, Lifecycle::Deleted) {
             return Ok(());
+        }
+        if let Lifecycle::Restoring { old, .. } = registration.lifecycle {
+            let previous = inner.root.join("trash").join(old.to_string());
+            if previous.try_exists()? {
+                return Err(Error::new(
+                    "RECOVERY_REQUIRED",
+                    format!(
+                        "restore still retains a previous database at {}; archive or recover it before deleting this tenant",
+                        previous.display()
+                    ),
+                ));
+            }
         }
         registration.lifecycle = Lifecycle::Deleting;
         next.prepare_publish()?;

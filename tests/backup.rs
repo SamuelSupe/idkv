@@ -738,7 +738,7 @@ fn concurrent_backups_count_active_staging_only_once() {
         }
     }
     cfg.max_backup_bytes = 16 << 20;
-    cfg.max_staging_bytes = 32 << 20;
+    cfg.max_staging_bytes = (32 << 20) + (1 << 20);
     cfg.bytes_per_second = 1 << 20;
     let service = BackupService::open(store.clone(), cfg).unwrap();
     let first = start(&service, a, BackupOperation::Create);
@@ -860,7 +860,7 @@ fn subsystem_review_one_tenant_cannot_fill_the_backup_job_table() {
 fn subsystem_review_retained_create_cannot_exhaust_other_tenants_staging() {
     let (dir, store, id, mut cfg) = setup();
     cfg.max_backup_bytes = 1 << 20;
-    cfg.max_staging_bytes = 2 << 20;
+    cfg.max_staging_bytes = 3 << 20;
     let other = store.create_tenant("other").unwrap().id;
     let service = BackupService::open(store.clone(), cfg).unwrap();
     let blocked = dir.path().join(format!("remote/tenants/{id}/objects"));
@@ -874,6 +874,12 @@ fn subsystem_review_retained_create_cannot_exhaust_other_tenants_staging() {
             .join(failed.id.to_string())
             .exists()
     );
+    fs::write(
+        dir.path()
+            .join(format!("data/backup-work/{}/retained", failed.id)),
+        vec![0; 600 << 10],
+    )
+    .unwrap();
     let rejected = wait(&service, &start(&service, id, BackupOperation::Create));
     assert_eq!(rejected.state, JobState::Failed);
     assert!(
@@ -1124,5 +1130,43 @@ fn review0732_bad_or_oversized_inventory_does_not_block_new_backups_and_can_be_d
         BackupOperation::Verify {
             backup: newest.backup,
         },
+    );
+}
+
+#[test]
+fn reviewf647_future_timestamp_does_not_prevent_disaster_restore() {
+    let (dir, store, id, cfg) = setup();
+    let service = BackupService::open(store.clone(), cfg).unwrap();
+    let created = complete(&service, id, BackupOperation::Create);
+    let mut manifest: BackupManifest = serde_json::from_slice(
+        &fs::read(snapshot(dir.path(), id, created.backup).join("manifest.json")).unwrap(),
+    )
+    .unwrap();
+    manifest.checkpoint_ms = u64::MAX;
+    publish_manifest_fixture(dir.path(), &manifest);
+    let confirmed = store.tenant(id).unwrap().get("assets", "a").unwrap();
+    complete(
+        &service,
+        id,
+        BackupOperation::Verify {
+            backup: created.backup,
+        },
+    );
+    assert_eq!(list(&service, id)[0].checkpoint_ms, u64::MAX);
+    store
+        .tenant(id)
+        .unwrap()
+        .put("assets", json!({"_key":"a","ip":"changed"}), None)
+        .unwrap();
+    complete(
+        &service,
+        id,
+        BackupOperation::Restore {
+            backup: created.backup,
+        },
+    );
+    assert_eq!(
+        store.tenant(id).unwrap().get("assets", "a").unwrap(),
+        confirmed
     );
 }

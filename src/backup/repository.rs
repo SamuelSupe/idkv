@@ -190,11 +190,19 @@ impl Inner {
             previous = 0;
             self.clock_checked.lock().remove(&tenant);
         }
+        if previous.saturating_add(366 * 86400 * 1000) < now_ms() {
+            // Reconcile again after an RTC/NTP jump, even within one process.
+            self.clock_checked.lock().remove(&tenant);
+        }
         // One Store owns a tenant's remote namespace. Reconcile once per process,
         // even with a local marker: that marker may come from an old disk image.
         if !exists || !self.clock_checked.lock().contains(&tenant) {
             self.scan_snapshots(tenant, None, true, &check, |summary| {
-                previous = previous.max(summary.checkpoint_ms);
+                if summary.checkpoint_ms <= ceiling {
+                    previous = previous.max(summary.checkpoint_ms);
+                } else {
+                    eprintln!("backup {tenant}/{}: future timestamp excluded from new clock; backup remains readable", summary.backup);
+                }
                 Ok(())
             })?;
         }
@@ -253,6 +261,9 @@ impl Inner {
         // newest `keep` summaries, so list's response cap cannot block pruning.
         let mut newest = BTreeMap::new();
         self.scan_snapshots(tenant, None, false, &check, |summary| {
+            if summary.checkpoint_ms > now_ms().saturating_add(366 * 86400 * 1000) {
+                return Err(Error::new("BACKUP_CLOCK_UNSAFE", "backup timestamps exceed the local clock; correct the clock or inspect the inventory before pruning; restore remains available"));
+            }
             newest.insert((summary.checkpoint_ms, summary.backup), summary);
             if newest.len() > keep {
                 newest.pop_first();

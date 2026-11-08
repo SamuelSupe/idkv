@@ -1,0 +1,17 @@
+    Checking tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+error: field assignment outside of initializer for an instance created with Default::default()
+   --> src/backup/transfer.rs:337:9
+    |
+337 |         undersized.max_staging_bytes = 200 << 30;
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+note: consider initializing the variable with `backup::model::BackupConfig { max_staging_bytes: 200 << 30, ..Default::default() }` and removing relevant reassignments
+   --> src/backup/transfer.rs:336:9
+    |
+336 |         let mut undersized = BackupConfig::default();
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#field_reassign_with_default
+    = note: `-D clippy::field-reassign-with-default` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::field_reassign_with_default)]`
+
+error: could not compile `tenant-kv` (lib test) due to 1 previous error

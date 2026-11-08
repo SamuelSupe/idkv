@@ -23,6 +23,47 @@ impl SyncedWals {
 }
 
 impl Engine {
+    /// Validate and truncate a private repair copy at an exact boundary in its last WAL.
+    pub(crate) fn truncate_repair_copy(
+        path: &Path,
+        info: &TenantInfo,
+        id: Uuid,
+        offset: u64,
+        budget: &Budget,
+    ) -> Result<()> {
+        let manifest = load_manifest(path)?;
+        let tail = manifest
+            .wals
+            .last()
+            .ok_or_else(|| Error::corrupt("missing tail WAL"))?;
+        if tail.id != id {
+            return Err(Error::invalid("only the last active WAL can be truncated"));
+        }
+        let wal = path.join("wal").join(format!("{id}.wal"));
+        reject_symlink(&wal)?;
+        let file = OpenOptions::new().write(true).open(&wal)?;
+        if offset < wal::HEADER as u64 || offset > file.metadata()?.len() {
+            return Err(Error::invalid("truncate offset outside WAL"));
+        }
+        file.set_len(offset)?;
+        file.sync_all()?;
+        // A non-tail replay rejects a partial frame: never silently round the
+        // operator's chosen boundary down. The serving file is untouched here.
+        Wal::recover(
+            &path.join("wal"),
+            tail,
+            info,
+            false,
+            None,
+            budget,
+            |_, _| Ok(()),
+        )?;
+        match fs::remove_file(path.join("WAL-SYNC")) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(error.into()),
+            _ => {}
+        }
+        sync_dir(path)
+    }
     pub(crate) fn empty_unregistered(path: &Path) -> Result<bool> {
         reject_symlink(&path.join("wal"))?;
         reject_symlink(&path.join("sst"))?;

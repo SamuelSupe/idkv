@@ -143,6 +143,19 @@ pub(crate) fn schedule_receipt(
     token: Option<Uuid>,
 ) -> Result<()> {
     if let Some(p) = policy(tx)? {
+        if let Some(state) = tx.cached_json::<gc::State>(STATE)?
+            && state
+                .alias_namespace
+                .is_some_and(|namespace| target.starts_with(&prefix(b'R', namespace)))
+            && state
+                .alias_receipts_after
+                .as_deref()
+                .is_some_and(|after| target <= after)
+        {
+            let mut state = (**state).clone();
+            state.alias_receipts_after = None;
+            put(tx, STATE.to_vec(), &state)?;
+        }
         let mut at = deadline(transaction_time(tx)?, p.retention_seconds)?;
         if let Some(id) = token
             && let Some(bytes) = tx.get(&key(TOKENS, id.as_bytes()))?

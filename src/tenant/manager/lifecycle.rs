@@ -1,9 +1,9 @@
 use super::*;
 
-struct TenantPreparation {
-    slot: Option<Arc<Mutex<Slot>>>,
-    path: PathBuf,
-    journaled: bool,
+pub(super) struct TenantPreparation {
+    pub(super) slot: Option<Arc<Mutex<Slot>>>,
+    pub(super) path: PathBuf,
+    pub(super) journaled: bool,
 }
 impl Drop for TenantPreparation {
     fn drop(&mut self) {
@@ -296,6 +296,28 @@ impl Store {
         check.verify()?;
         let restored_seq = check.replication_position()?;
         drop(check);
+        self.publish_ready_restore(
+            registration,
+            upstream,
+            &mut preparation,
+            restored_seq,
+            false,
+        )
+    }
+
+    pub(super) fn publish_ready_restore(
+        &self,
+        registration: Registration,
+        upstream: Option<&crate::replication::Source>,
+        preparation: &mut TenantPreparation,
+        restored_seq: u64,
+        repair: bool,
+    ) -> Result<()> {
+        let id = registration.info.id;
+        let stage = Uuid::parse_str(preparation.path.file_name().unwrap().to_str().unwrap())
+            .map_err(|_| Error::invalid("restore staging identity"))?;
+        let inner = &self.owner.inner;
+        let slot = self.slot(id);
         // Copy and verification run without the tenant lifecycle lock. Only publication
         // needs a stopped tenant; a failed attempt leaves the serving database intact.
         let _drain = if upstream.is_none() {
@@ -307,7 +329,9 @@ impl Store {
             Some(source) => inner.node.replica_write(source)?,
             None => {
                 let permission = inner.node.write()?;
-                self.require_local_restore()?;
+                if !repair {
+                    self.require_local_restore()?;
+                }
                 permission
             }
         };
@@ -423,9 +447,10 @@ pub(super) fn recover_lifecycle(
                         crate::storage::failpoint("restore_new_moved");
                     }
                     if !current.exists() {
-                        return Err(Error::corrupt(
-                            "restore lost both current and staged database",
-                        ));
+                        return Err(Error::corrupt(format!(
+                            "restore lost both current and staged database; inspect previous database at {} before any deletion",
+                            previous.display()
+                        )));
                     }
                     let actual: TenantInfo = read_json(&current.join("TENANT.meta"))?;
                     if actual.id != *id
@@ -452,7 +477,7 @@ pub(super) fn recover_lifecycle(
     }
     Ok(failures)
 }
-fn copy_tree(
+pub(super) fn copy_tree(
     source: &Path,
     destination: &Path,
     id: Uuid,
@@ -639,12 +664,18 @@ mod edge_review_tests {
             .put("docs", serde_json::json!({"_key":"ack"}), None)
             .unwrap();
         let mut registry = store.owner.inner.registry.read().clone();
+        let old = Uuid::new_v4();
         registry.tenants.get_mut(&bad.id).unwrap().lifecycle = Lifecycle::Restoring {
             stage: Uuid::new_v4(),
-            old: Uuid::new_v4(),
+            old,
         };
         drop(store);
-        fs::remove_dir_all(dir.path().join("tenants").join(bad.id.to_string())).unwrap();
+        let previous = dir.path().join("trash").join(old.to_string());
+        fs::rename(
+            dir.path().join("tenants").join(bad.id.to_string()),
+            &previous,
+        )
+        .unwrap();
         atomic_json(&dir.path().join("control/tenants.json"), &registry).unwrap();
         let store = Store::open(dir.path(), Options::default()).unwrap();
         assert_eq!(store.tenant(bad.id).err().unwrap().code, "UNAVAILABLE");
@@ -666,6 +697,12 @@ mod edge_review_tests {
                 .message
                 .contains(&bad.id.to_string())
         );
+        let error = store.delete_tenant(bad.id).unwrap_err();
+        assert_eq!(error.code, "RECOVERY_REQUIRED");
+        assert!(error.message.contains(&old.to_string()));
+        assert!(previous.join("TENANT.meta").is_file());
+        let saved = tempfile::tempdir().unwrap();
+        fs::rename(&previous, saved.path().join("previous")).unwrap();
         store.delete_tenant(bad.id).unwrap();
         assert!(store.pending_lifecycle_tenants().is_empty());
         store.create_tenant("bad-journal").unwrap();

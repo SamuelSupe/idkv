@@ -1,0 +1,26 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+error[E0369]: binary operation `==` cannot be applied to type `&resources::Bytes`
+    --> src/storage/engine/write.rs:1335:9
+     |
+1335 | /         assert_eq!(
+1336 | |             snapshot
+1337 | |                 .get(b"Rscheduled", &mut ReadStats::default())
+1338 | |                 .unwrap()
+...    |
+1341 | |             b"valid receipt"
+1342 | |         );
+     | |         ^
+     | |         |
+     | |_________&resources::Bytes
+     |           &[u8; 13]
+     |
+note: an implementation of `PartialEq<[u8; 13]>` might be missing for `resources::Bytes`
+    --> src/resources.rs:15:1
+     |
+  15 | pub struct Bytes {
+     | ^^^^^^^^^^^^^^^^ must implement `PartialEq<[u8; 13]>`
+     = note: this error originates in the macro `assert_eq` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+For more information about this error, try `rustc --explain E0369`.
+error: could not compile `tenant-kv` (lib test) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...

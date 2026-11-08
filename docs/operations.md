@@ -120,7 +120,7 @@ COMMIT_UNKNOWN 后不能继续写入该引擎。新请求不再复用它，旧�
 
 重建临时需要最多约一个未刷盘 WAL 文件大小的额外空间。ENOSPC 会打开不允许发布位置的诊断实例，context.writable 为 false、stats.recovery_read_only 为 true；普通快照/文档/查询读取返回 RECOVERY_REQUIRED（503），写入、后台修改、日志导出、复制位置确认和计划切换拒绝，避免返回缺少已确认数据的正常 404。原始字节保持不变，不每秒重试复制。释放空间和句柄后 close/reopen 完成恢复。注册表无变化的启动不重写 control/tenants.json；其他打开 IO_ERROR 缓存一秒，close 可提前清除。
 
-最后一个 WAL 仅长度不完整且位于 WAL-SYNC 水位之外时可自动截尾；坏魔数和 CRC 失败一律隔离。错误日志及 tkv_wal_corrupt_recoveries_total、tkv_wal_torn_tail_recoveries_total 记录拒绝/成功截尾次数（进程累计）。截尾前或拒绝恢复时保留 wal/*.corrupt 原 inode，不自动删除；恢复或人工修复前先归档现场，修复时用新 inode 替换，不能原地覆盖诊断硬链接。已刷盘保留 WAL 被外部删除时仍使旧导出租约失效，落后副本通过 LOG_GONE 重建。
+最后一个 WAL 仅长度不完整且位于 WAL-SYNC 水位之外时可自动截尾；坏魔数和 CRC 失败一律隔离。错误日志及 tkv_wal_corrupt_recoveries_total、tkv_wal_torn_tail_recoveries_total 记录拒绝/成功截尾次数（进程累计）。CRC/魔数错误拒绝恢复时保留 wal/*.corrupt 原 inode，不自动删除；正常长度残缺尾部只保留一份 wal/TORN-TAIL（偏移元数据与丢弃后缀，最多约 64 MiB+元数据），后续长度残缺覆盖它，不反复复制已确认 WAL 前缀；恢复或人工修复前先归档现场，修复时用新 inode 替换，不能原地覆盖诊断硬链接。已刷盘保留 WAL 被外部删除时仍使旧导出租约失效，落后副本通过 LOG_GONE 重建。
 
 installing 在检查点安装、管理操作排空及配额离线预检期间为 true。状态接口包含 commit_seq、memory_bytes、disk_bytes、各层文件数、活动快照数、维护错误，以及进程内累计的 document_bytes、wal_bytes、flush_bytes、compaction_read_bytes、compaction_write_bytes、commits、WAL fsyncs、write_lock_wait_ns，以及 scheduler.completed_jobs、cancelled_jobs、queue_wait_ns、queued_jobs。调度计数在 Store 生命周期内按租户累计；其余引擎指标在重开后清零。读取统计的 blocks_read 表示引擎文件读取，不保证绕过操作系统页缓存；decompressed_bytes 是解压后的字节数。写放大可用 `(wal_bytes + flush_bytes + compaction_write_bytes) / document_bytes` 估算，必须注明区间、索引数和合并是否追平。
 
@@ -158,6 +158,24 @@ HTTP 先用 try_lock/try_read 非阻塞取得已缓存预算。全局 registry/s
 
 删除租户会在持久删除状态发布后清理其 `backups/<UUID>/` 本地备份，并与该租户的本地备份/恢复互斥；启动时补清理已删除租户的旧副本。清理错误会返回并隔离该租户，重开 Store 重试。远端备份不随租户删除自动清除，见 [备份保留](backup.md)。
 
-磁盘缩配额必须在前台 80% 范围内额外留出 `max_batch_bytes + 4096` 字节，保护一个受限删除批次的 WAL 写入；默认约 16 MiB。副本先使用旧配额刷盘，再统计占用；磁盘单独缩容同样执行该顺序。缩容后的其他写入仍会消耗空间，不保证未来任意时刻、任意大小的删除都无背压。
+磁盘缩配额必须在前台 80% 范围内额外留出新磁盘配额的 5%，下限 64 KiB、上限 1 MiB，供小批次删除使用。该规则不依赖主从的 max_batch_bytes；较大删除仍需分批。副本先使用旧配额刷盘，再统计占用；磁盘单独缩容同样执行该顺序。缩容后的其他写入仍会消耗空间，不保证未来任意时刻、任意大小的删除都无背压。
 
-启动隔离的生命周期故障在 stderr 和复制 unavailable 中保留具体原因及租户 UUID。缺失 current/staged 的租户可以显式删除并释放名称。未解决的 journal 仍阻止计划角色切换，不能忽略可能存在的已确认数据；应修复或明确删除该租户，不能只重复重启。
+启动隔离的生命周期故障在 stderr 和复制 unavailable 中保留具体原因及租户 UUID。缺失 current/staged 的租户若仍有 trash/<old>，删除返回 RECOVERY_REQUIRED 并给出旧目录路径；必须先归档或恢复这份可能唯一的旧数据库，再显式删除。没有旧目录时可删除并释放名称。活跃租户目录缺失时，close/quota 不再跳过目录锁，返回 CORRUPTION。未解决的 journal 仍阻止计划角色切换，不能忽略可能存在的已确认数据；应修复或明确删除该租户，不能只重复重启。
+
+
+### 离线 WAL 前缀修复
+
+不能仅凭 CRC 和健康关闭水位区分未确认撕裂写与已确认字节的介质损坏。自动恢复继续拒绝 CRC/魔数错误；诊断日志给出 WAL UUID 与第一个坏帧偏移。确认应保留的前缀后，可停机执行：
+
+```sh
+tenant-kv-repair /var/lib/idkv TENANT_UUID WAL_UUID \
+  --at FRAME_START_BYTE_OFFSET \
+  --archive /mnt/recovery/idkv-evidence-001 \
+  --accept-data-loss
+```
+
+`--at` 是最后一个活跃 WAL 的精确帧边界；它及之后的字节将被舍弃，可能包含已确认数据。应先核对备份、副本及业务回执，不能把日志偏移视为“必然没有确认”。自定义 Options 可通过 `--options OPTIONS_JSON` 提供。命令要求独占 Store 和租户目录锁，只允许 primary/未启用复制的根；从库或已 fence 的旧主不允许借此恢复写入。
+
+修复先构造并验证私有数据库副本，将原始 WAL、已有诊断证据和 repair.json 复制到指定的全新目录并同步。归档目录的父目录须已存在，且位于 Store 根外；需要一份数据库暂存及证据的额外磁盘空间。随后更换节点 epoch、清空旧 parent fence，沿用持久恢复 journal 发布新的租户 history。输出包含保留序号、丢弃字节数、新 history/epoch 和证据位置。失败时应检查持久状态与归档；发布中的崩溃由重启 Store 完成恢复，不盲目重复截断。
+
+旧 epoch 的复制请求会被拒绝。**修复后须按新 Store 初始化流程重建所有旧从库**，不会把可能已分叉的尾部直接接回；其他租户数据不被截断，但节点 epoch 的变化同样要求重建复制关系。业务旧 history 的重试令牌不能授权新操作。这是显式的数据损失修复工具，不是自动断电容错或介质修复。

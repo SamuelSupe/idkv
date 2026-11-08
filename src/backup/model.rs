@@ -49,13 +49,23 @@ impl BackupConfig {
             || self.max_backup_bytes < 1 << 20
             || self.max_backup_bytes > 16 << 40
             || self.max_staging_bytes < self.max_backup_bytes
-            || self.max_staging_bytes > 32 << 40
+            || self.max_staging_bytes > (32 << 40) + (1 << 20)
             || !(1 << 20..=10 << 30).contains(&self.bytes_per_second)
             || !(1..=300).contains(&self.timeout_seconds)
             || !(1..=7 * 86400).contains(&self.job_timeout_seconds)
             || self.gc_grace_seconds > 365 * 86400
         {
             return Err(Error::invalid("backup service or resource limits"));
+        }
+        if self.max_staging_bytes
+            < self
+                .max_backup_bytes
+                .saturating_mul(2)
+                .saturating_add(1 << 20)
+        {
+            return Err(Error::invalid(
+                "max_staging_bytes must cover 2 * max_backup_bytes + 1 MiB for restore",
+            ));
         }
         if self.options.len() > 64
             || self
@@ -176,7 +186,6 @@ impl BackupManifest {
             || self.tenant.id != tenant
             || self.files.is_empty()
             || self.files.len() > FILE_LIMIT
-            || self.checkpoint_ms > now_ms().saturating_add(366 * 86400 * 1000)
         {
             return Err(Error::corrupt("backup identity or format"));
         }

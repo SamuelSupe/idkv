@@ -657,3 +657,162 @@ async fn review0732_trickling_response_releases_cycle_at_total_deadline() {
         .unwrap();
     server.abort();
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn reviewf647_cycle_budget_rotates_slow_tenants_and_bootstraps_timed_out_logs() {
+    use crate::http::{self, AuthConfig, Role as HttpRole, Token};
+    use axum::{
+        body::{Body, to_bytes},
+        extract::{Request, State},
+        middleware::Next,
+        response::Response,
+    };
+    use std::sync::atomic::AtomicUsize;
+    #[derive(Default)]
+    struct Delayed {
+        tenants: Mutex<Vec<Uuid>>,
+        snapshots: AtomicUsize,
+    }
+    async fn delay(State(state): State<Arc<Delayed>>, request: Request, next: Next) -> Response {
+        if request.uri().path() == "/v1/replication/snapshot" {
+            state.snapshots.fetch_add(1, Ordering::Relaxed);
+        }
+        if request.uri().path() != "/v1/replication/log" {
+            return next.run(request).await;
+        }
+        let (parts, body) = request.into_parts();
+        let bytes = to_bytes(body, 16384).await.unwrap();
+        let log: LogRequest = serde_json::from_slice(&bytes).unwrap();
+        state.tenants.lock().push(log.tenant);
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        next.run(Request::from_parts(parts, Body::from(bytes)))
+            .await
+    }
+    let (_source_dir, source_store, source_service) = primary(Options::default());
+    let source_state = source_store.replication_state();
+    let replica_dir = tempfile::tempdir().unwrap();
+    let replica_store = Store::open(replica_dir.path(), Options::default()).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let token = replica_dir.path().join("token");
+    fs::write(&token, "replication-unit-test-secret").unwrap();
+    fs::set_permissions(&token, fs::Permissions::from_mode(0o600)).unwrap();
+    let replica = Service::open(
+        replica_store.clone(),
+        Config {
+            cluster: source_state.cluster,
+            role: Role::Replica,
+            peer_url: format!("http://{}", listener.local_addr().unwrap()),
+            token_file: token,
+            poll_ms: 10,
+            log_retention_bytes: 1 << 20,
+        },
+    )
+    .unwrap();
+    let source = replica_store.bind_source(&source_state).unwrap();
+    let mut expected = Vec::new();
+    for n in 0..4 {
+        let info = source_store.create_tenant(&format!("slow-{n}")).unwrap();
+        let handle = source_store.tenant(info.id).unwrap();
+        handle.create_collection("docs").unwrap();
+        let checkpoint = replica_dir.path().join(format!("seed-{n}"));
+        handle.engine().checkpoint(&checkpoint).unwrap();
+        replica_store
+            .install_replica(&source, &checkpoint, info.clone())
+            .unwrap();
+        handle
+            .put("docs", json!({"_key":"ack","value":n}), None)
+            .unwrap();
+        expected.push((info.id, handle.get("docs", "ack").unwrap()));
+    }
+    let delayed = Arc::new(Delayed::default());
+    let app = http::app_with_replication(
+        source_store,
+        AuthConfig {
+            tokens: vec![Token {
+                subject: "replica".into(),
+                sha256: http::token_hash("replication-unit-test-secret"),
+                tenant: None,
+                role: HttpRole::Replication,
+            }],
+        },
+        None,
+        Some(source_service),
+    )
+    .unwrap()
+    .layer(axum::middleware::from_fn_with_state(delayed.clone(), delay));
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    for _ in 0..2 {
+        let started = Instant::now();
+        {
+            let _cycle = replica.inner.cycle.lock().await;
+            let _ = replica
+                .sync_until(false, Instant::now() + Duration::from_millis(100))
+                .await;
+        }
+        assert!(
+            started.elapsed() < Duration::from_secs(1),
+            "cycle multiplied the per-request deadline"
+        );
+        assert!(replica.inner.cycle.try_lock().is_ok());
+    }
+    assert!(
+        delayed
+            .tenants
+            .lock()
+            .iter()
+            .copied()
+            .collect::<HashSet<_>>()
+            .len()
+            >= 2
+    );
+    assert!(replica.status().unwrap().reinitializations > 0);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let _ = replica.sync_once().await;
+        if expected.iter().all(|(id, value)| {
+            replica_store
+                .tenant(*id)
+                .is_ok_and(|t| t.get("docs", "ack").ok().as_ref() == Some(value))
+        }) {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "{:?}",
+            replica.status().unwrap().last_error
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert!(delayed.snapshots.load(Ordering::Relaxed) > 0);
+    server.abort();
+}
+
+#[tokio::test]
+async fn reviewf647_promote_bounds_cycle_wait_and_rejects_permanent_credentials() {
+    let (_dir, _store, service) = primary(Options::default());
+    let held = service.inner.cycle.lock().await;
+    let started = Instant::now();
+    assert_eq!(
+        service
+            .promote_bounded(Uuid::new_v4(), Duration::from_millis(40))
+            .await
+            .unwrap_err()
+            .code,
+        "DEADLINE_EXCEEDED"
+    );
+    assert!(started.elapsed() < Duration::from_secs(1));
+    drop(held);
+    fs::set_permissions(
+        &service.inner.config.token_file,
+        fs::Permissions::from_mode(0o644),
+    )
+    .unwrap();
+    let error = service
+        .promote_bounded(Uuid::new_v4(), Duration::from_secs(2))
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, "REPLICATION_CREDENTIAL_INVALID");
+    assert!(started.elapsed() < Duration::from_secs(1));
+}

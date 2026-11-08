@@ -14,9 +14,9 @@ pub(super) struct State {
     #[serde(default)]
     alias_after: Option<Vec<u8>>,
     #[serde(default)]
-    alias_receipts_after: Option<Vec<u8>>,
+    pub(super) alias_receipts_after: Option<Vec<u8>>,
     #[serde(default)]
-    alias_seq: u64,
+    pub(super) alias_namespace: Option<Uuid>,
     #[serde(default)]
     alias_active: bool,
     history_identifier: Option<String>,
@@ -128,9 +128,12 @@ fn migration(
                 }
             }
             _ => {
-                if tx.get(&key(DEADLINE, k))?.is_none()
-                    && p.legacy_expires_at_ms <= now_ms()?.max(state.watermark_ms)
-                {
+                if tx.get(&key(DEADLINE, k))?.is_some() {
+                    continue;
+                }
+                let now = now_ms()?.max(state.watermark_ms);
+                if p.legacy_expires_at_ms <= now {
+                    state.watermark_ms = now;
                     tx.delete(k.clone())?;
                     state.reclaimed_records = state.reclaimed_records.saturating_add(1);
                 } else {
@@ -304,18 +307,16 @@ fn reclaim_receipt_alias(tx: &mut Transaction<'_>, state: &mut State) -> Result<
     let Some(alias) = aliases.first() else {
         state.alias_after = None;
         state.alias_receipts_after = None;
-        state.alias_seq = 0;
+        state.alias_namespace = None;
         state.alias_active = false;
         return Ok(());
     };
-    // A write between physical pages can insert a receipt behind the cursor.
-    // Restart that namespace scan unless only our own previous GC committed.
-    if state.alias_seq.checked_add(1) != Some(tx.seq) {
-        state.alias_receipts_after = None;
-    }
-    state.alias_seq = tx.seq;
     if let Some(value) = &alias.value {
         let namespace: Uuid = parse(value)?;
+        if state.alias_namespace != Some(namespace) {
+            state.alias_receipts_after = None;
+            state.alias_namespace = Some(namespace);
+        }
         let (receipts, exhausted) = tx.gc_prefix(
             &prefix(b'R', namespace),
             state.alias_receipts_after.as_deref(),
@@ -331,6 +332,7 @@ fn reclaim_receipt_alias(tx: &mut Transaction<'_>, state: &mut State) -> Result<
         }
     }
     state.alias_after = Some(alias.key.clone());
+    state.alias_namespace = None;
     state.alias_receipts_after = None;
     Ok(())
 }
@@ -356,6 +358,14 @@ pub(super) fn step(tenant: &TenantHandle) -> Result<()> {
             if state.migration_phase < 5 && !skip_migration {
                 attempted_batch = batch;
                 migration(tx, &p, &mut state, batch)?;
+                // schedule_at may rewind expiry after a quota-blocked migration
+                // let independent cleanup advance. Preserve that targeted rewind.
+                if let Some(pending) = tx.get(STATE)? {
+                    let pending: State = parse(&pending)?;
+                    if serde_json::to_vec(&pending)? != before {
+                        state.expiry_after = pending.expiry_after;
+                    }
+                }
                 if state.migration_phase >= 5 {
                     state.alias_active = true;
                 }

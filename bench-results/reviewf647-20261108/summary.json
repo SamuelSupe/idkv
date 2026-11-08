@@ -1,0 +1,128 @@
+{
+  "base_commit": "f6470acdea8bde0b25c92d39609aa73950b47a77",
+  "status": "passed",
+  "environment": {
+    "runtime": "OrbStack",
+    "os": "Ubuntu 25.10",
+    "architecture": "aarch64",
+    "rustc": "1.90.0 (1159e78c4 2025-09-14)",
+    "cargo": "1.90.0 (840b83a10 2025-07-30)",
+    "target_dir": "/var/tmp/idkv-p01-target-20261108",
+    "tmpdir": "/var/tmp/idkv-p01-tmp-20261108"
+  },
+  "baseline_reproductions": [
+    {
+      "log": "baseline-clock.log",
+      "expected_failures": 1,
+      "scenario": "Valid future-dated manifest fails Verify with CORRUPTION on original f6470ac"
+    },
+    {
+      "log": "baseline-alias.log",
+      "expected_failures": 1,
+      "scenario": "Unrelated commits before every alias GC page prevent completion on original f6470ac"
+    }
+  ],
+  "full_suite": {
+    "command": "cargo test --locked --features failpoints --no-fail-fast -- --test-threads=1",
+    "exit_code": 0,
+    "log": "tests.log",
+    "passed": 273,
+    "failed": 0,
+    "ignored": 0,
+    "test_seconds": 397.25,
+    "result_sections": 15
+  },
+  "targeted_regressions": {
+    "command": "cargo test --locked --features failpoints reviewf647 -- --test-threads=1",
+    "exit_code": 0,
+    "log": "targeted.log",
+    "passed": 7,
+    "failed": 0,
+    "ignored": 0,
+    "test_seconds": 5.74,
+    "result_sections": 14
+  },
+  "final_affected_test": {
+    "command": "cargo test --locked --features failpoints --lib backup::transfer::tests::review0732_large_restore_reserves_two_copies_without_consuming_create_allowance -- --exact --test-threads=1",
+    "exit_code": 0,
+    "log": "staging-final.log",
+    "passed": 1,
+    "failed": 0,
+    "ignored": 0,
+    "test_seconds": 0.32,
+    "result_sections": 1
+  },
+  "checks": [
+    {
+      "command": "cargo clippy --locked --features failpoints --all-targets -- -D warnings",
+      "exit_code": 0,
+      "log": "checks-final.log"
+    },
+    {
+      "command": "cargo check --locked --all-targets",
+      "exit_code": 0,
+      "log": "checks-final.log"
+    },
+    {
+      "command": "cargo fmt --all -- --check",
+      "exit_code": 0,
+      "log": "fmt.log",
+      "environment": "macOS host"
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0,
+      "log": "diff-check.log",
+      "environment": "macOS host"
+    }
+  ],
+  "validation_order_note": "Full suite compiled final production code. The only subsequent source edit changed a test config initializer to a struct literal for Clippy; the affected test was rerun and passed. Final all-target Clippy and default check used final sources.",
+  "acknowledged_data_checks": [
+    "Zero/CRC torn WAL: offline CLI preserves original bytes in separate archive, retains confirmed prefix documents/revisions, drops selected unknown append and rejects old replication epoch",
+    "Crash after moving old database and after publishing new database: lifecycle journal completes, confirmed prefix and revisions match; subsequent writes and verify succeed",
+    "Four incomplete append recoveries preserve confirmed documents while keeping one bounded suffix evidence file",
+    "Future timestamp valid backup: list and full Verify succeed, Restore recovers original document/revision after online mutation",
+    "Multi-tenant delayed HTTP log cycles: advance beyond first slow tenant, initiate checkpoint fallback and eventually match confirmed documents/revisions",
+    "Small disk quota shrink and replica/source asymmetric batch limits preserve confirmed documents and allow bounded deletion",
+    "Mixed receipt migration page reclaims expired legacy receipt at foreground disk ceiling while retaining live scheduled receipt and saving monotonic watermark"
+  ],
+  "coverage_limits": [
+    "Offline repair requires operator-selected prefix and explicit data-loss acceptance; CRC failure is not automatically truncated",
+    "All old replicas must be rebuilt after offline repair; forks created by earlier releases are not automatically detected",
+    "No physical device writeback fault or power-cut certification; crash tests use failpoints and subprocess abort",
+    "No live S3 fault test",
+    "Future timestamp fixture simulates host clock lag; system clock was not changed",
+    "Slow transfer tested with real HTTP and shortened deadlines, not an actual 87 MiB frame over a 0.2 MB/s link",
+    "Network/cycle deadlines do not forcibly cancel synchronous operating system I/O",
+    "Default staging capacity permits one maximum-sized restore, not a simultaneous additional maximum-sized backup",
+    "Remote repository remains single-Store writer; first creation inventory scan and idempotent absent backup deletion are retained"
+  ],
+  "intermediate_logs": {
+    "check.log": "Intermediate build with unused helper warning; helper removed before final suite",
+    "targeted-build-first.log": "Initial test compile error corrected before runtime validation",
+    "targeted-build-second.log": "Initial test compile error corrected before runtime validation",
+    "targeted-first.log": "First new regressions found missing temporary evidence file handling; fixed before final targeted/full runs",
+    "clippy-first.log": "Test-only field_reassign_with_default lint; corrected and affected test rerun",
+    "staging-filter-empty.log": "Incorrect exact test filter matched zero tests; not counted, rerun with qualified name"
+  },
+  "report": "docs/reviewf647-20261108.md",
+  "source_provenance": "source-provenance.json",
+  "log_sha256": {
+    "baseline-alias.log": "37416cc1b1491617d522bb6d07a5b7c7fe1f718a9e8c8a40303af9f1ca03b7e9",
+    "baseline-clock.log": "b269b3dd0dd6b8429e73da4d159f76733997c1324e784f88a5bc3f476f5de892",
+    "check.log": "34ee0c42a58a8178ef965178c612d99d89179393bbb26ae62895d7df857e3ee2",
+    "checks-final.log": "5bc4ae3fe7712b27f60e9a16671bd41e8bad0b0ceb98837eddcf2b2a2f2f22fe",
+    "clippy-first.log": "e35b6761f9a159b97342584ff94614c5a93f743cb6c44ae4401a725568273df0",
+    "diff-check.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "fmt.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "staging-filter-empty.log": "805fd29cc3a4a577daec85d3e804d86c465586cef2bf1ff88f8381ae61a20702",
+    "staging-final.log": "05f0a43eb481f1981f253d65607de9c11ea9ad210a4aad36e195b6220b8701f0",
+    "targeted-build-first.log": "595f340da6380869a2fa0a8c45be7ba93174b805636bccb71680488baa235f22",
+    "targeted-build-second.log": "5edffe5c64c11ad9bc32261b9880f62e6807eecc1537cf951e2fe9822866867f",
+    "targeted-first.log": "f4ae38b121933aa9814d7cbed78bc6763d03d49d4913f1bb791fc4b57d9c27ee",
+    "targeted.log": "407242e518737825302b9de54f82da5e16c87faf738fe451d0dec2944d5f94ff",
+    "tests.log": "61053271acfa630ae7c3b4bd20893f63937ff6152ec019ba282efc4c855d5532"
+  },
+  "delivery_note": "Validation captured before commit; Git history and remote main are the delivery record.",
+  "log_normalization": "Trailing empty lines removed for git diff --check; interior log content retained."
+}

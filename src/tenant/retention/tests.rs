@@ -911,7 +911,10 @@ fn review0732_receipt_alias_gc_does_not_miss_a_new_receipt_behind_its_cursor() {
     t.retention_step().unwrap();
     let early = key(&receipts, &0u32.to_be_bytes());
     t.engine()
-        .transact(|tx| tx.put(early.clone(), b"live retry receipt".to_vec()))
+        .transact(|tx| {
+            tx.put(early.clone(), b"live retry receipt".to_vec())?;
+            schedule_receipt(tx, &early, None)
+        })
         .unwrap();
     for _ in 0..4 {
         t.retention_step().unwrap();
@@ -932,7 +935,10 @@ fn review0732_receipt_alias_gc_does_not_miss_a_new_receipt_behind_its_cursor() {
             put(tx, STATE.to_vec(), &current)
         })
         .unwrap();
-    for _ in 0..6 {
+    for n in 0..6 {
+        t.engine()
+            .transact(|tx| tx.put(b"unrelated".to_vec(), vec![n]))
+            .unwrap();
         t.retention_step().unwrap();
     }
     assert!(

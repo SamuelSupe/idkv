@@ -1075,3 +1075,191 @@ fn review0732_uncertain_local_backup_reports_an_actionable_id() {
             .is_some()
     );
 }
+
+#[cfg(feature = "failpoints")]
+#[test]
+fn reviewf647_offline_wal_repair_preserves_confirmed_prefix_and_rejects_old_replication_epoch() {
+    use std::os::unix::fs::PermissionsExt;
+    use tenant_kv::replication::{Config, LogRequest, PROTOCOL, Role, Service};
+    for (fault, repair_crash) in [
+        ("wal_torn_zero_header", None),
+        ("wal_torn_header_crc", Some("restore_old_moved")),
+        ("wal_torn_payload_crc", Some("restore_new_moved")),
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("data");
+        let id = seed(&root);
+        let store = Store::open(&root, Options::default()).unwrap();
+        let tenant = store.tenant(id).unwrap();
+        tenant
+            .put(
+                "assets",
+                json!({"_key":"prefix","ip":"prefix","payload":"x".repeat(16384)}),
+                None,
+            )
+            .unwrap();
+        let confirmed = tenant.get("assets", "prefix").unwrap();
+        let history = tenant.info().history;
+        let generation = tenant.info().generation;
+        let seq = tenant.engine().seq();
+        let path = root.join("tenants").join(id.to_string());
+        let current = fs::read_to_string(path.join("CURRENT")).unwrap();
+        let manifest: serde_json::Value = storage::read_json(&path.join(current)).unwrap();
+        let wal: uuid::Uuid = manifest["wals"].as_array().unwrap().last().unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .parse()
+            .unwrap();
+        let wal_path = path.join("wal").join(format!("{wal}.wal"));
+        let offset = fs::metadata(&wal_path).unwrap().len();
+        let token = dir.path().join("token");
+        fs::write(&token, "repair-replication-test-token").unwrap();
+        fs::set_permissions(&token, fs::Permissions::from_mode(0o600)).unwrap();
+        let config = Config {
+            cluster: uuid::Uuid::new_v4(),
+            role: Role::Primary,
+            peer_url: "http://127.0.0.1:1".into(),
+            token_file: token,
+            poll_ms: 10,
+            log_retention_bytes: 1 << 20,
+        };
+        let service = Service::open(store.clone(), config.clone()).unwrap();
+        let epoch = service.status().unwrap().node.epoch;
+        assert!(
+            Store::repair_wal(
+                &root,
+                Options::default(),
+                id,
+                wal,
+                offset,
+                dir.path().join("locked")
+            )
+            .is_err()
+        );
+        drop(service);
+        drop(tenant);
+        drop(store);
+        let crash = std::process::Command::new(env!("CARGO_BIN_EXE_crash-probe"))
+            .arg(&root)
+            .arg(id.to_string())
+            .arg("write")
+            .env("TKV_FAILPOINT", fault)
+            .status()
+            .unwrap();
+        assert!(!crash.success());
+        let original = fs::read(&wal_path).unwrap();
+        assert!(original.len() as u64 > offset);
+        let store = Store::open(&root, Options::default()).unwrap();
+        assert_eq!(store.tenant(id).err().unwrap().code, "CORRUPTION");
+        drop(store);
+        assert!(
+            Store::repair_wal(
+                &root,
+                Options::default(),
+                id,
+                wal,
+                offset - 1,
+                dir.path().join("invalid-boundary")
+            )
+            .is_err()
+        );
+        assert_eq!(fs::read(&wal_path).unwrap(), original);
+        let archive = dir.path().join("evidence");
+        let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_tenant-kv-repair"));
+        command
+            .arg(&root)
+            .arg(id.to_string())
+            .arg(wal.to_string())
+            .arg("--at")
+            .arg(offset.to_string())
+            .arg("--archive")
+            .arg(&archive)
+            .arg("--accept-data-loss");
+        if let Some(point) = repair_crash {
+            command.env("TKV_FAILPOINT", point);
+        }
+        let repaired = command.output().unwrap();
+        assert_eq!(
+            repaired.status.success(),
+            repair_crash.is_none(),
+            "{}",
+            String::from_utf8_lossy(&repaired.stderr)
+        );
+        assert_eq!(
+            fs::read(archive.join(format!("{wal}.corrupt"))).unwrap(),
+            original
+        );
+        let store = Store::open(&root, Options::default()).unwrap();
+        let service = Service::open(store.clone(), config.clone()).unwrap();
+        assert_ne!(service.status().unwrap().node.epoch, epoch);
+        let tenant = store.tenant(id).unwrap();
+        assert_ne!(tenant.info().history, history);
+        assert_eq!(tenant.get("assets", "prefix").unwrap(), confirmed);
+        assert!(tenant.get("assets", "old").unwrap().is_some());
+        assert!(tenant.get("assets", "new").unwrap().is_none());
+        assert_eq!(
+            service
+                .export_log(&LogRequest {
+                    protocol: PROTOCOL,
+                    cluster: config.cluster,
+                    epoch,
+                    tenant: id,
+                    generation,
+                    after: seq,
+                    cursor: None
+                })
+                .err()
+                .unwrap()
+                .code,
+            "REPLICATION_CONFLICT"
+        );
+        tenant
+            .put("assets", json!({"_key":"after","ip":"after"}), None)
+            .unwrap();
+        tenant.engine().verify().unwrap();
+    }
+}
+
+#[test]
+fn reviewf647_repeated_incomplete_appends_keep_bounded_tail_evidence() {
+    let dir = tempfile::tempdir().unwrap();
+    let id = seed(dir.path());
+    let root = dir.path().join("tenants").join(id.to_string());
+    for n in 0..4 {
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        let tenant = store.tenant(id).unwrap();
+        tenant.put("assets", json!({"_key":"large-prefix","ip":"large-prefix","value":"x".repeat(128 << 10),"n":n}), None).unwrap();
+        let confirmed = tenant.get("assets", "large-prefix").unwrap();
+        drop(tenant);
+        drop(store);
+        let current = fs::read_to_string(root.join("CURRENT")).unwrap();
+        let manifest: serde_json::Value = storage::read_json(&root.join(current)).unwrap();
+        let wal = manifest["wals"].as_array().unwrap().last().unwrap()["id"]
+            .as_str()
+            .unwrap();
+        let path = root.join("wal").join(format!("{wal}.wal"));
+        let mut file = OpenOptions::new().append(true).open(path).unwrap();
+        file.write_all(b"TXN1-short").unwrap();
+        file.sync_all().unwrap();
+        drop(file);
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        assert_eq!(
+            store
+                .tenant(id)
+                .unwrap()
+                .get("assets", "large-prefix")
+                .unwrap(),
+            confirmed
+        );
+        let evidence: Vec<_> = fs::read_dir(root.join("wal"))
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| {
+                p.extension().is_some_and(|e| e == "corrupt")
+                    || p.file_name().unwrap() == "TORN-TAIL"
+            })
+            .collect();
+        assert_eq!(evidence.len(), 1);
+        assert!(fs::metadata(&evidence[0]).unwrap().len() < 1024);
+    }
+}

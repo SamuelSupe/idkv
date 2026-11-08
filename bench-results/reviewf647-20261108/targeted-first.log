@@ -1,0 +1,94 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.08s
+     Running unittests src/lib.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv-2393aa090e8f705f)
+
+running 4 tests
+test replication::client::tests::reviewf647_cycle_budget_rotates_slow_tenants_and_bootstraps_timed_out_logs ... ok
+test replication::client::tests::reviewf647_promote_bounds_cycle_wait_and_rejects_permanent_credentials ... ok
+test storage::engine::write::tests::reviewf647_mixed_migration_page_reclaims_without_foreground_space ... ok
+test tenant::manager::quota::tests::reviewf647_small_disk_shrink_keeps_cached_position_and_delete_space ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 117 filtered out; finished in 1.79s
+
+     Running unittests src/bin/crash_probe.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/crash_probe-908a2b5674b0a3c6)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/server.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv-ff39cc658b406b80)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/repair.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv_repair-cbb8724e60e0a6dd)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/restore_remote.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv_restore-bdcd2f5707c4399c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/backup.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/backup-2d671d6bcc0b4452)
+
+running 1 test
+test reviewf647_future_timestamp_does_not_prevent_disaster_restore ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 19 filtered out; finished in 0.54s
+
+     Running tests/dsl.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/dsl-84a4cd726864241a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/engine.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/engine-8652a21c0f9bada1)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 33 filtered out; finished in 0.00s
+
+     Running tests/http.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/http-d7db1cb4b3c9977c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.00s
+
+     Running tests/identity.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/identity-86f23e3ad5dd0df1)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/middleware.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/middleware-61a54848029b5c95)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 15 filtered out; finished in 0.00s
+
+     Running tests/recovery.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/recovery-05214f8460f1efa9)
+
+running 2 tests
+test reviewf647_offline_wal_repair_preserves_confirmed_prefix_and_rejects_old_replication_epoch ... ok
+test reviewf647_repeated_incomplete_appends_keep_bounded_tail_evidence ... FAILED
+
+failures:
+
+---- reviewf647_repeated_incomplete_appends_keep_bounded_tail_evidence stdout ----
+
+thread 'reviewf647_repeated_incomplete_appends_keep_bounded_tail_evidence' panicked at tests/recovery.rs:1245:18:
+called `Result::unwrap()` on an `Err` value: Error { code: "IO_ERROR", message: "No such file or directory (os error 2)", location: None }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    reviewf647_repeated_incomplete_appends_keep_bounded_tail_evidence
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 20 filtered out; finished in 2.17s
+
+error: test failed, to rerun pass `--test recovery`

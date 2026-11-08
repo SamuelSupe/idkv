@@ -55,7 +55,7 @@ GitHub 仓库提交源代码、测试、文档和验证记录，使用以下命�
 需要 Rust 1.90+ 和 Unix 文件系统；Linux 为已验证平台。运行目录必须支持文件锁、原子重命名及文件/目录 `fsync`。
 
 ```sh
-cargo build --locked --release --bin tenant-kv --bin tenant-kv-restore
+cargo build --locked --release --bin tenant-kv --bin tenant-kv-restore --bin tenant-kv-repair
 cargo run --locked --example embedded -- /var/tmp/tenant-kv-demo
 cargo run --locked --example dsl -- /var/tmp/tenant-kv-dsl-demo
 cargo run --locked --example identity -- /var/tmp/tenant-kv-identity-demo
@@ -184,3 +184,5 @@ python3 scripts/replication_demo.py --binary target/release/tenant-kv --root /va
 备份元信息发布失败导致重启退出、慢速写盘的跨租户阻塞，以及忘记任务失败后的重试，见[后续控制元信息审查](docs/special-stability4-20261107.md)。
 
 复制检查点租约阻塞 WAL 故障恢复的 P1，以及慢传输、哈希暂停、重启和切换的前后对照，见[修复与验证](docs/p01-fix-20261108.md)。
+
+[f6470ac 后续修复](docs/reviewf647-20261108.md)提供离线 WAL 前缀修复命令，隔离旧复制 epoch，并修复备份时钟、复制周期期限、GC 并发推进和小配额缩容边界。

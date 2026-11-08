@@ -54,3 +54,7 @@ required-features = ["failpoints"]
 name = "tenant-kv-restore"
 path = "src/bin/restore_remote.rs"
 
+
+[[bin]]
+name = "tenant-kv-repair"
+path = "src/bin/repair.rs"

@@ -63,6 +63,47 @@ fn preserve_wal(dir: &Path, info: &WalInfo) -> Result<std::path::PathBuf> {
     Ok(evidence)
 }
 
+fn preserve_torn_tail(
+    dir: &Path,
+    info: &WalInfo,
+    file: &mut File,
+    offset: u64,
+    length: u64,
+) -> Result<()> {
+    // Only the discarded suffix is evidence for a length-truncated append. Keep
+    // one bounded entry per tenant rather than another copy of every valid WAL.
+    use std::os::unix::fs::OpenOptionsExt;
+    let temp = dir.join("TORN-TAIL.tmp");
+    match fs::symlink_metadata(&temp) {
+        Ok(_) => reject_symlink(&temp)?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+    let mut output = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(&temp)?;
+    writeln!(
+        output,
+        "{}",
+        serde_json::json!({"wal": info.id, "offset": offset, "length": length})
+    )?;
+    file.seek(SeekFrom::Start(offset))?;
+    let mut buffer = [0; 8192];
+    let mut remaining = length - offset;
+    while remaining != 0 {
+        let size = remaining.min(buffer.len() as u64) as usize;
+        file.read_exact(&mut buffer[..size])?;
+        output.write_all(&buffer[..size])?;
+        remaining -= size as u64;
+    }
+    output.sync_all()?;
+    fs::rename(temp, dir.join("TORN-TAIL"))?;
+    sync_dir(dir)
+}
+
 fn corrupt_wal(dir: &Path, info: &WalInfo, offset: u64, reason: &str) -> Error {
     CORRUPT_RECOVERIES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let evidence = match preserve_wal(dir, info) {
@@ -195,12 +236,11 @@ impl Wal {
             offset += 24 + len as u64;
         }
         if offset < length {
-            let evidence = preserve_wal(dir, info)?;
+            preserve_torn_tail(dir, info, &mut file, offset, length)?;
             eprintln!(
-                "ERROR incomplete WAL tail: {} offset {offset}, discarded bytes {}; preserved {}",
+                "ERROR incomplete WAL tail: {} offset {offset}, suffix bytes {}; saved in wal/TORN-TAIL",
                 info.id,
                 length - offset,
-                evidence.display()
             );
         }
         let temp = dir.join(format!("{}.recover", info.id));

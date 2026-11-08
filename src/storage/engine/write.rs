@@ -1293,6 +1293,68 @@ mod tests {
             .unwrap();
     }
     #[test]
+    fn reviewf647_mixed_migration_page_reclaims_without_foreground_space() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::Store::open(dir.path(), Options::default()).unwrap();
+        let tenant = store
+            .tenant(store.create_tenant("mixed-migration").unwrap().id)
+            .unwrap();
+        drop(store);
+        tenant.set_retention(60).unwrap();
+        let engine = tenant.engine();
+        engine
+            .transact(|tx| {
+                let mut policy: serde_json::Value =
+                    serde_json::from_slice(&tx.get(b"~policy")?.unwrap())?;
+                policy["legacy_expires_at_ms"] = serde_json::json!(0);
+                tx.put(b"~policy".to_vec(), serde_json::to_vec(&policy)?)?;
+                tx.put(b"Rexpired".to_vec(), b"old receipt".to_vec())?;
+                tx.put(b"Rscheduled".to_vec(), b"valid receipt".to_vec())?;
+                crate::tenant::retention::schedule_at(
+                    tx,
+                    b"Rscheduled",
+                    u64::MAX,
+                    crate::tenant::retention::Expiration::Delete,
+                )
+            })
+            .unwrap();
+        let _maintenance = engine.maintenance.lock();
+        let actual = engine.disk.load(Ordering::Acquire);
+        engine.disk.store(
+            engine.info.disk_bytes - engine.info.disk_bytes / 5,
+            Ordering::Release,
+        );
+        tenant.retention_step().unwrap();
+        let snapshot = engine.snapshot().unwrap();
+        assert!(
+            snapshot
+                .get(b"Rexpired", &mut ReadStats::default())
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            snapshot
+                .get(b"Rscheduled", &mut ReadStats::default())
+                .unwrap()
+                .unwrap()
+                .as_slice(),
+            b"valid receipt"
+        );
+        let state: serde_json::Value = serde_json::from_slice(
+            &snapshot
+                .get(b"~gc", &mut ReadStats::default())
+                .unwrap()
+                .unwrap(),
+        )
+        .unwrap();
+        assert!(
+            state["watermark_ms"].as_u64().unwrap() > 0,
+            "legacy deletion did not durably seal the retry clock"
+        );
+        engine.disk.store(actual, Ordering::Release);
+    }
+
+    #[test]
     fn cleanup_can_use_reserved_disk_headroom_when_user_writes_are_backpressured() {
         let dir = tempfile::tempdir().unwrap();
         let store = crate::Store::open(dir.path(), Options::default()).unwrap();

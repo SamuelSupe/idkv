@@ -727,7 +727,7 @@ fn cleanup_unreferenced(path: &Path, manifest: &Manifest, budget: &Budget) -> Re
         let entry = entry?;
         reject_symlink(&entry.path())?;
         let name = entry.file_name().to_string_lossy().to_string();
-        if name.ends_with(".corrupt") {
+        if name.ends_with(".corrupt") || name == "TORN-TAIL" {
             continue;
         }
         if !wals.as_ref().map_or_else(

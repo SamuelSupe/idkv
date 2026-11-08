@@ -42,7 +42,7 @@ v0.5 的 [主从复制](replication.md) 与此备份能力独立。启用复制�
 ## 启用
 
 ```sh
-cargo build --locked --release --bin tenant-kv --bin tenant-kv-restore
+cargo build --locked --release --bin tenant-kv --bin tenant-kv-restore --bin tenant-kv-repair
 target/release/tenant-kv serve --root /var/lib/tenant-kv \
   --auth auth.json --backup-config examples/backup-s3.json
 ```
@@ -175,10 +175,15 @@ v0.8 租户 retention_seconds 及回收任务、凭据、截止时间均进入�
 
 暂存目录计费允许并发删除使条目消失（NotFound 计零），其他 I/O 错误和符号链接仍拒绝。活动预留继续计费，不因扫描瞬间没有看到文件而放宽预算。
 
-备份时钟在每次服务启动后首次为租户创建时与远端完成清单核对，即使本地 CLOCK 已存在，也能修复旧盘镜像带回的较低水位。缺失或损坏本地时钟从远端重建；损坏或缺失的已完成清单记错误并跳过时钟计算，降低 max_backup_bytes 不限制旧清单的列表、时钟和 prune 元数据读取，实际恢复/verify 仍检查当前配置。时间超过当前墙钟 366 天的清单拒绝作为有效备份；异常本地时间重置并核对远端，避免无限未来水位污染后续备份。仓库仍只支持单 Store 写入者，不提供远端多写者协调。
+备份时钟在每次服务启动后首次为租户创建时与远端完成清单核对，即使本地 CLOCK 已存在，也能修复旧盘镜像带回的较低水位。缺失或损坏本地时钟从远端重建；损坏或缺失的已完成清单记错误并跳过时钟计算，降低 max_backup_bytes 不限制旧清单的列表、时钟和 prune 元数据读取，实际恢复/verify 仍检查当前配置。清单读取、verify、restore/import 和列表不以本机墙钟判断备份完整性。只有新检查点的排序水位忽略超过本机墙钟 366 天的异常值，并记录诊断；大幅 RTC/NTP 跳变后重新核对远端。prune 若见到这样的时间先返回 BACKUP_CLOCK_UNSAFE，恢复仍可用；应校正时钟或人工核对后再清理，不能用 Delete 作为恢复的前置条件。仓库仍只支持单 Store 写入者，不提供远端多写者协调。
 
 `POST /v1/tenants/{tenant}/remote-backups/{backup}/delete`（空正文，租户 admin）提交显式删除任务，Rust 对应 `BackupOperation::Delete { backup }`。它先移除 COMPLETED，再移除 manifest，无需解析坏清单，重复执行幂等；对象由后续 prune 根据剩余清单引用回收。不要删除尚未核对价值的损坏备份。
 
 本地备份 rename 后目录同步失败返回 BACKUP_COMMIT_UNKNOWN，并在诊断中给出备份 UUID。该备份可能已存在，应先检查或使用已有 delete_backup 删除该 ID，不把报错当成“没有备份”。max_jobs=1 只有一个任务名额，无法提供多租户容量隔离；生产多租户应配置至少 2 并定期 forget 终态任务。
 
 新增 Delete 任务使用新的持久 operation 变体。旧二进制不保证读取新版任务记录；如需降级，应先完成并 forget 新类型任务，保持仓库单写入者约束。
+
+
+配置要求 `max_staging_bytes >= 2×max_backup_bytes+1 MiB`，否则启动返回明确的配置错误；旧的 100/200 GiB 配置应补足 1 MiB。默认容量能承载一份最大恢复，此时不能承诺另一租户同时创建；若需一份最大恢复加一份最大创建，应至少配置 `3×max_backup_bytes+1 MiB`，并提供相应物理空间。单租户串行和全局容量限制继续生效。
+
+每进程每租户首次创建时全量核对远端清单是保留的恢复成本，用来发现旧磁盘镜像带回的 CLOCK；后续创建复用本地水位。prune 的两遍扫描要求仓库遵守单 Store 写入者契约，外部程序不得并行写入清单/对象。显式 Delete 对不存在 ID 返回成功属于幂等删除契约。

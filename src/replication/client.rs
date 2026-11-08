@@ -65,6 +65,7 @@ struct Progress {
     initialization_errors: HashMap<Uuid, String>,
     status_cache: Option<(Instant, Arc<Received<Status>>)>,
     catalog_seen: Option<Instant>,
+    last_tenant: Option<Uuid>,
 }
 struct Inner {
     store: Store,
@@ -196,6 +197,7 @@ impl Service {
                     initialization_errors: HashMap::new(),
                     status_cache: None,
                     catalog_seen: None,
+                    last_tenant: None,
                 }),
             }),
         })
@@ -325,7 +327,11 @@ impl Service {
             .await
             .map_err(|_| {
                 Error::new(
-                    "REPLICATION_UNAVAILABLE",
+                    if path == "/v1/replication/log" {
+                        "REPLICA_SNAPSHOT_REQUIRED"
+                    } else {
+                        "REPLICATION_UNAVAILABLE"
+                    },
                     "peer request total deadline exceeded",
                 )
             })?
@@ -349,10 +355,14 @@ impl Service {
             .await
             .map_err(|_| Error::new("INTERNAL", "token reader failed"))?
             .map_err(|error| {
-                Error::new(
-                    "REPLICATION_UNAVAILABLE",
-                    format!("peer credential unavailable: {error}"),
-                )
+                if error.code == "REPLICATION_CREDENTIAL_INVALID" {
+                    error
+                } else {
+                    Error::new(
+                        "REPLICATION_UNAVAILABLE",
+                        format!("peer credential unavailable: {error}"),
+                    )
+                }
             })?;
         let header_timeout = if path == "/v1/replication/promote" {
             150
@@ -424,6 +434,7 @@ impl Service {
                 | "CONFLICT"
                 | "READ_ONLY"
                 | "RECOVERY_REQUIRED"
+                | "REPLICATION_CREDENTIAL_INVALID"
                 | "INCOMPATIBLE_VERSION"
                 | "RESOURCE_EXHAUSTED"
                 | "DEADLINE_EXCEEDED"
@@ -459,6 +470,10 @@ impl Service {
         self.sync_inner(true).await.map(|_| ())
     }
     async fn sync_inner(&self, report_error: bool) -> Result<bool> {
+        self.sync_until(report_error, Instant::now() + Duration::from_secs(120))
+            .await
+    }
+    async fn sync_until(&self, report_error: bool, deadline: Instant) -> Result<bool> {
         if self.inner.store.replication_state().role != Role::Replica {
             return Err(Error::new("CONFLICT", "node is not a replica"));
         }
@@ -476,7 +491,13 @@ impl Service {
         let (catalog_stamp, upstream) = if let Some(cached) = cached {
             cached
         } else {
-            let status: Received<Status> = self.request("/v1/replication/status", None).await?;
+            let status: Received<Status> = self
+                .request_bounded(
+                    "/v1/replication/status",
+                    None,
+                    deadline.saturating_duration_since(Instant::now()),
+                )
+                .await?;
             let entry = (Instant::now(), Arc::new(status));
             self.inner.progress.lock().status_cache = Some(entry.clone());
             entry
@@ -575,9 +596,21 @@ impl Service {
         }
         let started = Instant::now();
         let mut positions = upstream.tenants.clone();
+        if let Some(last) = self.inner.progress.lock().last_tenant
+            && !positions.is_empty()
+        {
+            let start = positions.partition_point(|p| p.info.id <= last) % positions.len();
+            positions.rotate_left(start);
+        }
         for round in 0..8 {
             let mut next = Vec::new();
             for mut position in positions {
+                if Instant::now() >= deadline {
+                    let error =
+                        Error::new("DEADLINE_EXCEEDED", "replication cycle network deadline");
+                    self.inner.progress.lock().error = Some(error.to_string());
+                    return if report_error { Err(error) } else { Ok(true) };
+                }
                 if blocked.contains_key(&position.info.id) {
                     continue;
                 }
@@ -596,8 +629,9 @@ impl Service {
                         continue;
                     }
                 }
+                self.inner.progress.lock().last_tenant = Some(position.info.id);
                 match self
-                    .sync_tenant(&source, upstream.node.cluster, &position)
+                    .sync_tenant_until(&source, upstream.node.cluster, &position, deadline)
                     .await
                 {
                     Ok(TenantSync::Idle) => {
@@ -655,11 +689,12 @@ impl Service {
         }
         unreachable!("bounded replication rounds return at the limit")
     }
-    async fn sync_tenant(
+    async fn sync_tenant_until(
         &self,
         source: &Source,
         cluster: Uuid,
         position: &TenantPosition,
+        deadline: Instant,
     ) -> Result<TenantSync> {
         let store = self.inner.store.clone();
         let id = position.info.id;
@@ -698,7 +733,11 @@ impl Service {
                 .cloned(),
         };
         let page: Result<Received<LogPage>> = self
-            .request("/v1/replication/log", Some(serde_json::to_value(&request)?))
+            .request_bounded(
+                "/v1/replication/log",
+                Some(serde_json::to_value(&request)?),
+                deadline.saturating_duration_since(Instant::now()),
+            )
             .await;
         match page {
             Err(error)
@@ -902,14 +941,28 @@ impl Service {
     }
 
     pub async fn promote(&self, fence_id: Uuid) -> Result<NodeState> {
-        let _cycle = self.inner.cycle.lock().await;
+        self.promote_bounded(fence_id, Duration::from_secs(120))
+            .await
+    }
+    async fn promote_bounded(&self, fence_id: Uuid, timeout: Duration) -> Result<NodeState> {
+        let deadline = Instant::now() + timeout;
+        let _cycle = tokio::time::timeout(timeout, self.inner.cycle.lock())
+            .await
+            .map_err(|_| {
+                Error::new(
+                    "DEADLINE_EXCEEDED",
+                    "promotion waiting for replication cycle",
+                )
+            })?;
         let local = self.inner.store.replication_state();
         if local.role == Role::Primary && local.parent.as_ref().is_some_and(|p| p.id == fence_id) {
             return Ok(local);
         }
-        let deadline = Instant::now() + Duration::from_secs(120);
         loop {
-            let result = self.promote_once(fence_id).await;
+            if Instant::now() >= deadline {
+                return Err(Error::new("DEADLINE_EXCEEDED", "promotion deadline"));
+            }
+            let result = self.promote_once(fence_id, deadline).await;
             match result {
                 Err(error)
                     if matches!(
@@ -927,8 +980,14 @@ impl Service {
             }
         }
     }
-    async fn promote_once(&self, fence_id: Uuid) -> Result<NodeState> {
-        let upstream: Received<Status> = self.request("/v1/replication/status", None).await?;
+    async fn promote_once(&self, fence_id: Uuid, deadline: Instant) -> Result<NodeState> {
+        let upstream: Received<Status> = self
+            .request_bounded(
+                "/v1/replication/status",
+                None,
+                deadline.saturating_duration_since(Instant::now()),
+            )
+            .await?;
         super::compatible(upstream.node.protocol)?;
         let fence = upstream
             .node
@@ -936,7 +995,10 @@ impl Service {
             .as_ref()
             .filter(|f| f.id == fence_id && upstream.node.role == Role::Fenced)
             .ok_or_else(|| Error::new("CONFLICT", "source does not confirm this durable fence"))?;
-        self.sync_inner(true).await?;
+        self.sync_until(true, deadline).await?;
+        if Instant::now() >= deadline {
+            return Err(Error::new("DEADLINE_EXCEEDED", "promotion deadline"));
+        }
         let store = self.inner.store.clone();
         let fence = fence.clone();
         tokio::task::spawn_blocking(move || store.promote_verified(&fence))
@@ -1070,14 +1132,27 @@ fn read_token(path: &std::path::Path) -> Result<String> {
     let file = OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
-        .open(path)?;
+        .open(path)
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::PermissionDenied
+                || error.raw_os_error() == Some(libc::ELOOP)
+            {
+                Error::new(
+                    "REPLICATION_CREDENTIAL_INVALID",
+                    "replication token permissions or symlink are invalid",
+                )
+            } else {
+                error.into()
+            }
+        })?;
     let metadata = file.metadata()?;
     if !metadata.is_file()
         || metadata.permissions().mode() & 0o077 != 0
         || metadata.nlink() != 1
         || metadata.uid() != unsafe { libc::geteuid() }
     {
-        return Err(Error::invalid(
+        return Err(Error::new(
+            "REPLICATION_CREDENTIAL_INVALID",
             "replication token must be a private regular file (0600), owned by this user with one link",
         ));
     }

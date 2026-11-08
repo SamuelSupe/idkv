@@ -1,0 +1,48 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.35s
+     Running unittests src/lib.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv-2393aa090e8f705f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 117 filtered out; finished in 0.00s
+
+     Running unittests src/bin/crash_probe.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/crash_probe-908a2b5674b0a3c6)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/server.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv-ff39cc658b406b80)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/restore_remote.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/tenant_kv_restore-bdcd2f5707c4399c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/backup.rs (/var/tmp/idkv-p01-target-20261108/debug/deps/backup-7537044b4004ea42)
+
+running 1 test
+test reviewf647_future_timestamp_does_not_prevent_disaster_restore ... FAILED
+
+failures:
+
+---- reviewf647_future_timestamp_does_not_prevent_disaster_restore stdout ----
+
+thread 'reviewf647_future_timestamp_does_not_prevent_disaster_restore' panicked at tests/backup.rs:83:5:
+assertion `left == right` failed: BackupJob { id: 71fa687c-5055-498f-8974-12aa628741ae, tenant: 4c62a19b-a450-4bf5-982f-023b0960e407, backup: ccabe9cc-3812-4246-a3f2-62f8802a45cc, operation: Verify { backup: ccabe9cc-3812-4246-a3f2-62f8802a45cc }, state: Failed, created_ms: 1794140386918, updated_ms: 1794140386921, uploaded_bytes: 0, reused_bytes: 0, processed_files: 0, checkpoint_seq: None, result: None, error: Some("CORRUPTION: backup identity or format") }
+  left: Failed
+ right: Completed
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    reviewf647_future_timestamp_does_not_prevent_disaster_restore
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 19 filtered out; finished in 0.63s
+
+error: test failed, to rerun pass `--test backup`

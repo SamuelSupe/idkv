@@ -1,0 +1,19 @@
+   Compiling tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+error[E0277]: `LogPage` doesn't implement `Debug`
+    --> tests/recovery.rs:1207:18
+     |
+1207 |                 .unwrap_err()
+     |                  ^^^^^^^^^^ the trait `Debug` is not implemented for `LogPage`
+     |
+note: required by a bound in `Result::<T, E>::unwrap_err`
+    --> /home/livesite/.rustup/toolchains/1.90.0-aarch64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:1258:12
+     |
+1256 |     pub fn unwrap_err(self) -> E
+     |            ---------- required by a bound in this associated function
+1257 |     where
+1258 |         T: fmt::Debug,
+     |            ^^^^^^^^^^ required by this bound in `Result::<T, E>::unwrap_err`
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `tenant-kv` (test "recovery") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...

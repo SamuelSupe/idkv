@@ -1,0 +1,14 @@
+    Checking tenant-kv v0.10.1 (/Users/livesite/Documents/ChatGPT/idkv)
+warning: method `sync_tenant` is never used
+   --> src/replication/client.rs:692:14
+    |
+124 | impl Service {
+    | ------------ method in this implementation
+...
+692 |     async fn sync_tenant(
+    |              ^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `tenant-kv` (lib test) generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.24s
