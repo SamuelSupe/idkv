@@ -23,6 +23,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         args[5].parse()?,
         &args[7],
     )?;
+    for field in ["warning", "report_warning"] {
+        if let Some(warning) = result[field].as_str() {
+            eprintln!("warning: {warning}");
+        }
+    }
     println!("{}", serde_json::to_string_pretty(&result)?);
     Ok(())
 }

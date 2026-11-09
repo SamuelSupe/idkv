@@ -611,6 +611,27 @@ fn temporal_corrections_history_heads_and_receipts_recover_atomically() {
             receipt.is_ok(),
             "atomic correction at {point}"
         );
+        let reverse: SubjectIdentifiersRequest =
+            serde_json::from_value(json!({"entity_id":entity,"valid_at":query.valid_at})).unwrap();
+        assert_eq!(
+            t.get_subject_identifiers(&reverse)
+                .unwrap()
+                .identifiers
+                .is_empty(),
+            receipt.is_ok(),
+            "reverse index atomicity at {point}"
+        );
+        let history: SubjectHistoryRequest =
+            serde_json::from_value(json!({"entity_id":entity})).unwrap();
+        assert_eq!(
+            t.get_subject_history(&history)
+                .unwrap()
+                .events
+                .iter()
+                .any(|e| e.operation_id == "correction"),
+            receipt.is_ok(),
+            "event atomicity at {point}"
+        );
         if let Ok(receipt) = receipt {
             assert_eq!(result.knowledge_version, receipt.knowledge.version);
             assert_eq!(result.timeline_revision, receipt.timelines[0].revision);
@@ -1305,6 +1326,8 @@ fn reviewc3b_repair_reports_epoch_and_publication_failures_without_panicking() {
         ("repair_epoch_changed", true, false),
         ("restore_journal_published", false, true),
         ("restore_cleanup", false, true),
+        ("restore_cleanup_collect", false, true),
+        ("repair_final_report", false, true),
         ("restore_cleanup_permission", false, true),
     ] {
         // The injected cleanup failure remains covered when running as root;
@@ -1367,6 +1390,12 @@ fn reviewc3b_repair_reports_epoch_and_publication_failures_without_panicking() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(!stderr.contains("panicked"), "{stderr}");
         let report: serde_json::Value = storage::read_json(&archive.join("repair.json")).unwrap();
+        let report = if point == "repair_final_report" {
+            assert_eq!(report["phase"], "publishing_tenant");
+            serde_json::from_slice::<serde_json::Value>(&output.stdout).unwrap()
+        } else {
+            report
+        };
         let new_epoch: uuid::Uuid = report["new_epoch"].as_str().unwrap().parse().unwrap();
         assert_ne!(new_epoch, epoch);
         assert_eq!(
@@ -1383,8 +1412,16 @@ fn reviewc3b_repair_reports_epoch_and_publication_failures_without_panicking() {
                 .next()
                 .is_some()
         );
-        if point.starts_with("restore_cleanup") {
+        if point == "repair_final_report" {
             assert!(output.status.success(), "{stderr}");
+            assert_eq!(report["phase"], "published");
+            assert_eq!(report["report_persisted"], false);
+            assert!(report["failed_phase"].is_null());
+            assert!(stderr.contains("warning:"), "{stderr}");
+            assert!(stderr.contains("repair.json"), "{stderr}");
+        } else if point.starts_with("restore_cleanup") {
+            assert!(output.status.success(), "{stderr}");
+            assert!(stderr.contains("warning:"), "{stderr}");
             assert_eq!(report["phase"], "published_cleanup_pending");
             assert!(
                 report["warning"]
@@ -1502,4 +1539,137 @@ fn reviewc3b_noop_repair_preserves_healthy_database_and_epoch() {
     let tenant = store.tenant(id).unwrap();
     assert_eq!(tenant.info().history, history);
     assert_eq!(tenant.get("assets", "ack").unwrap(), confirmed);
+}
+
+#[cfg(feature = "failpoints")]
+#[test]
+fn published_restore_cleanup_errors_keep_the_tenant_readable_and_writable() {
+    for point in ["restore_cleanup", "restore_cleanup_collect"] {
+        let dir = tempfile::tempdir().unwrap();
+        let id = seed(dir.path());
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        let before = store
+            .tenant(id)
+            .unwrap()
+            .get("assets", "old")
+            .unwrap()
+            .unwrap();
+        let backup = store.backup(id).unwrap();
+        store
+            .tenant(id)
+            .unwrap()
+            .put("assets", json!({"_key":"after-backup","ip":"later"}), None)
+            .unwrap();
+        drop(store);
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_crash-probe"))
+            .arg(dir.path())
+            .arg(id.to_string())
+            .arg("restore-cleanup")
+            .arg(backup.to_string())
+            .env("TKV_ERRORPOINT", point)
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{stderr}");
+        assert!(stderr.contains("warning:"), "{stderr}");
+        let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(result["restored"], before);
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        let tenant = store.tenant(id).unwrap();
+        assert_eq!(tenant.get("assets", "old").unwrap().unwrap(), before);
+        assert_eq!(
+            tenant.get("assets", "post-restore").unwrap().unwrap()["_rev"],
+            result["confirmed"]["rev"]
+        );
+        tenant.engine().verify().unwrap();
+    }
+}
+
+#[cfg(feature = "failpoints")]
+#[test]
+fn interrupted_repair_archive_is_removed_and_the_same_path_can_be_retried() {
+    use std::os::unix::fs::PermissionsExt;
+    for real_permission_error in [false, true] {
+        if real_permission_error && unsafe { libc::geteuid() } == 0 {
+            continue;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("data");
+        let id = seed(&root);
+        let store = Store::open(&root, Options::default()).unwrap();
+        let tenant = store.tenant(id).unwrap();
+        let confirmed = tenant.get("assets", "old").unwrap();
+        let history = tenant.info().history;
+        let epoch = store.replication_state().epoch;
+        let database = root.join("tenants").join(id.to_string());
+        let current = fs::read_to_string(database.join("CURRENT")).unwrap();
+        let manifest: serde_json::Value = storage::read_json(&database.join(current)).unwrap();
+        let wal = manifest["wals"].as_array().unwrap().last().unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let path = database.join("wal").join(format!("{wal}.wal"));
+        let offset = fs::metadata(&path).unwrap().len();
+        drop(tenant);
+        drop(store);
+        OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap()
+            .write_all(&[0; 24])
+            .unwrap();
+        let original = fs::read(&path).unwrap();
+        let blocked = database.join("archive-source-blocked");
+        if real_permission_error {
+            fs::create_dir(&blocked).unwrap();
+            fs::set_permissions(&blocked, fs::Permissions::from_mode(0o0)).unwrap();
+        }
+        let archive = dir.path().join("evidence");
+        let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_tenant-kv-repair"));
+        command
+            .arg(&root)
+            .arg(id.to_string())
+            .arg(&wal)
+            .arg("--at")
+            .arg(offset.to_string())
+            .arg("--archive")
+            .arg(&archive)
+            .arg("--accept-data-loss");
+        if !real_permission_error {
+            command.env("TKV_ERRORPOINT", "repair_archive_copied");
+        }
+        let output = command.output().unwrap();
+        if real_permission_error {
+            fs::set_permissions(&blocked, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        assert!(!output.status.success());
+        assert!(!archive.exists(), "incomplete archive prevents retry");
+        let store = Store::open(&root, Options::default()).unwrap();
+        assert_eq!(store.replication_state().epoch, epoch);
+        assert_eq!(
+            store.tenants().iter().find(|t| t.id == id).unwrap().history,
+            history
+        );
+        assert_eq!(fs::read(&path).unwrap(), original);
+        drop(store);
+        let report = Store::repair_wal(
+            &root,
+            Options::default(),
+            id,
+            wal.parse().unwrap(),
+            offset,
+            &archive,
+        )
+        .unwrap();
+        assert_eq!(report["phase"], "published");
+        let store = Store::open(&root, Options::default()).unwrap();
+        assert_eq!(
+            store.tenant(id).unwrap().get("assets", "old").unwrap(),
+            confirmed
+        );
+        assert_eq!(
+            fs::read(archive.join("database/wal").join(format!("{wal}.wal"))).unwrap(),
+            original
+        );
+    }
 }

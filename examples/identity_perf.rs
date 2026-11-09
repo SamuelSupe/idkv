@@ -90,7 +90,14 @@ fn main() -> Result<()> {
                 let result = t.identity_resolve(&request)?;
                 timing.push(now.elapsed().as_nanos() as u64);
                 assert_eq!(result.binding.unwrap().entity_id, ids[at % 2]);
-                assert_eq!(result.stats.document_reads, 2);
+                assert_eq!(
+                    result.stats.document_reads,
+                    if known_at.is_some() && known_at != version {
+                        3
+                    } else {
+                        2
+                    }
+                );
                 stats = result.stats;
             }
             timing.sort_unstable();

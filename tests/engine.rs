@@ -1587,13 +1587,14 @@ fn deleting_another_tenant_preserves_unpublished_restore_preparation() {
 
 #[cfg(unix)]
 #[test]
-fn restore_cleanup_error_still_fences_the_tenant_until_store_recovery() {
+fn published_restore_cleanup_error_keeps_the_tenant_available() {
     use std::os::unix::fs::PermissionsExt;
     let (dir, store, tenant) = setup();
     let id = tenant.id();
     tenant
         .put("assets", json!({"_key":"same","value":"before"}), None)
         .unwrap();
+    let before = tenant.get("assets", "same").unwrap().unwrap();
     let backup = store.backup(id).unwrap();
     tenant
         .put("assets", json!({"_key":"same","value":"after"}), None)
@@ -1619,19 +1620,26 @@ fn restore_cleanup_error_still_fences_the_tenant_until_store_recovery() {
     }
     let result = store.restore(id, backup);
     std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o700)).unwrap();
-    assert!(result.is_err());
-    assert_eq!(store.tenant(id).err().unwrap().code, "UNAVAILABLE");
-    assert_eq!(store.close_tenant(id).unwrap_err().code, "UNAVAILABLE");
+    result.unwrap();
+    let tenant = store.tenant(id).unwrap();
+    assert_eq!(tenant.get("assets", "same").unwrap().unwrap(), before);
+    let confirmed = tenant
+        .put("assets", json!({"_key":"recovered"}), None)
+        .unwrap();
+    assert_eq!(
+        tenant.get("assets", "recovered").unwrap().unwrap()["_rev"],
+        confirmed.rev
+    );
+    drop(tenant);
     drop(store);
     let reopened = Store::open(dir.path(), options()).unwrap();
     let tenant = reopened.tenant(id).unwrap();
+    assert_eq!(tenant.get("assets", "same").unwrap().unwrap(), before);
     assert_eq!(
-        tenant.get("assets", "same").unwrap().unwrap()["value"],
-        "before"
+        tenant.get("assets", "recovered").unwrap().unwrap()["_rev"],
+        confirmed.rev
     );
-    tenant
-        .put("assets", json!({"_key":"recovered"}), None)
-        .unwrap();
+    tenant.engine().verify().unwrap();
 }
 
 #[test]

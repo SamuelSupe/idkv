@@ -20,7 +20,7 @@ use std::{
 };
 use uuid::Uuid;
 
-pub(crate) const STORAGE_REGISTRY_VERSION: u32 = 5;
+pub(crate) const STORAGE_REGISTRY_VERSION: u32 = 6;
 
 pub(crate) struct TenantCore {
     pub identity_clock: std::sync::OnceLock<crate::identity::ClockAnchor>,

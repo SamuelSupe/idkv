@@ -2,7 +2,7 @@
 
 v0.10 提供[请求级读取控制](read-controls.md)：读取截止时间、扫描预算、禁止全扫描和取消。现有请求正文与 DSL 语法保持不变。
 
-v0.3.0 提供七个命令：`from`、`explain`、`get`、`mget`、`lookup`、`put`、`delete`。查询和写入直接复用数据库原生接口，JSON API 保持可用。集合、索引、Lookup 定义和备份仍由管理 API 创建；DSL 没有管理语句、SQL 兼容层、JOIN、聚合、UDF 或脚本执行。
+当前提供九个命令：`from`、`explain`、`get`、`mget`、`lookup`、`resolve`、`resolvemany`、`put`、`delete`。查询和写入直接复用数据库原生接口，JSON API 保持可用。集合、索引、Lookup 定义和备份仍由管理 API 创建；DSL 没有管理语句、SQL 兼容层、JOIN、聚合、UDF 或脚本执行。
 
 ## 一个完整例子
 
@@ -48,7 +48,7 @@ v0.5 的从库可执行读取和 Lookup，`put` / `delete` 返回 READ_ONLY。v0
 
 ## HTTP 与参数绑定
 
-`POST /v1/tenants/{tenant_uuid}/dsl`，使用既有 Bearer token。请求只接受 `statement`、`params`、`cursor` 三个字段：
+`POST /v1/tenants/{tenant_uuid}/dsl`，使用既有 Bearer token。请求接受 `statement`、`params`、`cursor`，写语句还可携带 `write_options`：
 
 ```json
 {
@@ -62,6 +62,27 @@ v0.5 的从库可执行读取和 Lookup，`put` / `delete` 返回 READ_ONLY。v0
 参数只替换一个完整 JSON 值，不拼接源码。参数值中的引号、管道、分号和关键字都只是数据。参数集合必须与语句引用的名字完全一致，缺少或多余参数均拒绝；同一参数可以多次引用。集合名、字段名、运算符和 Lookup 名不能用参数替换。JSON 内部也不插值：`{"owner": "$name"}` 保存字面字符串 `$name`，需要动态文档时使用 `put assets $document`。
 
 租户由已授权 URL 上下文确定，DSL 没有 `use tenant`。读取命令需要 `read` 权限；`put/delete` 需要 `write`。HTTP 在打开引擎前检查命令权限，解析完成后再次按命令类型校验；准备语句缓存不缓存授权结果。
+
+## 时态身份匹配
+
+```json
+{
+  "statement": "resolvemany with $request",
+  "params": {
+    "request": {
+      "known_at": "latest",
+      "items": [
+        {"identifier":{"kind":"account","namespace":"crm/prod","value":"10086"},"valid_at":"2026-11-05T10:30:00Z"},
+        {"identifier":{"kind":"account","namespace":"crm/prod","value":"10086"},"valid_at":"2026-11-05T11:00:00Z"}
+      ]
+    }
+  }
+}
+```
+
+`resolve with $request` 接收单条 `/identity/resolve` 的正文；`resolvemany with $request` 接收 `/identity/resolve_many` 的正文。都要求 read 权限，不指定内部集合名，返回与原生 API 相同的 JSON。批量共享一个快照和知识版本、保持输入顺序及重复项，未匹配的 binding 为 null；错误时整批失败。完整语义见[身份 API](identity.md)。
+
+两个命令均不接受 cursor、write_options 写入条件或后续管道。参数只作为值绑定；批量列表建议放 params，避免 64 KiB 语句上限。准备语句不缓存知识头、参数或快照，同一 Prepared 再次执行 latest 会读取新的头。固定解释时由请求明确传入知识 UUID。`Prepared::execute_read` 与原生解析共用 TenantReader 的截止时间、取消及扫描预算。
 
 ## Rust 准备语句
 
@@ -96,6 +117,8 @@ explain := "explain" query
 get     := "get" collection value
 mget    := "mget" collection value
 lookup  := "lookup" collection "using" lookup_name "with" value
+resolve := "resolve" "with" value
+resolvemany := "resolvemany" "with" value
 put     := "put" collection value ["if_rev" value]
 delete  := "delete" collection value ["if_rev" value]
 value   := JSON_literal | "$" parameter_name
@@ -127,7 +150,7 @@ from assets | where field("/tags/0") == "prod" | fields field("/a~1b"), field("/
 
 ## 分页、Lookup 与诊断
 
-下一页提交相同语句、相同参数并添加返回的 `cursor`。指纹根据绑定后的查询计算，因此只改空白不会改变查询；改变过滤值、字段、排序或 limit 会拒绝游标。只有 `from` 接受 cursor。游标绑定租户、集合、运行代次和快照，默认从第一页起 60 秒，到期/重启/恢复后失效；延续成功会消费旧 token。
+下一页提交相同语句、相同参数并添加返回的 `cursor`。指纹根据绑定后的查询计算，因此只改空白不会改变查询；改变过滤值、字段、排序或 limit 会拒绝游标。`from`、`ids` 和 `history` 接受 cursor。游标绑定租户、集合、运行代次和快照，默认从第一页起 60 秒，到期/重启/恢复后失效；延续成功会消费旧 token。
 
 v0.4 保证同一个 token 在并发续页时最多成功消费一次，其余请求返回 CURSOR_EXPIRED；超预算等执行失败不提前消费 token。
 
@@ -156,3 +179,15 @@ v0.4 保证同一个 token 在并发续页时最多成功消费一次，其余�
 v0.6 的 `identity_temporal` 是受管集合，DSL 可以按租户权限读取其审计文档，但 `put`、`delete` 会返回 `MANAGED_COLLECTION`。时态修正使用 [身份 API](identity.md)，以保证有效区间、知识历史与幂等收据同批更新；DSL 尚未增加时态语法。
 
 启用租户统一保留后，DSL 写命令的 `write_options` 还需携带首次提交前取得的 `retry_token`；operation_id、history、token 与原语句和参数一同保存，重试不得刷新。语法不变，过期行为见 [retention.md](retention.md)。
+
+### 主体查询：ids / history
+
+```json
+{"statement":"ids with $request","params":{"request":{"entity_id":"<UUID>","valid_at":"2026-11-09T10:00:00Z","known_at":"latest","limit":100}}}
+```
+
+```json
+{"statement":"history with $request","params":{"request":{"entity_id":"<UUID>","recorded_from":"2026-11-01T00:00:00Z","limit":100}}}
+```
+
+两者都是只读命令，不带集合名，返回与原生 `/identity/ids`、`/identity/history` 相同的结果。下一页重复 statement、params，在 DSL 请求顶层传 `cursor`；参数内 cursor 被拒绝。prepared 只缓存语法，知识头在首次执行时固定。游标隔离、保留期、空页和预算语义见[主体查询](identity.md#主体反查和变更历史)。

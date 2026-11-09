@@ -218,3 +218,36 @@ pub struct ResolveResult {
     pub binding: Option<Binding>,
     pub stats: crate::ReadStats,
 }
+
+/// One event-time lookup in an ordered, single-snapshot resolution batch.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ResolveItem {
+    pub identifier: Identifier,
+    pub valid_at: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ResolveManyRequest {
+    /// Missing, null or `latest` pins one knowledge head for the entire batch.
+    #[serde(default)]
+    pub known_at: Option<String>,
+    pub items: Vec<ResolveItem>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResolveMatch {
+    pub timeline_revision: Option<Uuid>,
+    pub binding: Option<Binding>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ResolveManyResult {
+    pub knowledge_version: Uuid,
+    pub history: String,
+    pub snapshot_seq: u64,
+    /// One result per input, in input order, including duplicates and misses.
+    pub results: Vec<ResolveMatch>,
+    pub stats: crate::ReadStats,
+}

@@ -168,7 +168,10 @@ fn restored_history_rejects_aba_and_receipts_survive_restart() {
             .code,
         "OPERATION_CONFLICT"
     );
-    assert_eq!(store.replication_state().protocol, 3);
+    assert_eq!(
+        store.replication_state().protocol,
+        tenant_kv::replication::PROTOCOL
+    );
 }
 
 #[test]

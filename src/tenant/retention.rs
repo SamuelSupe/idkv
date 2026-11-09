@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
-const POLICY: &[u8] = b"~policy";
+pub(crate) const POLICY: &[u8] = b"~policy";
 const STATE: &[u8] = b"~gc";
 const EXPIRY: &[u8] = b"~e/";
 const DEADLINE: &[u8] = b"~d/";
@@ -199,17 +199,39 @@ pub(crate) fn check_snapshot(
     legacy: bool,
     code: &str,
 ) -> Result<()> {
-    let at: Option<u64> = snapshot
-        .get(&key(DEADLINE, target), &mut ReadStats::default())?
+    check_snapshot_controlled(
+        snapshot,
+        target,
+        legacy,
+        code,
+        None,
+        &mut ReadStats::default(),
+    )
+}
+pub(crate) fn check_snapshot_controlled(
+    snapshot: &Snapshot,
+    target: &[u8],
+    legacy: bool,
+    code: &str,
+    budget: Option<&crate::read::ReadBudget>,
+    stats: &mut ReadStats,
+) -> Result<()> {
+    let mut get = |key: &[u8]| match budget {
+        Some(budget) => snapshot.get_controlled(key, stats, budget),
+        None => snapshot.get(key, stats),
+    };
+    let at: Option<u64> = get(&key(DEADLINE, target))?
         .map(|b| parse(&b))
         .transpose()?;
     let at = match at {
         Some(at) => Some(at),
-        None if legacy => snapshot_policy(snapshot)?.map(|p| p.legacy_expires_at_ms),
+        None if legacy => get(POLICY)?
+            .map(|b| parse::<RetentionPolicy>(&b))
+            .transpose()?
+            .map(|p| p.legacy_expires_at_ms),
         None => None,
     };
-    let watermark = snapshot
-        .get(STATE, &mut ReadStats::default())?
+    let watermark = get(STATE)?
         .map(|b| parse::<gc::State>(&b))
         .transpose()?
         .map_or(0, |s| s.watermark_ms);
@@ -362,3 +384,9 @@ impl TenantHandle {
 
 #[cfg(test)]
 mod tests;
+
+pub(crate) fn knowledge_floor(tx: &Transaction<'_>) -> Result<u64> {
+    Ok(tx
+        .cached_json::<gc::State>(STATE)?
+        .map_or(0, |s| s.swept_floor))
+}

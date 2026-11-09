@@ -524,7 +524,7 @@ impl<'a> Scan<'a> {
             cancellation: None,
         })
     }
-    pub(super) fn seek(&mut self, range: &ScanRange, stats: &mut ReadStats) -> Result<()> {
+    pub(crate) fn seek(&mut self, range: &ScanRange, stats: &mut ReadStats) -> Result<()> {
         self.heap.clear();
         self.last = None;
         if range.end.as_ref().is_some_and(|end| range.start >= *end) {
@@ -573,7 +573,7 @@ impl<'a> Scan<'a> {
     pub(super) fn exhausted(&self) -> bool {
         self.heap.is_empty()
     }
-    pub(super) fn next_for_gc(
+    pub(crate) fn next_for_gc(
         &mut self,
         stats: &mut ReadStats,
         physical_limit: usize,

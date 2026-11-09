@@ -172,9 +172,9 @@ impl Store {
         }
         let previous = serde_json::to_vec(&registry)?;
         registry.replication_enabled |= registry.version == 2;
-        // A healthy v4 root can serve reads even on a full disk. Upgrade its
-        // representation only when a registry mutation already needs a write.
-        registry.version = registry.version.max(4);
+        // Older writers do not maintain subject indexes or event history. Fence
+        // them durably before any tenant can accept writes in the new format.
+        registry.version = registry::VERSION;
         let lifecycle_errors = recover_lifecycle(&root, &mut registry, None)?;
         if serde_json::to_vec(&registry)? != previous {
             registry.prepare_publish()?;
@@ -878,7 +878,10 @@ fn maintain_tenant(inner: &Arc<Inner>, slot: &Arc<Mutex<Slot>>, pressure_minimum
             .and_then(|_| core.engine.maintain())
             .and_then(|_| {
                 if inner.node.writable() {
-                    handle.retention_step().and_then(|_| handle.gc_step())
+                    handle
+                        .retention_step()
+                        .and_then(|_| handle.gc_step())
+                        .and_then(|_| handle.identity_subject_step())
                 } else {
                     Ok(())
                 }

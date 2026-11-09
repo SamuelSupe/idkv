@@ -106,7 +106,7 @@ v0.5.2 在发布删除 journal 前先关闭内存中的写入入口。发布或�
 
 ## 故障与指标
 
-新建根注册表为 v5，保留历史状态及已删 UUID 不可复用语义。健康 v4 根在单纯启动、读取时不升级文件；下一次必要的注册表发布才原子迁移，满盘时仍可启动已有数据的读取服务。待完成的生命周期日志以及 v1–v3 兼容迁移仍需要可写空间。升级需同时更新服务与离线恢复程序，旧程序不能打开迁移后的根；升级前保留停机备份。能力接口的 storage_registry=5 表示程序写出的格式，不能据此判断根目录文件已经迁移。WAL/SST 和复制协议未改变。16 MiB 注册表格式上限仍在，达到上限前应结合 `tkv_registry_metadata_bytes`、`tkv_registry_metadata_capacity_bytes` 和 `tkv_registry_deleted_tenants` 预警；容量不足在生命周期状态发布前拒绝，不将未发布的创建留在注册表中。
+当前根注册表为 v6，保留 v5 的紧凑删除历史编码及 UUID 不可复用语义。启动时持久升级注册表，防止旧程序写入身份数据却不维护主体索引和事件；首次升级需要少量可写空间。升级前停写并保留备份，同时更新主从、服务和离线恢复程序。旧程序不能打开升级后的根，不能直接降级。复制协议为 4；WAL/SST 编码未改变。16 MiB 注册表上限仍在，结合 `tkv_registry_metadata_bytes`、`tkv_registry_metadata_capacity_bytes`、`tkv_registry_deleted_tenants` 预警。既有身份反向索引分批重建，返回 `INDEX_NOT_READY` 时等待维护推进，具体见[身份模块](identity.md#升级与保留)。
 
 在线缩配额的 used 检查和限额发布与并发预留同步；预留之间仍可并发，释放不等待配额更新。已有预留不能被强制撤销，当前使用量超过目标配额时仍拒绝缩容。管理排空失败后，索引恢复缓存会失效，入口恢复后可在同一个引擎继续重建，不依赖另一次目录修改或重开。
 
@@ -176,10 +176,12 @@ tenant-kv-repair /var/lib/idkv TENANT_UUID WAL_UUID \
 
 `--at` 是最后一个活跃 WAL 的精确帧边界，必须小于文件长度；零字节截断会被拒绝且不更换 history/epoch。它及之后的字节将被舍弃，可能包含已确认数据。命令不把指定范围当成已证明损坏；管理员仍可显式舍弃健康帧。应先核对备份、副本及业务回执，不能把日志偏移视为“必然没有确认”。自定义 Options 可通过 `--options OPTIONS_JSON` 提供。命令要求独占 Store 和租户目录锁，只允许 primary/未启用复制的根；从库或已 fence 的旧主不允许借此恢复写入。
 
-修复先构造并验证私有数据库副本，再将完整原租户目录（含 SST、所有 WAL、MANIFEST、CURRENT、TENANT.meta、水位及诊断证据）独立复制到归档的 `database/` 并同步，不使用会被后续写入改变的硬链接。归档目录以 0700 创建，父目录须已存在且位于 Store 根外；`--archive evidence` 相对当前工作目录解析。需要数据库暂存和完整归档这两份额外空间，已有诊断副本另计。归档不足或复制失败不会进入 epoch 变更。修复后可清理 Store 内的旧 trash，完整原库留在外部归档；不要在保留的唯一归档上直接修改或启动引擎。
+修复先构造并验证私有数据库副本，再将完整原租户目录（含 SST、所有 WAL、MANIFEST、CURRENT、TENANT.meta、水位及诊断证据）独立复制到归档的 `database/` 并同步，不使用会被后续写入改变的硬链接。归档目录以 0700 创建，父目录须已存在且位于 Store 根外；`--archive evidence` 相对当前工作目录解析。需要数据库暂存和完整归档这两份额外空间，已有诊断副本另计。归档不足或复制失败不会进入 epoch 变更；普通错误返回时会清理本次新建、尚未准备完成的归档目录，可用同一路径重试。进程崩溃或文件系统拒绝清理仍可能留下目录，遇到已有归档时先检查，不能覆盖已有证据。修复后可清理 Store 内的旧 trash，完整原库留在外部归档；不要在保留的唯一归档上直接修改或启动引擎。
 
 节点 epoch 先持久化，随后才由租户 lifecycle journal 发布新 history 和数据库；这两份状态不是同一个原子事务。`repair.json` 在写 epoch 前保存 `phase: changing_epoch` 意图，后续依次记录 `epoch_changed`、`publishing_tenant`、`published`。崩溃时记录可能落后一步，必须结合节点状态与租户 journal 判断，不能仅凭未看到 `published` 就重跑。普通失败尽力保存 `failed`、`failed_phase`、`error`，错误输出带新 epoch、报告路径及失败阶段；报告落盘失败也会说明。epoch 已变更而租户未发布的情况下，原库仍在，但旧从库关系已经失效。
 
-如果新库已发布、仅旧目录清理失败，命令成功输出 `published_cleanup_pending` 和 `warning`，不再 panic 或要求重复截断；处理文件系统权限/空间后重开 Store 清理即可。最终报告包含保留序号、丢弃字节数、新 history/epoch、完整归档和 WAL 路径。若选错边界，先从完整归档制作工作副本、核对正确前缀再实施恢复；不能直接把旧 history/epoch 覆盖回正在运行的节点。
+如果新库已发布、仅旧目录收集或清理失败，repair 命令成功输出 `published_cleanup_pending` 和 `warning`，同时向 stderr 打印 warning；处理文件系统权限/空间后重开 Store 清理即可。普通本地/远端备份恢复及副本安装也把发布后的清理失败视为成功并记录 stderr warning，租户继续可读写（副本保持只读），不会再因此标记 UNAVAILABLE。
+
+修复发布完成后，如果仅最后一次 repair.json 写入失败，命令仍成功退出；stdout 保留真实的 `published` 或 `published_cleanup_pending` 阶段，附 `report_persisted:false`、`report_warning`，stderr 提示已发布以及报告路径。false 表示最终报告的持久化未得到确认，磁盘上的报告可能落后；不能据此再次执行截尾。发布之前的错误仍返回失败并保留阶段诊断。最终报告包含保留序号、丢弃字节数、新 history/epoch、完整归档和 WAL 路径。若选错边界，先从完整归档制作工作副本、核对正确前缀再实施恢复；不能直接把旧 history/epoch 覆盖回正在运行的节点。
 
 旧 epoch 的复制请求会被拒绝。**修复后须按新 Store 初始化流程重建所有旧从库**，不会把可能已分叉的尾部直接接回；其他租户数据不被截断，但节点 epoch 的变化同样要求重建复制关系。业务旧 history 的重试令牌不能授权新操作。这是显式的数据损失修复工具，不是自动断电容错或介质修复。

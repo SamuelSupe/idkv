@@ -24,10 +24,10 @@ let result = reader.query("assets", query)?;
 if let Some(cursor) = result.cursor { tenant.release_cursor(&cursor)?; }
 ```
 
-`TenantReader` 提供 get、multi_get、query、explain、lookup_many、read_batch、published_dataset、read_published、query_published、lookup_published 和 wait_context。原 TenantHandle 方法继续可用。
+`TenantReader` 提供 get、multi_get、query、explain、lookup_many、read_batch、published_dataset、read_published、query_published、lookup_published、identity_resolve、identity_resolve_many 和 wait_context。原 TenantHandle 方法继续可用。
 
 - deadline 从 `read_with` 创建成功时开始计时；复用同一个 reader 的调用共享该截止时间。需要新预算时创建新 reader。
-- 每次调用独立取得快照。只有 read_batch / read_published 内所有子操作使用同一快照，并累计扫描量；连续调用 reader.query 不等于跨调用事务。
+- 每次调用独立取得快照。read_batch / read_published / identity_resolve_many 内所有子操作使用同一快照，并累计扫描量；连续调用 reader.query 不等于跨调用事务。
 - timeout_ms 和 max_scan 只能收紧引擎 query_ms / max_scan；零值非法。租户和全局内存、并发、输出字节预算照常生效。
 - max_scan 使用执行统计中的 scanned_entries：物理扫描包含历史版本和墓碑，查询/Lookup 的点定位命中也计数。原生 Get/MultiGet 不消耗扫描计数，受键数量、输入/输出字节与时间限制；它们不会退化为集合扫描。
 - allow_full_scan=false 在执行正文扫描前拒绝含集合扫描分支的计划，返回 SCAN_NOT_ALLOWED。OR 中任一分支需要全扫描也会失败。主键范围、索引范围仍可执行，但范围可能很宽，因此仍需要扫描预算。explain 始终可以返回被禁止的计划，便于调用方调整索引。
@@ -58,7 +58,7 @@ curl -X POST "$BASE/v1/tenants/$TENANT/collections/assets/query" \
   -d '{"filter":{"field":"/_key","op":"eq","value":"asset-0"},"limit":1}'
 ```
 
-支持文档 GET、MultiGet、Query、Explain、Lookup execute、read_batch、发布元信息 GET、发布 read/query/execute，以及 DSL 只读语句。管理、写入、身份模块和复制管理路径不接收这些控制头；DSL 写语句同样拒绝。未知值、重复控制头、零值返回 400/INVALID_ARGUMENT。
+支持文档 GET、MultiGet、Query、Explain、Lookup execute、read_batch、发布元信息 GET、发布 read/query/execute，identity resolve/resolve_many，以及 DSL 只读语句（包括 resolve/resolvemany）。管理、写入、其他身份接口和复制管理路径不接收这些控制头；DSL 写语句同样拒绝。未知值、重复控制头、零值返回 400/INVALID_ARGUMENT。
 
 同一截止时间覆盖请求体接收、工作线程排队、X-TKV-Min-History / X-TKV-Min-Seq 一致性等待和读取执行，不在子查询处重新计时。一致性等待额外保留五秒上限。指定控制头后耗尽总截止时间返回 408/DEADLINE_EXCEEDED；未指定时，一致性等待耗尽仍保持旧版 409/REPLICA_LAG。扫描超限为 429/RESOURCE_EXHAUSTED，禁止集合扫描为 422/SCAN_NOT_ALLOWED。
 
@@ -86,7 +86,7 @@ let page = client.query("assets", query, &options).await?;
 if let Some(cursor) = page.cursor { client.release_cursor(&cursor).await?; }
 ```
 
-客户端新增 MultiGet、Query、Explain、Lookup、read_batch、published_dataset、read_published、query_published、lookup_published 和 release_cursor。`get(collection,key,minimum)` 保持原签名；需要读取控制时用 get_with_options。ReadPosition 可以从 WriteResult、ReadBatchResult 或 ReadContext 生成。需要把读取结果用于条件写时，使用 read_batch 返回的同快照 history 和文档 _rev，不要用新获取的 write_context 替换原读取的历史。
+客户端新增 MultiGet、Query、Explain、Lookup、read_batch、published_dataset、read_published、query_published、lookup_published、identity_resolve、identity_resolve_many 和 release_cursor。`get(collection,key,minimum)` 保持原签名；需要读取控制时用 get_with_options。ReadPosition 可以从 WriteResult、ReadBatchResult、ResolveManyResult 或 ReadContext 生成。需要把读取结果用于条件写时，使用 read_batch 返回的同快照 history 和文档 _rev，不要用新获取的 write_context 替换原读取的历史。
 
 新读取优先使用从库。v0.10.1 在一个 Client 及其 clone 之间让读取与批量写入共享一秒的路由缓存；同时到来的冷请求合并为一次发现。复用 Client 才能持续命中缓存，每次重新创建 Client 会重新发现。发现阶段最多并发探测两个配置节点，每个探测不超过两秒及剩余预算的四分之一，为实际读取留下时间。等待其他调用刷新缓存同样受本次调用的截止时间和取消控制，没有常驻刷新任务。
 
@@ -101,3 +101,5 @@ if let Some(cursor) = page.cursor { client.release_cursor(&cursor).await?; }
 release_cursor 仅访问原节点，read 角色即可释放其授权租户内的游标；成功后不可继续分页；节点不可达时由租约回收。SDK 游标只用于 SDK，不能直接提交到原始 HTTP；相同租户与节点配置的新 Client 可以继续尚未过期的 SDK 游标。如果续页快照早于请求的最低序号，返回 409/SNAPSHOT_TOO_OLD，并保留原游标，不会用当前节点已追平来伪装原快照满足新位置。主从切换、恢复、服务重启仍会使旧快照失效。客户端不会自行升主。
 
 内存表扫描按固定快照序号二分选择每个 key 的可见版本，不逐个遍历较新的历史版本；快照之后新增且没有可见版本的 key 仍计一次扫描，避免绕过预算；SST 仍可能读取多个历史记录，实际访问的记录和 tombstone 继续受扫描预算约束。非索引排序的每页需要重新扫描并计算有界 top-K，应为高频分页配置相应索引。
+
+`/identity/ids`、`/identity/history` 及 DSL `ids`、`history` 同样使用每请求读取预算、最低复制位置、取消信号和统计，不进行全租户回退扫描。游标与普通 query 共用名额，固定首次快照和知识版本；查询过滤器须保持相同。单页有物理推进上限，因此空页可能仍返回 cursor。错误不消费输入游标；客户端应在期限内继续或显式释放。

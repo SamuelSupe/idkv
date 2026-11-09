@@ -127,9 +127,17 @@ impl Store {
         // independent full archive have been synchronized successfully. Keeping
         // only WAL bytes is insufficient if the chosen boundary was too early.
         use std::os::unix::fs::DirBuilderExt;
-        fs::DirBuilder::new().mode(0o700).create(&archive)?;
+        fs::DirBuilder::new().mode(0o700).create(&archive).map_err(|error| Error::new(
+            "IO_ERROR", format!("cannot create fresh repair archive {}: {error}; inspect an existing directory before choosing a new archive", archive.display()),
+        ))?;
+        let mut archive_preparation = TenantPreparation {
+            slot: None,
+            path: archive.clone(),
+            journaled: false,
+        };
         let database = archive.join("database");
         lifecycle::copy_tree(&original, &database, tenant, &budget, &inner.io)?;
+        crate::storage::errorpoint("repair_archive_copied")?;
         let evidence = database.join("wal").join(format!("{wal}.wal"));
         let new_epoch = Uuid::new_v4();
         let mut report = serde_json::json!({"tenant":tenant,"wal":wal,"truncate_at":offset,
@@ -142,6 +150,7 @@ impl Store {
         sync_dir(&archive)?;
         sync_dir(&parent)?;
         sync_dir(&inner.root.join("staging"))?;
+        archive_preparation.journaled = true;
         drop(permission);
         let result = (|| -> Result<()> {
             // This is a durable intent, not an atomic transaction with the
@@ -164,14 +173,21 @@ impl Store {
             report["phase"] = "publishing_tenant".into();
             atomic_json(&report_path, &report)?;
             match store.publish_ready_restore(registration, None, &mut preparation, seq, true) {
-                Err(error) if error.code == "RESTORE_CLEANUP_FAILED" => {
+                Ok(Some(error)) => {
                     report["phase"] = "published_cleanup_pending".into();
                     report["warning"] = error.to_string().into();
                 }
                 Err(error) => return Err(error),
-                Ok(()) => report["phase"] = "published".into(),
+                Ok(None) => report["phase"] = "published".into(),
             }
-            atomic_json(&report_path, &report)
+            report["report_persisted"] = true.into();
+            if let Err(error) = crate::storage::errorpoint("repair_final_report")
+                .and_then(|()| atomic_json(&report_path, &report))
+            {
+                report["report_persisted"] = false.into();
+                report["report_warning"] = format!("database published; final report durability not confirmed at {}: {error}; do not repeat WAL repair", report_path.display()).into();
+            }
+            Ok(())
         })();
         if let Err(error) = result {
             let phase = report["phase"].as_str().unwrap_or("unknown").to_owned();

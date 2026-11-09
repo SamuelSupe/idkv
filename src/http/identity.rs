@@ -8,6 +8,7 @@ pub(super) fn dispatch(
     body: Value,
     token: &Token,
     telemetry: &crate::telemetry::Telemetry,
+    read: &read_controls::OperationContext<'_>,
 ) -> Result<Value> {
     let context = IdentityContext {
         source: "http".into(),
@@ -26,7 +27,21 @@ pub(super) fn dispatch(
             .unwrap_or_default();
         serde_json::to_value(tenant.identity_write_with(&context, decode(body)?, &options)?)?
     } else if route.ends_with("/resolve") {
-        let result = tenant.identity_resolve(&decode(body)?)?;
+        let result = read.reader(tenant)?.identity_resolve(&decode(body)?)?;
+        telemetry.record_read(&result.stats);
+        serde_json::to_value(result)?
+    } else if route.ends_with("/resolve_many") {
+        let result = read.reader(tenant)?.identity_resolve_many(&decode(body)?)?;
+        telemetry.record_read(&result.stats);
+        serde_json::to_value(result)?
+    } else if route.ends_with("/ids") {
+        let result = read
+            .reader(tenant)?
+            .get_subject_identifiers(&decode(body)?)?;
+        telemetry.record_read(&result.stats);
+        serde_json::to_value(result)?
+    } else if route.ends_with("/history") {
+        let result = read.reader(tenant)?.get_subject_history(&decode(body)?)?;
         telemetry.record_read(&result.stats);
         serde_json::to_value(result)?
     } else if route.ends_with("/timeline") {
@@ -50,6 +65,12 @@ pub(super) fn request_schema(route: &str) -> Option<&'static str> {
         Some("IdentityWrite")
     } else if route.ends_with("/resolve") {
         Some("IdentityResolve")
+    } else if route.ends_with("/resolve_many") {
+        Some("IdentityResolveMany")
+    } else if route.ends_with("/ids") {
+        Some("SubjectIdentifiersRequest")
+    } else if route.ends_with("/history") {
+        Some("SubjectHistoryRequest")
     } else if route.ends_with("/timeline") {
         Some("Identifier")
     } else {
@@ -70,6 +91,12 @@ pub(super) fn response_schema(route: &str) -> Value {
         reference("IdentityKnowledge")
     } else if route.ends_with("/resolve") {
         reference("IdentityResolution")
+    } else if route.ends_with("/resolve_many") {
+        reference("IdentityResolutions")
+    } else if route.ends_with("/ids") {
+        reference("SubjectIdentifiersResult")
+    } else if route.ends_with("/history") {
+        reference("SubjectHistoryResult")
     } else if route.ends_with("/timeline") {
         nullable(reference("IdentityTimeline"))
     } else if route.ends_with("/{entity}") {
@@ -117,6 +144,30 @@ pub(super) fn schemas() -> serde_json::Map<String, Value> {
     out.insert("IdentityKnowledge".into(),object(json!({"version":uuid,"ordinal":{"type":"integer","minimum":0},"previous":nullable(uuid.clone()),"recorded_at_us":micros,"commit_seq":{"type":"integer","minimum":0},"source":text,"actor":text}),&["version","ordinal","previous","recorded_at_us","commit_seq","source","actor"]));
     out.insert("IdentityTimelineChange".into(),object(json!({"identifier":reference("Identifier"),"revision":nullable(uuid.clone()),"changed":{"type":"boolean"},"effective_from_us":micros,"effective_to_us":nullable(micros.clone()),"replaced":segments}),&["identifier","revision","changed","effective_from_us","effective_to_us","replaced"]));
     out.insert("IdentityReceipt".into(),object(json!({"operation_id":text,"knowledge":reference("IdentityKnowledge"),"effective_time_us":micros,"entity":nullable(reference("IdentityEntity")),"timelines":{"type":"array","items":reference("IdentityTimelineChange")}}),&["operation_id","knowledge","effective_time_us","entity","timelines"]));
-    out.insert("IdentityResolution".into(),object(json!({"knowledge_version":uuid,"timeline_revision":nullable(uuid),"binding":nullable(reference("IdentityBinding")),"stats":reference("ReadStats")}),&["knowledge_version","timeline_revision","binding","stats"]));
+    out.insert("IdentityResolution".into(),object(json!({"knowledge_version":uuid,"timeline_revision":nullable(uuid.clone()),"binding":nullable(reference("IdentityBinding")),"stats":reference("ReadStats")}),&["knowledge_version","timeline_revision","binding","stats"]));
+    out.insert("IdentityResolveItem".into(), object(json!({"identifier":reference("Identifier"),"valid_at":{"type":"string","format":"date-time"}}), &["identifier","valid_at"]));
+    out.insert("IdentityResolveMany".into(), object(json!({"known_at":{"oneOf":[uuid,{"const":"latest"},{"type":"null"}]},"items":{"type":"array","minItems":1,"items":reference("IdentityResolveItem")}}), &["items"]));
+    out.insert("IdentityResolveMatch".into(), object(json!({"timeline_revision":nullable(uuid.clone()),"binding":nullable(reference("IdentityBinding"))}), &["timeline_revision","binding"]));
+    out.insert("IdentityResolutions".into(), object(json!({"knowledge_version":uuid,"history":{"type":"string"},"snapshot_seq":{"type":"integer","minimum":0},"results":{"type":"array","items":reference("IdentityResolveMatch")},"stats":reference("ReadStats")}), &["knowledge_version","history","snapshot_seq","results","stats"]));
+    let known = json!({"oneOf":[uuid,{"const":"latest"},{"type":"null"}]});
+    let limit = json!({"type":"integer","minimum":1,"maximum":1000,"default":100});
+    let cursor = json!({"type":["string","null"],"description":"Repeat filters; only null means exhausted. Bound to tenant, principal and node."});
+    let timestamp = json!({"type":"string","format":"date-time"});
+    out.insert("SubjectIdentifiersRequest".into(), object(json!({"entity_id":uuid,"valid_at":timestamp,"known_at":known,"kind":{"type":["string","null"],"minLength":1,"maxLength":64},"namespace":{"type":["string","null"],"minLength":1,"maxLength":256},"limit":limit,"cursor":cursor}), &["entity_id","valid_at"]));
+    out.insert("SubjectHistoryRequest".into(), object(json!({"entity_id":uuid,"known_at":known,"recorded_from":nullable(timestamp.clone()),"recorded_to":nullable(timestamp),"limit":limit,"cursor":cursor}), &["entity_id"]));
+    out.insert("SubjectIdentifier".into(), object(json!({"identifier":reference("Identifier"),"timeline_revision":uuid,"binding":reference("IdentityBinding")}), &["identifier","timeline_revision","binding"]));
+    out.insert(
+        "IdentityAttributeValue".into(),
+        object(
+            json!({"present":{"type":"boolean"},"value":{}}),
+            &["present", "value"],
+        ),
+    );
+    out.insert("IdentityAttributeChange".into(), object(json!({"field":text,"before":reference("IdentityAttributeValue"),"after":reference("IdentityAttributeValue")}), &["field","before","after"]));
+    out.insert("IdentityIdentifierChange".into(), object(json!({"identifier":reference("Identifier"),"timeline_revision":uuid,"effective_from_us":micros,"effective_to_us":nullable(micros),"before":segments,"after":segments}), &["identifier","timeline_revision","effective_from_us","effective_to_us","before","after"]));
+    out.insert("IdentityEvent".into(), object(json!({"event_id":uuid,"operation_id":text,"knowledge":reference("IdentityKnowledge"),"change_index":{"type":"integer","minimum":0},"kind":{"enum":["entity_created","attributes_updated","identifier_bound","identifier_rebound","identifier_unbound","identifier_replaced"]},"entity_ids":{"type":"array","items":uuid},"reason":nullable(reason),"changes":{"type":"array","items":reference("IdentityIdentifierChange")},"attributes":{"type":"array","items":reference("IdentityAttributeChange")}}), &["event_id","operation_id","knowledge","change_index","kind","entity_ids","reason","changes","attributes"]));
+    out.insert("IdentityHistoryCoverage".into(), object(json!({"recording_started":reference("IdentityKnowledge"),"legacy_history_missing":{"type":"boolean"},"retention_enabled":{"type":"boolean"}}), &["recording_started","legacy_history_missing","retention_enabled"]));
+    out.insert("SubjectIdentifiersResult".into(), object(json!({"entity_id":uuid,"knowledge_version":uuid,"history":text,"snapshot_seq":{"type":"integer","minimum":0},"identifiers":{"type":"array","items":reference("SubjectIdentifier")},"cursor":cursor,"stats":reference("ReadStats")}), &["entity_id","knowledge_version","history","snapshot_seq","identifiers","cursor","stats"]));
+    out.insert("SubjectHistoryResult".into(), object(json!({"entity_id":uuid,"knowledge_version":uuid,"history":text,"snapshot_seq":{"type":"integer","minimum":0},"events":{"type":"array","items":reference("IdentityEvent")},"coverage":reference("IdentityHistoryCoverage"),"cursor":cursor,"stats":reference("ReadStats")}), &["entity_id","knowledge_version","history","snapshot_seq","events","coverage","cursor","stats"]));
     out
 }

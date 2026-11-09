@@ -13,7 +13,8 @@ pub(super) struct Scratch<'a> {
     pub tenant: &'a TenantHandle,
     bytes: usize,
     memory: Vec<Reservation>,
-    deadline: Instant,
+    deadline: Option<Instant>,
+    limit: usize,
 }
 impl<'a> Scratch<'a> {
     pub fn new(tenant: &'a TenantHandle) -> Self {
@@ -21,13 +22,32 @@ impl<'a> Scratch<'a> {
             tenant,
             bytes: 0,
             memory: Vec::new(),
-            deadline: Instant::now() + Duration::from_millis(tenant.engine().options.query_ms),
+            deadline: Some(
+                Instant::now() + Duration::from_millis(tenant.engine().options.query_ms),
+            ),
+            limit: tenant.engine().options.max_query_bytes,
+        }
+    }
+    pub fn maintenance(tenant: &'a TenantHandle) -> Self {
+        Self {
+            tenant,
+            bytes: 0,
+            memory: Vec::new(),
+            deadline: None,
+            // Migration visits one source document and at most four links.
+            // Client query limits must not permanently block background repair.
+            limit: tenant
+                .engine()
+                .options
+                .max_document_bytes
+                .saturating_mul(32)
+                .saturating_add(1 << 20),
         }
     }
     pub fn charge(&mut self, bytes: usize) -> Result<()> {
         self.check()?;
         self.bytes = self.bytes.saturating_add(bytes);
-        if self.bytes > self.tenant.engine().options.max_query_bytes {
+        if self.bytes > self.limit {
             return Err(Error::limit("identity temporary memory limit"));
         }
         self.memory
@@ -35,7 +55,10 @@ impl<'a> Scratch<'a> {
         Ok(())
     }
     pub fn check(&self) -> Result<()> {
-        if Instant::now() >= self.deadline {
+        if self
+            .deadline
+            .is_some_and(|deadline| Instant::now() >= deadline)
+        {
             Err(Error::new(
                 "DEADLINE_EXCEEDED",
                 "identity operation deadline",
@@ -119,29 +142,8 @@ impl<'a> Scratch<'a> {
             Ok(())
         }
     }
-    pub fn history(
-        &mut self,
-        snapshot: &Snapshot,
-        collection: Uuid,
-        id: &Identifier,
-        ordinal: u64,
-        stats: &mut crate::ReadStats,
-    ) -> Result<Option<Timeline>> {
-        let prefix_text = format!("history:{}:", digest(id)?);
-        let mut prefix = document_key(collection, &prefix_text);
-        prefix.truncate(prefix.len() - 2);
-        let start = document_key(collection, &format!("{prefix_text}{:016x}", !ordinal));
-        let mut scan = snapshot.scan(start, codec::prefix_end(&prefix), None, stats)?;
-        scan.set_budget(self.tenant.engine().options.max_scan, self.deadline);
-        let record = scan.next(stats)?;
-        if record.is_some() {
-            stats.document_reads += 1;
-        }
-        record
-            .map(|r| self.decode_typed(&r.value.unwrap()))
-            .transpose()
-    }
 }
+
 pub(super) fn digest(value: &impl Serialize) -> Result<String> {
     Ok(Sha256::digest(serde_json::to_vec(value)?)
         .iter()

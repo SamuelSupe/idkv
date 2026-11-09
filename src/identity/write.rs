@@ -75,6 +75,7 @@ fn save_timeline(
     timeline: &Timeline,
     ordinal: u64,
 ) -> Result<()> {
+    super::subjects::update_links(scratch, tx, collection, timeline, ordinal)?;
     scratch.write(
         tx,
         collection,
@@ -196,6 +197,7 @@ impl TenantHandle {
                 actor: context.actor.clone(),
             };
             scratch.write(tx, collection, "head:config", "config", &config)?;
+            super::subjects::ensure_state(&mut scratch, tx, collection, &head, true)?;
             if retention::policy(tx)?.is_some() {
                 crate::tenant::catalog::put(
                     tx,
@@ -341,6 +343,13 @@ impl TenantHandle {
             effective_time_us: now,
             entity: None,
             timelines: Vec::new(),
+        };
+        super::subjects::ensure_state(scratch, tx, collection, &knowledge, false)?;
+        let old_attributes = match request {
+            IdentityWrite::UpdateEntity { entity_id, .. } => {
+                entity(scratch, tx, collection, *entity_id)?.attributes
+            }
+            _ => serde_json::Value::Null,
         };
         match &request {
             IdentityWrite::CreateEntity { attributes, .. } => {
@@ -514,6 +523,14 @@ impl TenantHandle {
                 }
             }
         }
+        super::subjects::record_operation(
+            scratch,
+            tx,
+            collection,
+            request,
+            &receipt,
+            &old_attributes,
+        )?;
         scratch.response(&receipt)?;
         retention::schedule(
             tx,

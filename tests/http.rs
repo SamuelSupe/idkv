@@ -1380,7 +1380,7 @@ async fn identity_http_authentication_managed_writes_and_unforgeable_provenance(
                     role: Role::Read,
                 },
                 Token {
-                    subject: "test-service".into(),
+                    subject: "another-service".into(),
                     sha256: http::token_hash(writer),
                     tenant: Some(a),
                     role: Role::Write,
@@ -1515,6 +1515,165 @@ async fn identity_http_authentication_managed_writes_and_unforgeable_provenance(
         receipt["entity"]["entity_id"]
     );
     assert_eq!(result["binding"]["assurance"], "asserted");
+    let batch = json!({"known_at":written["knowledge"]["version"], "items":[request, {"identifier":{"kind":"account","namespace":"crm","value":"missing"},"valid_at":"2026-01-02T00:00:00Z"}, request]});
+    let (status, many) = call(
+        &app,
+        "POST",
+        &format!("{base}/resolve_many"),
+        Some(reader),
+        batch.clone(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{many}");
+    assert_eq!(many["results"][0]["binding"], result["binding"]);
+    assert_eq!(many["results"][0], many["results"][2]);
+    assert!(many["results"][1]["binding"].is_null());
+    let dsl_path = format!("/v1/tenants/{a}/dsl");
+    let dsl_batch = json!({"statement":"resolvemany with $request", "params":{"request":batch}});
+    let (status, dsl) = call(&app, "POST", &dsl_path, Some(reader), dsl_batch.clone()).await;
+    assert_eq!(status, StatusCode::OK, "{dsl}");
+    assert_eq!(dsl["results"], many["results"]);
+    assert_eq!(dsl["knowledge_version"], many["knowledge_version"]);
+    let (status, single) = call(
+        &app,
+        "POST",
+        &dsl_path,
+        Some(reader),
+        json!({"statement":"resolve with $request","params":{"request":request}}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{single}");
+    assert_eq!(single["binding"], result["binding"]);
+    for (path, body) in [
+        (format!("{base}/resolve_many"), batch.clone()),
+        (dsl_path, dsl_batch.clone()),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(&path)
+                    .header("authorization", format!("Bearer {reader}"))
+                    .header("content-type", "application/json")
+                    .header("x-tkv-max-scan", "100000")
+                    .body(Body::from(serde_json::to_vec(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        // Native and DSL reads both advertise the controlled-read contract.
+        assert_eq!(response.headers()["x-tkv-read-controls"], "1");
+        let value: Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .unwrap();
+        assert_eq!(value["results"], many["results"]);
+    }
+    for (path, body) in [
+        (
+            format!("/v1/tenants/{b}/identity/resolve_many"),
+            batch.clone(),
+        ),
+        (format!("/v1/tenants/{b}/dsl"), dsl_batch),
+    ] {
+        assert_eq!(
+            call(&app, "POST", &path, Some(reader), body).await.0,
+            StatusCode::FORBIDDEN
+        );
+    }
+    let subject = receipt["entity"]["entity_id"].clone();
+    for (command, request, field) in [
+        (
+            "ids",
+            json!({"entity_id":subject,"valid_at":"2026-01-02T00:00:00Z","limit":1}),
+            "identifiers",
+        ),
+        ("history", json!({"entity_id":subject,"limit":1}), "events"),
+    ] {
+        let (status, native) = call(
+            &app,
+            "POST",
+            &format!("{base}/{command}"),
+            Some(reader),
+            request.clone(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{native}");
+        assert_eq!(native[field].as_array().unwrap().len(), 1);
+        let statement = format!("{command} with $request");
+        let body = json!({"statement":statement,"params":{"request":request}});
+        let (status, dsl) = call(
+            &app,
+            "POST",
+            &format!("/v1/tenants/{a}/dsl"),
+            Some(reader),
+            body.clone(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{dsl}");
+        assert_eq!(dsl[field], native[field]);
+        let mut continued = body;
+        continued["cursor"] = dsl["cursor"].clone();
+        let (status, page) = call(
+            &app,
+            "POST",
+            &format!("/v1/tenants/{a}/dsl"),
+            Some(reader),
+            continued,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{page}");
+        let mut other = request.clone();
+        other["cursor"] = native["cursor"].clone();
+        assert_eq!(
+            call(
+                &app,
+                "POST",
+                &format!("{base}/{command}"),
+                Some(writer),
+                other.clone()
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            call(
+                &app,
+                "POST",
+                &format!("{base}/{command}"),
+                Some(reader),
+                other
+            )
+            .await
+            .0,
+            StatusCode::OK
+        );
+        assert_eq!(
+            call(
+                &app,
+                "POST",
+                &format!("/v1/tenants/{b}/identity/{command}"),
+                Some(reader),
+                request
+            )
+            .await
+            .0,
+            StatusCode::FORBIDDEN
+        );
+    }
+    let mut invalid = batch;
+    invalid["items"][1]["valid_at"] = json!("invalid");
+    let (status, error) = call(
+        &app,
+        "POST",
+        &format!("{base}/resolve_many"),
+        Some(reader),
+        invalid,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(error.get("results").is_none());
     assert_eq!(
         call(
             &app,

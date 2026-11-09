@@ -4,7 +4,7 @@ v0.6.0 提供受管理的身份写入和单标识基础解析，用于回答“�
 
 当前只有独占 `identifies` 关系。每租户保留集合名 `identity_temporal`，内部仍使用该租户原有 WAL、LSM、备份和复制链路。普通 CRUD、DSL 写入、集合删除、索引及 Lookup 定义修改不能修改这个集合。普通授权读取可以查看其中的审计记录。嵌入式 `Engine` 原始键值接口属于可信宿主代码，不是隔离恶意进程内调用者的安全边界。
 
-本阶段没有原生 `resolve_many`、反向身份展开、固定知识分页、Log/Trace/RUM 查询协调器、多值关系、实体删除或全量 `replace_bindings`。批量写入采用增量 merge；未列出的标识保持原状。
+现在支持原生 `resolve_many`，以及 DSL `resolve` / `resolvemany`。本阶段没有反向身份展开、固定知识分页、Log/Trace/RUM 查询协调器、多值关系、实体删除或全量 `replace_bindings`。批量写入采用增量 merge；未列出的标识保持原状。
 
 ## 运行示例
 
@@ -21,6 +21,7 @@ HTTP 服务沿用现有启动方式和 Bearer token 配置。以下路径均以 
 | `POST /initialize` | 创建受管集合；相同配置重复初始化返回当前知识头 | admin |
 | `POST /write` | 创建实体、更新属性、原子修改多个标识 | admin / identity_write / identity_correct；纠错需 admin 或 identity_correct |
 | `POST /resolve` | 指定业务时间、当前或历史知识解析 | read/write/admin |
+| `POST /resolve_many` | 一份快照、一个知识版本下按输入顺序批量解析 | read/write/admin |
 | `POST /timeline` | 获取当前完整时间线和修订令牌 | read/write/admin |
 | `GET /entities/{entity}` | 当前实体属性与两类修订令牌 | read/write/admin |
 | `GET /operations/{operation}` | 已提交操作的原始收据 | read/write/admin |
@@ -108,6 +109,39 @@ python3 scripts/identity_smoke.py http://127.0.0.1:8080 /path/to/admin-token.txt
 
 `known_at` 可以省略、为 `null`、`latest`，或先前收据中的 `knowledge.version` UUID。每次调用固定一份租户快照。返回实际知识版本、时间线 revision、`binding` 和 `stats`；没有有效绑定时 `binding:null`。指定 UUID 不属于本租户当前历史、已因恢复回退而丢失，或从库尚未收到时返回 `KNOWLEDGE_UNAVAILABLE`，不退回最新解释。UUID 是跨重启的业务知识版本；`commit_seq` 仅供复制进度诊断，不能代替知识 UUID。
 
+### 5. 批量事件匹配
+
+`POST /v1/tenants/{tenant}/identity/resolve_many`：
+
+```json
+{
+  "known_at": "latest",
+  "items": [
+    {"identifier":{"kind":"account","namespace":"crm/prod","value":"10086"},"valid_at":"2026-11-05T10:30:00Z"},
+    {"identifier":{"kind":"account","namespace":"crm/prod","value":"10086"},"valid_at":"2026-11-05T11:00:00Z"},
+    {"identifier":{"kind":"account","namespace":"crm/prod","value":"missing"},"valid_at":"2026-11-05T11:00:00Z"}
+  ]
+}
+```
+
+返回 `knowledge_version`、`history`、`snapshot_seq`、`results` 和整批 `stats`。`results` 与输入等长、顺序相同；每项为 `{ "timeline_revision": UUID或null, "binding": Binding或null }`。重复输入保留重复结果，同一标识不同时间共享时间线读取和解码。区间仍为 `[from,to)`；未命中属于正常结果，时间线不存在时 revision 也为 null。只返回归属和原始绑定证据，不把当前实体属性当作历史属性。
+
+整批只取得一次快照、一次知识头。`known_at` 只能放在顶层，省略/null/latest 固定本次知识头，UUID 固定历史解释。所有输入先校验，任一输入错误、知识不可用、损坏或预算失败都会使整批失败，不返回部分结果。跨批次需要稳定解释时，把首批返回的 `knowledge_version` 放入后续请求；这不会延长保留期，版本过期后仍返回 `KNOWLEDGE_UNAVAILABLE`。`history` / `snapshot_seq` 是复制一致性位置，不能代替业务知识 UUID。
+
+Rust 类型位于 `tenant_kv::identity`：`ResolveItem`、`ResolveManyRequest`、`ResolveMatch`、`ResolveManyResult`。调用 `TenantHandle::identity_resolve_many(&request)`；需要共享截止时间或取消时，使用 `tenant.read_with(&options)?.identity_resolve_many(&request)`。单条 `identity_resolve` 也支持 `TenantReader`，原返回结构保持不变。
+
+HTTP 两个解析端点与 DSL 都支持[读取控制](read-controls.md)及 `X-TKV-Min-History` / `X-TKV-Min-Seq`。指定尚未复制的知识 UUID 会报错；需要等待主库已确认的位置时同时传最低位置。Rust HTTP 客户端提供 `Client::identity_resolve_many(&request, &ClientReadOptions)` 和 `identity_resolve`；`ReadPosition::from(&batch_result)` 可复用批量位置。客户端不会把一批请求拆成多次单条调用。能力标记为 `identity_resolve_many_v1`，应先升级服务端，再启用新客户端/DSL。
+
+每批 1..`max_read_keys` 条，默认 1000。输入、响应和临时内存分别受 `max_batch_bytes`、`max_response_bytes`、`max_query_bytes` 约束，默认 16 MiB、16 MiB、64 MiB。验证、读取和匹配共享默认 5 秒截止时间；历史扫描的 `max_scan` 累计整批物理记录（包括版本和墓碑），默认 100000，不按标识重新计数。latest 使用分组 MultiGet，历史查询使用有界多范围扫描，不进行集合全扫描，因此可与 `allow_full_scan=false` 一起使用。查询阶段按小批保留原始值、逐条解码时间线，输出内存累计计费；超过预算时调用方应拆小批次。
+
+性能对比程序会逐项核对顺序调用、原生批量和 DSL 的结果，并交替执行顺序与批量计时：
+
+```sh
+cargo run --locked --release --example identity_resolve_many -- /var/tmp/identity-batch-new 20
+```
+
+覆盖 1/32/128/1000 条、不同标识与重复标识、1/64 片段时间线、latest/固定知识，以及启用/禁用块缓存。禁用块缓存仍会命中操作系统页缓存，不能视为真实冷盘测试。实测结果与回归范围见[验证记录](resolve-many-validation-20261109.md)。
+
 ## 可信来源和幂等性
 
 v0.7 HTTP 写入口允许 admin、identity_write 和 identity_correct；手动有效区间等纠错需 admin 或 identity_correct。初始化仍仅 admin。来源固定为 `http`，操作者来自凭证配置中的稳定 subject，轮换哈希但保持 subject 不改变重试身份。请求中的 `source`、`actor`、`assurance` 等未知字段会被拒绝。证据引用是该管理员声明可使用的审计引用，结果标记为 `asserted`；本阶段不接第三方证据验证器，不会伪造 `verified`。连接器应在可信宿主中完成来源、规范化及证据授权，然后调用带 `IdentityContext` 的 Rust 接口。该上下文不能直接来自未经授权的 JSON。
@@ -128,8 +162,51 @@ operation_id 在回执保留期内按租户去重，限 128 字节；不能把�
 
 时钟检查对比进程内单调时钟与墙钟，并校验上次持久记录时间；成功采样会刷新锚点，避免正常渐进校时相对于首次锚点累计漂移。失败采样不移动锚点，也不自动接受大跳变；应校正系统时间，必要时释放句柄后关闭重开租户，使锚点重建，仍受上次持久记录时间约束。超过 `clock_tolerance_ms` 返回 `CLOCK_SKEW`，容忍范围内的并列或微小回退受控递增。进程重启后没有外部可信时源，无法识别所有向前跳变；部署需要正常时间同步。
 
-备份自动包含这些普通物理文件；复制从库回放相同 WAL 时间、UUID 和收据，不重新选择生效时间。主从切换保留已复制知识；异步复制原有 RPO 约束仍然存在。**当前 v0.8 要求主从两端都升级到 v0.8，复制协议为 3；含回收数据的目录不能降级交给旧服务写入。** 旧版本不认识受管集合保护。WAL/SST 物理编码仍为 v1，协议版本检查明确拒绝旧节点混跑。
+备份自动包含这些普通物理文件；复制从库回放相同 WAL 时间、UUID 和收据，不重新选择生效时间。主从切换保留已复制知识；异步复制原有 RPO 约束仍然存在。**当前主体查询版本使用复制协议 4，主从必须同时升级；含主体索引及回收数据的目录不能降级交给旧服务写入。** 旧版本不认识受管集合保护。WAL/SST 物理编码仍为 v1，协议版本检查明确拒绝旧节点混跑。
 
 可用 `cargo run --locked --release --example identity_perf -- /var/tmp/identity-perf 1000` 测量 1、10、100、1000 片段下的当前与历史解析成本，原始结果见 [v0.6 验证报告](v0.6-validation.md)，v0.6.1 的同负载前后对比及限制见 [本轮优化报告](v0.6.1-validation.md)。
 
 启用统一保留后，新操作使用 `identity_write_with` 或 HTTP 的 `write_options` 携带首次取得的 retry_token/history。operation_id 仍放在时态请求顶层。凭据与请求不能在重试时刷新；已过期回执不授权重新执行。
+
+## 主体反查和变更历史
+
+主体沿用 `Entity.entity_id`，与认证凭证的 `subject` 无关。新增只读端点：
+
+| 能力 | HTTP | DSL | Rust / HTTP Client |
+|---|---|---|---|
+| 按主体反查标识 | `POST /v1/tenants/{tenant}/identity/ids` | `ids with $request` | `get_subject_identifiers` |
+| 主体身份变更历史 | `POST /v1/tenants/{tenant}/identity/history` | `history with $request` | `get_subject_history` |
+
+反查请求示例：
+
+```json
+{"entity_id":"<UUID>","valid_at":"2026-11-09T10:00:00Z","known_at":"latest","kind":"account","namespace":"crm/prod","limit":100}
+```
+
+`valid_at` 必填，`kind`、`namespace` 可选，均精确区分大小写。返回 `entity_id`、`knowledge_version`、`history`、`snapshot_seq`、`identifiers`、`cursor`、`stats`。每个匹配项含 `identifier`、`timeline_revision`、`binding`。在相同知识版本和业务时间下，反查返回该主体的标识集合，与逐一 `resolve` 的归属一致；重绑定后仍能在旧知识版本下查询原主体。结果按标识摘要稳定排序，不按 value 字典序排序。不存在的主体返回 `NOT_FOUND`，存在但没有匹配标识时返回空列表；未知、过期或尚未复制的知识 UUID 返回 `KNOWLEDGE_UNAVAILABLE`。
+
+历史请求示例：
+
+```json
+{"entity_id":"<UUID>","known_at":"latest","recorded_from":"2026-11-01T00:00:00Z","recorded_to":"2026-12-01T00:00:00Z","limit":100}
+```
+
+`recorded_from`、`recorded_to` 可省略，区间为 `[from,to)`，筛选操作的**记录时间**，不是绑定的业务生效时间。返回同样的位置和游标元数据，以及 `events`、`coverage`。事件按知识 ordinal 降序、同一操作内 change_index 升序排列。事件类型包括 `entity_created`、`attributes_updated`、`identifier_bound`、`identifier_rebound`、`identifier_unbound`、`identifier_replaced`。每项包含 event_id、operation_id、完整 knowledge（含来源、操作者和记录时间）、受影响 entity_ids、reason，以及属性或绑定变更。绑定的 before/after 仅包含变更区间内的片段；replace 为一条含两个标识变更的事件。重绑定事件可从原主体和新主体两侧读取，event_id 相同。属性记录实际变化字段，`{present:false,value:null}` 与已存在的 JSON null 区分。同一操作的幂等重试不新增事件；无变化的操作保留原收据，但不生成变更事件。这是变更日志，不提供属性的任意历史时点快照，也不记录未提交的失败尝试。
+
+两个接口默认每页 100 项，范围为 1..`max_page_size`（默认 1000）。使用 `SubjectIdentifiersRequest/Result`、`SubjectHistoryRequest/Result`，通过 `TenantHandle`、`TenantReader` 或异步 HTTP `Client` 调用。每页受读取超时、取消、物理扫描、临时内存、响应字节和最低复制位置限制。过滤和历史跨度较大时应减小页大小。单页最多推进 256 条物理索引记录，也可能在达到返回项数前结束；**空列表加非空 cursor 不代表结束，只有 cursor=null 才结束**。
+
+下一页重复相同筛选、limit、known_at，并提交返回的 cursor；首次 `latest` 在整个游标生命周期固定为一份知识头和快照。DSL 的游标放在顶层 `cursor`，不能放进 `$request`。游标默认 60 秒，绑定租户、认证主体、引擎代际、复制 epoch、筛选和发放节点；与普通查询共享快照/游标名额。成功消费一次，预算失败不消费旧游标；并发消费只有一个成功。恢复或切换历史后失效。HTTP SDK 返回 `tkv1` 包装游标并将后续请求固定到原节点；可用现有 `release_cursor` 提前释放。页面保留在快照中，但逻辑保留期仍可能在翻页间到期，历史事件不会绕过到期校验。
+
+反向索引只存主体与标识的候选关系及知识版本；最终匹配读取同一快照下的权威时间线。关系变化、事件正文、主体事件索引、知识头和幂等收据在**同一个 WAL 事务**提交，复制和检查点携带相同记录，不存在异步漏记窗口。事件正文只保存一份，多主体通过指针关联。所有展开记录和字节计入现有原子批次上限；开启 retention 后也计入到期记录，超限整次回滚。
+
+### 升级与保留
+
+能力标记 `identity_subjects_v1`。本次根注册表版本为 **6**、复制协议为 **4**。启动时先持久升级根注册表再服务，旧程序会拒绝打开；这用于防止旧写入器漏维护新索引。升级前停写并备份，同时更新主从和离线工具；首次升级需要少量可写空间，不能直接降级。WAL/SST 编码未变。
+
+新初始化的身份集合立即可查。既有身份集合在主节点打开后，由维护线程按小事务从保留中的时间线历史重建反向索引，持久记录进度；重启可续建，新写入同时维护新索引。重建使用有界维护内存和租户/全局资源计费，不套用客户端的 query_ms/max_query_bytes，调低查询限制不会阻断重建。构建期间反查返回 `INDEX_NOT_READY`，不退化为全租户扫描。旧时间线的物理清理等到重建完成，过期知识仍按原规则不可查询。从库只复制这些记录，不独立重建。旧检查点恢复也使用同样流程。
+
+升级前无法可靠补全的审计事件不会被伪造：`coverage.recording_started` 表示开始记录的知识水位，`legacy_history_missing=true` 明示此前历史不完整；新集合为 false。`coverage.retention_enabled=true` 表示事件历史可能已经被截短，即使当前页非空也不能声称完整生命周期审计。
+
+启用租户 retention 后，事件正文和各主体指针分别安排到期任务，避免一次清理大范围纠错时形成超大事务；后启用策略的旧事件也分批补入。反向关系按最低保留知识版本清理，保留一份前驱基线（包括 absent 基线），保证尚可查询知识的反查不被破坏。未配置 retention 时，事件与知识保留到删除租户或替换历史；合规用途需要另外制定留存及备份策略。
+
+回归、Linux 执行范围和高关联数主体的分页实测见[主体验证记录](subject-queries-validation-20261109.md)。示例可运行 `cargo run --release --example identity_subjects -- /var/tmp/idkv-subjects-new`，它会核对正反向归属和所有已确认更新对应的事件。

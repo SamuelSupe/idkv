@@ -22,14 +22,14 @@ pub(super) struct State {
     history_identifier: Option<String>,
     baseline_kept: bool,
     sweeping_floor: u64,
-    swept_floor: u64,
+    pub(super) swept_floor: u64,
     pub reclaimed_records: u64,
     pub completed_rounds: u64,
     pub watermark_ms: u64,
 }
 impl State {
     pub(super) fn status(&self) -> serde_json::Value {
-        serde_json::json!({"migration_complete":self.migration_phase>=5,"reclaimed_records":self.reclaimed_records,
+        serde_json::json!({"migration_complete":self.migration_phase>=7,"reclaimed_records":self.reclaimed_records,
             "completed_rounds":self.completed_rounds,"watermark_ms":self.watermark_ms,
             "knowledge_floor":self.swept_floor,"history_sweep_active":self.history_after.is_some()})
     }
@@ -60,6 +60,12 @@ fn migration(
             .unwrap_or_else(|| b"~absent".to_vec()),
         4 => collection
             .map(|c| doc_prefix(c, "knowledge:"))
+            .unwrap_or_else(|| b"~absent".to_vec()),
+        5 => collection
+            .map(|c| doc_prefix(c, "event:"))
+            .unwrap_or_else(|| b"~absent".to_vec()),
+        6 => collection
+            .map(|c| doc_prefix(c, "subject-event:"))
             .unwrap_or_else(|| b"~absent".to_vec()),
         _ => return Ok(()),
     };
@@ -232,6 +238,9 @@ fn history(tx: &mut Transaction<'_>, state: &mut State, batch: usize) -> Result<
     let Some(collection) = identity_collection(tx)? else {
         return Ok(());
     };
+    if !crate::identity::subjects_ready(tx, collection)? {
+        return Ok(());
+    }
     if state.history_after.is_none() {
         let (rows, _) = tx.gc_prefix(KNOWLEDGE, state.knowledge_after.as_deref(), batch)?;
         let mut first = None;
@@ -355,7 +364,7 @@ pub(super) fn step(tenant: &TenantHandle) -> Result<()> {
                 .unwrap_or_default();
             let before = serde_json::to_vec(&state)?;
             let previous_reclaimed = state.reclaimed_records;
-            if state.migration_phase < 5 && !skip_migration {
+            if state.migration_phase < 7 && !skip_migration {
                 attempted_batch = batch;
                 migration(tx, &p, &mut state, batch)?;
                 // schedule_at may rewind expiry after a quota-blocked migration
@@ -366,7 +375,7 @@ pub(super) fn step(tenant: &TenantHandle) -> Result<()> {
                         state.expiry_after = pending.expiry_after;
                     }
                 }
-                if state.migration_phase >= 5 {
+                if state.migration_phase >= 7 {
                     state.alias_active = true;
                 }
             } else {
@@ -390,7 +399,7 @@ pub(super) fn step(tenant: &TenantHandle) -> Result<()> {
                         state.watermark_ms = previous_watermark;
                     }
                 }
-                if state.migration_phase >= 5 {
+                if state.migration_phase >= 7 {
                     history(tx, &mut state, batch)?;
                     state.alias_active |= state.reclaimed_records > previous_reclaimed;
                     if state.alias_active {

@@ -105,7 +105,8 @@ impl TenantHandle {
             if cursor.replication_epoch != replication_epoch {
                 return Err(Error::new("CURSOR_EXPIRED", "replication history changed"));
             }
-            if cursor.fingerprint != fingerprint
+            if cursor.identity.is_some()
+                || cursor.fingerprint != fingerprint
                 || cursor.principal != budget.principal
                 || cursor.snapshot.tenant() != self.id()
                 || cursor.snapshot.generation() != self.engine().runtime_id
@@ -414,6 +415,7 @@ impl TenantHandle {
         let next_cursor = if more {
             let last = candidates.last().unwrap();
             Some(Cursor {
+                identity: None,
                 principal: budget.principal.clone(),
                 publication,
                 replication_epoch,
@@ -422,10 +424,9 @@ impl TenantHandle {
                 after: last.order.clone(),
                 position: last.position.clone(),
                 collection: collection.id,
-                _memory: self
-                    .engine()
-                    .budget
-                    .reserve(last.order.len() + last.position.len() + 256)?,
+                _memory: self.engine().budget.reserve(
+                    last.order.len() + last.position.len() + std::mem::size_of::<Cursor>() + 128,
+                )?,
             })
         } else {
             None
@@ -451,40 +452,7 @@ impl TenantHandle {
                 "replication history changed during query",
             ));
         }
-        let next = {
-            let mut cursors = self.core.cursors.lock();
-            cursors.retain(|_, c| c.valid());
-            if let Some(old) = &query.cursor
-                && let Ok(id) = Uuid::parse_str(old)
-                && !cursors.contains_key(&id)
-            {
-                return Err(Error::new(
-                    "CURSOR_EXPIRED",
-                    "cursor expired or already consumed",
-                ));
-            }
-            if next_cursor.is_some()
-                && query.cursor.is_none()
-                && (cursors.len() >= self.engine().options.max_snapshots / 2
-                    || cursors
-                        .values()
-                        .filter(|c| c.principal == budget.principal)
-                        .count()
-                        >= (self.engine().options.max_snapshots / 4).max(1))
-            {
-                return Err(Error::limit("cursor count limit"));
-            }
-            if let Some(old) = &query.cursor {
-                cursors.remove(&Uuid::parse_str(old).unwrap());
-            }
-            if let Some(cursor) = next_cursor {
-                let token = Uuid::new_v4();
-                cursors.insert(token, cursor);
-                Some(token.to_string())
-            } else {
-                None
-            }
-        };
+        let next = self.publish_cursor(query.cursor.as_deref(), next_cursor, budget)?;
         stats.scanned_entries -= scanned_before;
         Ok(QueryResult {
             documents,

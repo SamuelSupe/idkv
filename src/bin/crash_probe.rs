@@ -219,13 +219,35 @@ fn main() {
             .unwrap()
             .create_collection("assets")
             .unwrap();
-    } else if args[3] == "restore" || args[3] == "restore-error" {
+    } else if matches!(
+        args[3].as_str(),
+        "restore" | "restore-error" | "restore-cleanup"
+    ) {
         let id = tenant.id();
         drop(tenant);
         loop {
             match store.restore(id, args[4].parse().unwrap()) {
                 Err(e) if e.code == "BUSY" => {
                     std::thread::sleep(std::time::Duration::from_millis(10))
+                }
+                result if args[3] == "restore-cleanup" => {
+                    result.unwrap();
+                    let tenant = store.tenant(id).unwrap();
+                    assert!(tenant.get("assets", "after-backup").unwrap().is_none());
+                    let restored = tenant.get("assets", "old").unwrap().unwrap();
+                    let ack = tenant
+                        .put(
+                            "assets",
+                            json!({"_key":"post-restore","ip":"restored-ip"}),
+                            None,
+                        )
+                        .unwrap();
+                    assert_eq!(
+                        tenant.get("assets", "post-restore").unwrap().unwrap()["_rev"],
+                        ack.rev
+                    );
+                    println!("{}", json!({"restored":restored,"confirmed":ack}));
+                    break;
                 }
                 result if args[3] == "restore-error" => {
                     assert!(result.is_err());

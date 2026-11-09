@@ -1,4 +1,5 @@
 use super::{Client, Request};
+use crate::identity::*;
 use crate::{
     Error, Explain, LookupResult, PublishedDataset, PublishedQuery, PublishedReadBatch,
     PublishedResult, Query, QueryResult, ReadBatchResult, ReadContext, ReadOperation, ReadOptions,
@@ -26,6 +27,30 @@ impl From<&WriteResult> for ReadPosition {
 }
 impl From<&ReadBatchResult> for ReadPosition {
     fn from(value: &ReadBatchResult) -> Self {
+        Self {
+            history: value.history.clone(),
+            seq: value.snapshot_seq,
+        }
+    }
+}
+impl From<&ResolveManyResult> for ReadPosition {
+    fn from(value: &ResolveManyResult) -> Self {
+        Self {
+            history: value.history.clone(),
+            seq: value.snapshot_seq,
+        }
+    }
+}
+impl From<&SubjectIdentifiersResult> for ReadPosition {
+    fn from(value: &SubjectIdentifiersResult) -> Self {
+        Self {
+            history: value.history.clone(),
+            seq: value.snapshot_seq,
+        }
+    }
+}
+impl From<&SubjectHistoryResult> for ReadPosition {
+    fn from(value: &SubjectHistoryResult) -> Self {
         Self {
             history: value.history.clone(),
             seq: value.snapshot_seq,
@@ -376,6 +401,111 @@ impl Client {
             )
             .await?
             .0)
+    }
+    pub async fn identity_resolve(
+        &self,
+        request: &ResolveRequest,
+        options: &ClientReadOptions,
+    ) -> Result<ResolveResult> {
+        Ok(self
+            .read(
+                &[
+                    "v1",
+                    "tenants",
+                    &self.tenant.to_string(),
+                    "identity",
+                    "resolve",
+                ],
+                Some(serde_json::to_value(request)?),
+                options,
+                None,
+                reqwest::Method::POST,
+            )
+            .await?
+            .0)
+    }
+    /// One remote snapshot; never decomposes the batch into separate requests.
+    pub async fn identity_resolve_many(
+        &self,
+        request: &ResolveManyRequest,
+        options: &ClientReadOptions,
+    ) -> Result<ResolveManyResult> {
+        Ok(self
+            .read(
+                &[
+                    "v1",
+                    "tenants",
+                    &self.tenant.to_string(),
+                    "identity",
+                    "resolve_many",
+                ],
+                Some(serde_json::to_value(request)?),
+                options,
+                None,
+                reqwest::Method::POST,
+            )
+            .await?
+            .0)
+    }
+    /// Continuations remain pinned to the issuing node; no cross-node cursor retries.
+    pub async fn get_subject_identifiers(
+        &self,
+        request: &SubjectIdentifiersRequest,
+        options: &ClientReadOptions,
+    ) -> Result<SubjectIdentifiersResult> {
+        let mut request = request.clone();
+        let pinned = request
+            .cursor
+            .as_deref()
+            .map(|token| self.decode_cursor(token))
+            .transpose()?;
+        request.cursor = pinned.as_ref().map(|(_, key)| key.clone());
+        let (mut result, node): (SubjectIdentifiersResult, _) = self
+            .read(
+                &["v1", "tenants", &self.tenant.to_string(), "identity", "ids"],
+                Some(serde_json::to_value(request)?),
+                options,
+                pinned.map(|(node, _)| node),
+                reqwest::Method::POST,
+            )
+            .await?;
+        if let Some(token) = &mut result.cursor {
+            *token = format!("tkv1.{}.{}", self.cursor_origin(&node), token);
+        }
+        Ok(result)
+    }
+    /// Continuations remain pinned to the issuing node; no cross-node cursor retries.
+    pub async fn get_subject_history(
+        &self,
+        request: &SubjectHistoryRequest,
+        options: &ClientReadOptions,
+    ) -> Result<SubjectHistoryResult> {
+        let mut request = request.clone();
+        let pinned = request
+            .cursor
+            .as_deref()
+            .map(|token| self.decode_cursor(token))
+            .transpose()?;
+        request.cursor = pinned.as_ref().map(|(_, key)| key.clone());
+        let (mut result, node): (SubjectHistoryResult, _) = self
+            .read(
+                &[
+                    "v1",
+                    "tenants",
+                    &self.tenant.to_string(),
+                    "identity",
+                    "history",
+                ],
+                Some(serde_json::to_value(request)?),
+                options,
+                pinned.map(|(node, _)| node),
+                reqwest::Method::POST,
+            )
+            .await?;
+        if let Some(token) = &mut result.cursor {
+            *token = format!("tkv1.{}.{}", self.cursor_origin(&node), token);
+        }
+        Ok(result)
     }
     pub async fn read_batch(
         &self,

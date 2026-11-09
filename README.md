@@ -6,7 +6,7 @@ GitHub 项目名为 `idkv`。为保留现有集成兼容性，Rust 包及服务�
 
 每个租户拥有独立 UUID 目录、目录锁、提交序号、WAL、Manifest、SST、索引和缓存实例。一个租户内的集合与索引使用同一套 LSM。租户名称和文档中的 `tenant` 字段不会参与文件路径或权限判断。
 
-当前为可运行版本。测试证据、性能测量及尚未完成的生产资格验证分别记录在各版本报告中。WAL/SST 格式目前为 v1；新建及后续发布的根注册表为 v5，健康 v4 根仅打开和读取时延后升级，旧版 Store 拒绝打开升级后的根；复制协议为 3，主从需同时升级。升级前应备份，步骤与兼容性见 [中间件集成契约](docs/middleware.md)。
+当前为可运行版本。测试证据、性能测量及尚未完成的生产资格验证分别记录在各版本报告中。WAL/SST 格式目前为 v1；根注册表为 v6，启动时先持久升级以阻止旧写入器漏维护身份索引，旧版 Store 拒绝打开升级后的根；复制协议为 4，主从需同时升级。升级前应备份，步骤与兼容性见 [中间件集成契约](docs/middleware.md)。
 
 针对 75e2938 的复查已修复复制导出在副本重启后不能释放、保留 WAL 不推进及管理响应重新打开租户的问题，并收紧一致性等待和在线索引背压边界。实际重启对比、并发负载、故障验证及剩余限制见 [复查修复报告](docs/review-followup-20261106.md)。
 
@@ -17,6 +17,8 @@ GitHub 项目名为 `idkv`。为保留现有集成兼容性，Rust 包及服务�
 [读流量与 WAL 恢复修复](docs/read-drain-recovery-20261106.md)增加安装闸门和游标撤销，消除连续短读的安装饥饿；冷追赶复用引擎，并将 WAL 恢复改为新文件普通写入后发布，增加隔离引擎自动排空及打开 I/O 错误退避。
 
 [同步水位与排空期限修复](docs/wal-watermark-drain-20261106.md)让健康打开跳过 WAL 重写，空间不足时提供受限的只读服务，并限制复制排空等待、提前唤醒一致性等待及同步发布读取入口。
+
+新增[时态身份批量解析](docs/identity.md)：Rust/HTTP `identity_resolve_many`，以及 DSL `resolve with $request` / `resolvemany with $request`。整批共享快照、知识版本和读取预算，保持输入顺序与重复项；默认最多 1000 项。持久格式和复制协议保持不变。
 
 v0.10.1 优化客户端读取路由与后台维护：一秒路由缓存、并发发现合并、正文/索引排队读取取消，以及写锁外磁盘用量扫描。缓存不改变最低读取位置、游标绑定或写入确认语义。使用见[读取控制](docs/read-controls.md)，前后对比与验证范围见 [v0.10.1 报告](docs/v0.10.1-validation.md)。
 
@@ -188,3 +190,5 @@ python3 scripts/replication_demo.py --binary target/release/tenant-kv --root /va
 [f6470ac 后续修复](docs/reviewf647-20261108.md)提供离线 WAL 前缀修复命令，隔离旧复制 epoch，并修复备份时钟、复制周期期限、GC 并发推进和小配额缩容边界。
 
 [c3b4c98 后续修复](docs/reviewc3b-20261108.md)区分复制整轮截止与单页传输超时，并补齐离线修复的完整原库归档、持久阶段记录和清理失败报告。
+
+主体反查和变更历史：`POST /identity/ids`、`POST /identity/history`（前缀 `/v1/tenants/{tenant}`），对应 DSL `ids with $request`、`history with $request`；支持知识版本、分页和读取预算。详见[身份查询](docs/identity.md#主体反查和变更历史)。

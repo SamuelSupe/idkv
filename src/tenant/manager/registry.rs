@@ -55,7 +55,7 @@ struct DiskRegistry {
 impl<'de> Deserialize<'de> for Registry {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
         let mut disk = DiskRegistry::deserialize(deserializer)?;
-        if disk.version < VERSION && !disk.deleted.is_empty() {
+        if disk.version < 5 && !disk.deleted.is_empty() {
             return Err(D::Error::custom(
                 "compact deleted tenants require registry v5",
             ));
@@ -88,7 +88,7 @@ impl<'de> Deserialize<'de> for Registry {
 }
 impl Serialize for Registry {
     fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
-        let compact = self.version >= VERSION;
+        let compact = self.version >= 5;
         let mut state = serializer.serialize_struct("Registry", if compact { 4 } else { 3 })?;
         state.serialize_field("version", &self.version)?;
         state.serialize_field("replication_enabled", &self.replication_enabled)?;
@@ -206,7 +206,7 @@ mod tests {
     }
 
     #[test]
-    fn legacy_read_startup_defers_upgrade_until_registry_publication() {
+    fn legacy_startup_fences_older_identity_writers_before_serving() {
         let dir = tempfile::tempdir().unwrap();
         let (id, ack) = {
             let store = Store::open(dir.path(), Options::default()).unwrap();
@@ -222,7 +222,6 @@ mod tests {
         let mut registry: Registry = read_json(&path).unwrap();
         registry.version = 4;
         atomic_json(&path, &registry).unwrap();
-        let before = fs::read(&path).unwrap();
         {
             let store = Store::open(dir.path(), Options::default()).unwrap();
             assert_eq!(
@@ -234,7 +233,8 @@ mod tests {
                     .unwrap()["_rev"],
                 ack.rev
             );
-            assert_eq!(fs::read(&path).unwrap(), before);
+            let upgraded: serde_json::Value = read_json(&path).unwrap();
+            assert_eq!(upgraded["version"], VERSION);
             store.create_tenant("upgrades-on-publication").unwrap();
             let disk: serde_json::Value = read_json(&path).unwrap();
             assert_eq!(disk["version"], VERSION);

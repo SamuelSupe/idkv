@@ -741,8 +741,41 @@ async fn reviewc3b_cycle_deadlines_rotate_without_checkpoint_rebuilds() {
     struct Delayed {
         tenants: Mutex<Vec<Uuid>>,
         snapshots: AtomicUsize,
+        slow_body: Mutex<Option<Uuid>>,
+    }
+    struct SlowBody {
+        first: Option<axum::body::Bytes>,
+        rest: Option<axum::body::Bytes>,
+        pause: std::pin::Pin<Box<tokio::time::Sleep>>,
+    }
+    impl axum::body::HttpBody for SlowBody {
+        type Data = axum::body::Bytes;
+        type Error = std::convert::Infallible;
+        fn poll_frame(
+            mut self: std::pin::Pin<&mut Self>,
+            cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Option<std::result::Result<hyper::body::Frame<Self::Data>, Self::Error>>>
+        {
+            if let Some(first) = self.first.take() {
+                return std::task::Poll::Ready(Some(Ok(hyper::body::Frame::data(first))));
+            }
+            if self.rest.is_none() {
+                return std::task::Poll::Ready(None);
+            }
+            if std::future::Future::poll(self.pause.as_mut(), cx).is_pending() {
+                return std::task::Poll::Pending;
+            }
+            std::task::Poll::Ready(
+                self.rest
+                    .take()
+                    .map(|rest| Ok(hyper::body::Frame::data(rest))),
+            )
+        }
     }
     async fn delay(State(state): State<Arc<Delayed>>, request: Request, next: Next) -> Response {
+        if request.uri().path() == "/v1/replication/status" && state.slow_body.lock().is_some() {
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
         if request.uri().path() == "/v1/replication/snapshot" {
             state.snapshots.fetch_add(1, Ordering::Relaxed);
         }
@@ -753,9 +786,28 @@ async fn reviewc3b_cycle_deadlines_rotate_without_checkpoint_rebuilds() {
         let bytes = to_bytes(body, 16384).await.unwrap();
         let log: LogRequest = serde_json::from_slice(&bytes).unwrap();
         state.tenants.lock().push(log.tenant);
-        tokio::time::sleep(Duration::from_millis(600)).await;
-        next.run(Request::from_parts(parts, Body::from(bytes)))
-            .await
+        let slow_body = *state.slow_body.lock();
+        if slow_body.is_none() {
+            tokio::time::sleep(Duration::from_millis(600)).await;
+        }
+        let response = next
+            .run(Request::from_parts(parts, Body::from(bytes)))
+            .await;
+        if slow_body == Some(log.tenant) {
+            let (mut parts, body) = response.into_parts();
+            parts.headers.remove(axum::http::header::CONTENT_LENGTH);
+            let mut bytes = to_bytes(body, MAX_WIRE_BYTES).await.unwrap();
+            let first = bytes.split_to(1);
+            return Response::from_parts(
+                parts,
+                Body::new(SlowBody {
+                    first: Some(first),
+                    rest: Some(bytes),
+                    pause: Box::pin(tokio::time::sleep(Duration::from_millis(800))),
+                }),
+            );
+        }
+        response
     }
     let (_source_dir, source_store, source_service) = primary(Options::default());
     let source_state = source_store.replication_state();
@@ -860,6 +912,39 @@ async fn reviewc3b_cycle_deadlines_rotate_without_checkpoint_rebuilds() {
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     assert_eq!(delayed.snapshots.load(Ordering::Relaxed), 0);
+    // Every cycle loses half its budget to status. One valid log body cannot
+    // finish in what remains, while the other tenants can still advance.
+    let slow = expected[0].0;
+    *delayed.slow_body.lock() = Some(slow);
+    for (id, value) in &mut expected {
+        let handle = source_store.tenant(*id).unwrap();
+        handle
+            .put("docs", json!({"_key":"ack","value":77}), None)
+            .unwrap();
+        *value = handle.get("docs", "ack").unwrap();
+    }
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let _ = replica
+            .sync_until(true, Instant::now() + Duration::from_millis(500))
+            .await;
+        if expected.iter().all(|(id, value)| {
+            replica_store
+                .tenant(*id)
+                .is_ok_and(|t| t.get("docs", "ack").ok().as_ref() == Some(value))
+        }) {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "partial successful bodies never made progress: {:?}",
+            replica.status().unwrap().last_error
+        );
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    }
+    assert_eq!(replica.status().unwrap().reinitializations, 1);
+    assert_eq!(delayed.snapshots.load(Ordering::Relaxed), 1);
+    *delayed.slow_body.lock() = None;
     let id = expected[0].0;
     let handle = source_store.tenant(id).unwrap();
     handle
@@ -876,8 +961,8 @@ async fn reviewc3b_cycle_deadlines_rotate_without_checkpoint_rebuilds() {
         .await
         .unwrap_err();
     assert_eq!(error.code, "DEADLINE_EXCEEDED");
-    assert_eq!(replica.status().unwrap().reinitializations, 0);
-    assert_eq!(delayed.snapshots.load(Ordering::Relaxed), 0);
+    assert_eq!(replica.status().unwrap().reinitializations, 1);
+    assert_eq!(delayed.snapshots.load(Ordering::Relaxed), 1);
     replica
         .promote_bounded(fence.id, Duration::from_secs(10))
         .await

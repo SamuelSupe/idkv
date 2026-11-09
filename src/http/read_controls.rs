@@ -7,7 +7,14 @@ pub(super) const HEADERS: [&str; 3] = [
     "x-tkv-allow-full-scan",
 ];
 pub(super) fn supports(route: &str, method: &Method) -> bool {
-    if route.contains("/identity/") || route.starts_with("/v1/replication/") {
+    if route.contains("/identity/") {
+        return *method == Method::POST
+            && (route.ends_with("/resolve")
+                || route.ends_with("/resolve_many")
+                || route.ends_with("/ids")
+                || route.ends_with("/history"));
+    }
+    if route.starts_with("/v1/replication/") {
         return false;
     }
     (*method == Method::GET

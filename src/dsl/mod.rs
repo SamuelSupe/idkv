@@ -33,6 +33,10 @@ pub enum Output {
     Get(Option<Value>),
     MultiGet(Vec<Option<Value>>),
     Lookup(LookupResult),
+    Resolve(crate::identity::ResolveResult),
+    ResolveMany(crate::identity::ResolveManyResult),
+    SubjectIds(crate::identity::SubjectIdentifiersResult),
+    SubjectHistory(crate::identity::SubjectHistoryResult),
     Write(WriteResult),
 }
 
@@ -65,6 +69,10 @@ enum Command {
     Explain(Selection),
     Get(Operand),
     MultiGet(Operand),
+    Resolve(Operand),
+    ResolveMany(Operand),
+    SubjectIds(Operand),
+    SubjectHistory(Operand),
     Lookup {
         name: String,
         inputs: Operand,
@@ -150,11 +158,12 @@ impl Prepared {
         reader: Option<&crate::TenantReader<'_>>,
     ) -> Result<Output> {
         let (options, principal) = write;
-        let default_reader;
+        let mut default_reader;
         let reader = match reader {
             Some(reader) => reader,
             None => {
                 default_reader = tenant.read_with(&crate::ReadOptions::default())?;
+                default_reader.budget.principal = Some(principal.into());
                 &default_reader
             }
         };
@@ -163,8 +172,15 @@ impl Prepared {
         {
             return Err(Error::invalid("write_options require a write statement"));
         }
-        if cursor.is_some() && !matches!(self.command, Command::Query(_)) {
-            return Err(Error::invalid("cursor is only valid for from queries"));
+        if cursor.is_some()
+            && !matches!(
+                self.command,
+                Command::Query(_) | Command::SubjectIds(_) | Command::SubjectHistory(_)
+            )
+        {
+            return Err(Error::invalid(
+                "cursor is only valid for from, ids and history queries",
+            ));
         }
         if params.len() != self.parameters.len() {
             return Err(Error::invalid(
@@ -192,7 +208,11 @@ impl Prepared {
                 .transpose()?
                 .unwrap_or(0),
             Command::Put { document, .. } => document.binding_memory(&binding_sizes)?,
-            Command::MultiGet(keys) => keys.binding_memory(&binding_sizes)?,
+            Command::MultiGet(keys)
+            | Command::Resolve(keys)
+            | Command::ResolveMany(keys)
+            | Command::SubjectIds(keys)
+            | Command::SubjectHistory(keys) => keys.binding_memory(&binding_sizes)?,
             _ => 0,
         };
         if expanded > tenant.engine().options.max_query_bytes {
@@ -243,6 +263,42 @@ impl Prepared {
                     })
                     .collect::<Result<Vec<_>>>()?;
                 Output::MultiGet(reader.multi_get(collection, &keys)?)
+            }
+            Command::Resolve(request) => {
+                reader.budget.check()?;
+                let request = crate::identity::ResolveRequest::deserialize(value(request))?;
+                Output::Resolve(reader.identity_resolve(&request)?)
+            }
+            Command::ResolveMany(request) => {
+                reader.budget.check()?;
+                let request = value(request);
+                if request
+                    .get("items")
+                    .and_then(Value::as_array)
+                    .is_some_and(|items| items.len() > tenant.engine().options.max_read_keys)
+                {
+                    return Err(Error::limit("identity resolve_many item limit"));
+                }
+                let request = crate::identity::ResolveManyRequest::deserialize(request)?;
+                Output::ResolveMany(reader.identity_resolve_many(&request)?)
+            }
+            Command::SubjectIds(request) => {
+                let mut request =
+                    crate::identity::SubjectIdentifiersRequest::deserialize(value(request))?;
+                if request.cursor.is_some() {
+                    return Err(Error::invalid("use the DSL top-level cursor"));
+                }
+                request.cursor = cursor.map(str::to_owned);
+                Output::SubjectIds(reader.get_subject_identifiers(&request)?)
+            }
+            Command::SubjectHistory(request) => {
+                let mut request =
+                    crate::identity::SubjectHistoryRequest::deserialize(value(request))?;
+                if request.cursor.is_some() {
+                    return Err(Error::invalid("use the DSL top-level cursor"));
+                }
+                request.cursor = cursor.map(str::to_owned);
+                Output::SubjectHistory(reader.get_subject_history(&request)?)
             }
             Command::Lookup { name, inputs } => {
                 let inputs = value(inputs)

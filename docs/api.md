@@ -194,3 +194,7 @@ v0.9.1 的查询定位规则：
 `POST T/retry-context` 是会写入 retry token 的操作：read 角色仍被拒绝，响应按写入路径处理，不附加只读响应语义或接受一致性读控制。`GET /openapi.json` 的配置专属文档在创建 HTTP router 时生成并编码一次，各请求复用同一份内容。
 
 恢复未完成的只读诊断实例拒绝普通业务读取，返回 RECOVERY_REQUIRED（503），而非旧视图下的正常 404。本地备份在 rename 后同步结果不确定时返回 BACKUP_COMMIT_UNKNOWN，message 包含可检查/删除的 UUID。
+
+`POST /v1/tenants/{tenant}/identity/resolve_many` 和 DSL `resolvemany with $request` 提供同快照批量时态解析。顶层 known_at 固定整批知识版本，每项 identifier/valid_at 独立；返回有序 results、knowledge_version、history、snapshot_seq 和累计 stats。默认最多 1000 项，任一错误导致整批失败。`resolve with $request` 对应单条解析。两个端点均支持请求级读取控制和最低复制位置，详见 [identity.md](identity.md)。
+
+主体查询（read 权限）：`POST /v1/tenants/{tenant}/identity/ids` 接收 `SubjectIdentifiersRequest`，返回 `SubjectIdentifiersResult`；`POST /v1/tenants/{tenant}/identity/history` 接收 `SubjectHistoryRequest`，返回 `SubjectHistoryResult`。支持相同的读取控制、最低复制位置及节点绑定游标；参数、事件和覆盖范围详见[身份模块](identity.md#主体反查和变更历史)，准确结构见 OpenAPI。

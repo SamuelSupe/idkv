@@ -1366,8 +1366,111 @@ async fn temporal_history_receipts_and_effective_time_survive_replication_and_sw
         replica.identity_resolve(&query).unwrap_err().code,
         "KNOWLEDGE_UNAVAILABLE"
     );
+    let batch = ResolveManyRequest {
+        known_at: query.known_at.clone(),
+        items: vec![
+            ResolveItem {
+                identifier: identifier.clone(),
+                valid_at: query.valid_at.clone()
+            };
+            32
+        ],
+    };
+    let remote =
+        tenant_kv::client::Client::new(std::slice::from_ref(&pair.ub), ADMIN.into(), id).unwrap();
+    assert_eq!(
+        remote
+            .identity_resolve_many(&batch, &Default::default())
+            .await
+            .unwrap_err()
+            .code,
+        "KNOWLEDGE_UNAVAILABLE"
+    );
+    let current = primary.identity_resolve_many(&batch).unwrap();
+    let minimum = tenant_kv::client::ClientReadOptions {
+        minimum: Some((&current).into()),
+        read: ReadOptions {
+            timeout_ms: Some(100),
+            ..Default::default()
+        },
+    };
+    assert_eq!(
+        remote
+            .identity_resolve_many(&batch, &minimum)
+            .await
+            .unwrap_err()
+            .code,
+        "DEADLINE_EXCEEDED"
+    );
     pair.catch_up(false).await;
     assert!(replica.identity_resolve(&query).unwrap().binding.is_none());
+    let history_request: SubjectHistoryRequest =
+        serde_json::from_value(json!({"entity_id":entity,"limit":1})).unwrap();
+    let mut history_page = remote
+        .get_subject_history(&history_request, &Default::default())
+        .await
+        .unwrap();
+    assert_eq!(history_page.events[0].operation_id, "unbind");
+    let mut next = history_request.clone();
+    next.cursor = history_page.cursor.take();
+    assert!(next.cursor.as_ref().unwrap().starts_with("tkv1."));
+    assert_eq!(
+        remote
+            .get_subject_history(&next, &Default::default())
+            .await
+            .unwrap()
+            .events[0]
+            .operation_id,
+        "bind"
+    );
+    let reverse_request: SubjectIdentifiersRequest = serde_json::from_value(json!({"entity_id":entity,"valid_at":query.valid_at,"known_at":first.knowledge.version,"limit":1})).unwrap();
+    let reverse = remote
+        .get_subject_identifiers(&reverse_request, &Default::default())
+        .await
+        .unwrap();
+    assert_eq!(reverse.identifiers[0].identifier, identifier);
+    assert_eq!(
+        replica
+            .get_subject_identifiers(&reverse_request)
+            .unwrap()
+            .identifiers,
+        primary
+            .get_subject_identifiers(&reverse_request)
+            .unwrap()
+            .identifiers
+    );
+    let mut continued = reverse_request.clone();
+    continued.cursor = reverse.cursor;
+    assert!(
+        remote
+            .get_subject_identifiers(&continued, &Default::default())
+            .await
+            .unwrap()
+            .identifiers
+            .is_empty()
+    );
+
+    let replicated = remote
+        .identity_resolve_many(
+            &batch,
+            &tenant_kv::client::ClientReadOptions {
+                minimum: Some((&current).into()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(replicated.results, current.results);
+    assert_eq!(replicated.history, current.history);
+    assert_eq!(replicated.knowledge_version, current.knowledge_version);
+    assert!(
+        remote
+            .identity_resolve(&query, &Default::default())
+            .await
+            .unwrap()
+            .binding
+            .is_none()
+    );
     query.known_at = Some(first.knowledge.version.to_string());
     assert_eq!(
         replica

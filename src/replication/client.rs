@@ -61,6 +61,7 @@ struct Progress {
     reinitializations: u64,
     initialization_backoff: HashMap<Uuid, Duration>,
     log_backoff: HashMap<Uuid, (Instant, Duration)>,
+    interrupted_log_bodies: HashMap<Uuid, u8>,
     waiting_for_readers: HashSet<Uuid>,
     initialization_errors: HashMap<Uuid, String>,
     status_cache: Option<(Instant, Arc<Received<Status>>)>,
@@ -193,6 +194,7 @@ impl Service {
                     reinitializations: 0,
                     initialization_backoff: HashMap::new(),
                     log_backoff: HashMap::new(),
+                    interrupted_log_bodies: HashMap::new(),
                     waiting_for_readers: HashSet::new(),
                     initialization_errors: HashMap::new(),
                     status_cache: None,
@@ -340,15 +342,38 @@ impl Service {
             remaining
         };
         let mut received_log_body = false;
-        tokio::time::timeout(
+        let tenant = log
+            .then(|| body.as_ref()?.get("tenant")?.as_str()?.parse::<Uuid>().ok())
+            .flatten();
+        let received = tokio::time::timeout(
             timeout,
             self.receive_response(path, body, &mut received_log_body),
         )
-        .await
-        .map_err(|_| {
-            // A shortened cycle budget or a server that has not sent a
-            // successful body says nothing about whether this page can fit.
-            let snapshot = log && remaining >= log_timeout && received_log_body;
+        .await;
+        if (received.is_ok() || !received_log_body)
+            && let Some(tenant) = tenant
+        {
+            self.inner
+                .progress
+                .lock()
+                .interrupted_log_bodies
+                .remove(&tenant);
+        }
+        received.map_err(|_| {
+            // Rotation must remain fair, but a tenant repeatedly receiving only
+            // partial bodies also needs a way to progress without a full window.
+            let repeated = if remaining < log_timeout
+                && received_log_body
+                && let Some(tenant) = tenant
+            {
+                let mut progress = self.inner.progress.lock();
+                let attempts = progress.interrupted_log_bodies.entry(tenant).or_default();
+                *attempts = attempts.saturating_add(1);
+                *attempts >= 3
+            } else {
+                false
+            };
+            let snapshot = log && received_log_body && (remaining >= log_timeout || repeated);
             Error::new(
                 if snapshot {
                     "REPLICA_SNAPSHOT_REQUIRED"
@@ -358,7 +383,7 @@ impl Service {
                     "REPLICATION_UNAVAILABLE"
                 },
                 if snapshot {
-                    "log body exceeded full request deadline"
+                    "log body exceeded full request deadline or repeated cycle deadlines"
                 } else {
                     "peer request deadline exceeded"
                 },
@@ -576,6 +601,9 @@ impl Service {
             progress.retry_at.retain(|id, _| active.contains(id));
             progress.log_backoff.retain(|id, _| active.contains(id));
             progress
+                .interrupted_log_bodies
+                .retain(|id, _| active.contains(id));
+            progress
                 .initialization_errors
                 .retain(|id, _| active.contains(id));
             progress
@@ -786,7 +814,10 @@ impl Service {
                     "LOG_GONE" | "REPLICA_SNAPSHOT_REQUIRED"
                 ) =>
             {
-                self.inner.progress.lock().cursors.remove(&position.info.id);
+                let mut progress = self.inner.progress.lock();
+                progress.cursors.remove(&position.info.id);
+                progress.interrupted_log_bodies.remove(&position.info.id);
+                drop(progress);
                 self.start_initialize(source, position.info.id, true);
                 Ok(TenantSync::Idle)
             }

@@ -296,15 +296,21 @@ impl Store {
         check.verify()?;
         let restored_seq = check.replication_position()?;
         drop(check);
-        self.publish_ready_restore(
+        let warning = self.publish_ready_restore(
             registration,
             upstream,
             &mut preparation,
             restored_seq,
             false,
-        )
+        )?;
+        if let Some(warning) = warning {
+            eprintln!("warning: {warning}");
+        }
+        Ok(())
     }
 
+    // A cleanup warning means publication committed. Callers must not fence the
+    // tenant or repeat publication merely because obsolete files remain.
     pub(super) fn publish_ready_restore(
         &self,
         registration: Registration,
@@ -312,7 +318,7 @@ impl Store {
         preparation: &mut TenantPreparation,
         restored_seq: u64,
         repair: bool,
-    ) -> Result<()> {
+    ) -> Result<Option<Error>> {
         let id = registration.info.id;
         let stage = Uuid::parse_str(preparation.path.file_name().unwrap().to_str().unwrap())
             .map_err(|_| Error::invalid("restore staging identity"))?;
@@ -369,8 +375,7 @@ impl Store {
             atomic_json(&inner.root.join("control/tenants.json"), &*registry)?;
             crate::storage::errorpoint("restore_journal_published")?;
             recover_lifecycle(&inner.root, &mut registry, Some(id))?;
-            atomic_json(&inner.root.join("control/tenants.json"), &*registry)?;
-            collect_lifecycle_debris(&inner.root, &registry, false)
+            atomic_json(&inner.root.join("control/tenants.json"), &*registry)
         })();
         if let Err(error) = &result {
             slot.record_failure(Error::new(
@@ -382,27 +387,24 @@ impl Store {
             slot.last_seq = Some(restored_seq);
             slot.installing = None;
         }
+        result?;
+        let debris = crate::storage::errorpoint("restore_cleanup_collect")
+            .and_then(|()| collect_lifecycle_debris(&inner.root, &registry, false));
         drop(registry);
         drop(slot);
         // Large obsolete directories are reclaimed after publication, without
         // holding the shared registry or this tenant's lifecycle lock.
         drop(_permission);
-        let debris = result?;
-        let cleanup = crate::storage::errorpoint("restore_cleanup")
-            .and_then(|()| remove_lifecycle_debris(&inner.root, debris));
-        if let Err(error) = &cleanup {
-            if let Some(slot) = &preparation.slot {
-                slot.lock().record_failure(Error::new(
-                    "UNAVAILABLE",
-                    format!("restore cleanup failed; reopen Store to recover: {error}"),
-                ));
-            }
-            return Err(Error::new(
+        let cleanup = debris.and_then(|debris| {
+            crate::storage::errorpoint("restore_cleanup")
+                .and_then(|()| remove_lifecycle_debris(&inner.root, debris))
+        });
+        Ok(cleanup.err().map(|error| {
+            Error::new(
                 "RESTORE_CLEANUP_FAILED",
                 format!("restore published, obsolete directory cleanup pending: {error}"),
-            ));
-        }
-        cleanup
+            )
+        }))
     }
 }
 

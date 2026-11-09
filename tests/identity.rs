@@ -332,7 +332,7 @@ fn automatic_time_preserves_expiration_future_plans_and_concurrent_receipts() {
 #[test]
 fn constraints_and_expanded_limits_roll_back_every_record() {
     let options = Options {
-        max_batch_operations: 6,
+        max_batch_operations: 10,
         ..Options::default()
     };
     let (_dir, _store, t) = init(
@@ -575,6 +575,15 @@ fn restore_never_reuses_a_discarded_knowledge_uuid() {
         known_at: Some(lost.knowledge.version.to_string()),
     };
     assert_eq!(
+        t.identity_resolve_many(&resolve_items(
+            &[("one", "2026-03-01T00:00:00Z")],
+            Some(lost.knowledge.version)
+        ))
+        .unwrap_err()
+        .code,
+        "KNOWLEDGE_UNAVAILABLE"
+    );
+    assert_eq!(
         t.identity_resolve(&query).unwrap_err().code,
         "KNOWLEDGE_UNAVAILABLE"
     );
@@ -606,5 +615,733 @@ fn restore_never_reuses_a_discarded_knowledge_uuid() {
     assert_eq!(
         t.identity_resolve(&query).unwrap_err().code,
         "KNOWLEDGE_UNAVAILABLE"
+    );
+}
+
+fn resolve_items(items: &[(&str, &str)], known: Option<Uuid>) -> ResolveManyRequest {
+    ResolveManyRequest {
+        known_at: known.map(|v| v.to_string()),
+        items: items
+            .iter()
+            .map(|(key, at)| ResolveItem {
+                identifier: serde_json::from_value(ident(key)).unwrap(),
+                valid_at: (*at).into(),
+            })
+            .collect(),
+    }
+}
+
+#[test]
+fn resolve_many_preserves_order_boundaries_knowledge_and_prepared_tenant_isolation() {
+    let (_dir, store, t) = init(Options::default(), IdentityConfig::default());
+    let a = entity(&t, "a");
+    let b = entity(&t, "b");
+    let first = execute(
+        &t,
+        change(
+            &t,
+            "first",
+            "one",
+            bind(a),
+            manual("2026-01-01T09:00:00Z", Some("2026-01-01T12:00:00Z")),
+        ),
+    )
+    .unwrap();
+    let prepared = t.prepare_dsl("resolvemany with $request").unwrap();
+    let events = [
+        ("one", "2026-01-01T10:00:00Z"),
+        ("missing", "2026-01-01T10:00:00Z"),
+        ("one", "2026-01-01T11:00:00Z"),
+        ("one", "2026-01-01T12:00:00Z"),
+        ("one", "2026-01-01T10:00:00Z"),
+    ];
+    let latest = resolve_items(&events, None);
+    let params = json!({"request":latest});
+    let before = serde_json::to_value(
+        prepared
+            .execute(&t, params.as_object().unwrap(), None)
+            .unwrap(),
+    )
+    .unwrap();
+    execute(
+        &t,
+        change(
+            &t,
+            "correct",
+            "one",
+            rebind(b),
+            manual("2026-01-01T10:00:00Z", Some("2026-01-01T11:00:00Z")),
+        ),
+    )
+    .unwrap();
+    t.engine().flush().unwrap();
+    t.engine().compact(true).unwrap();
+    for known in [None, Some(first.knowledge.version)] {
+        let request = resolve_items(&events, known);
+        let result = t.identity_resolve_many(&request).unwrap();
+        assert_eq!(result.history, t.history());
+        assert_eq!(result.results.len(), events.len());
+        assert_eq!(result.results[0], result.results[4]);
+        assert_eq!(
+            result.results[0].binding.as_ref().unwrap().entity_id,
+            if known.is_some() { a } else { b }
+        );
+        assert!(result.results[1].timeline_revision.is_none());
+        assert!(result.results[3].binding.is_none());
+        assert!(result.results[3].timeline_revision.is_some());
+        assert!(result.stats.document_reads < events.len() as u64);
+        for (item, matched) in request.items.iter().zip(&result.results) {
+            let single = t
+                .identity_resolve(&ResolveRequest {
+                    identifier: item.identifier.clone(),
+                    valid_at: item.valid_at.clone(),
+                    known_at: Some(result.knowledge_version.to_string()),
+                })
+                .unwrap();
+            assert_eq!(single.binding, matched.binding);
+            assert_eq!(single.timeline_revision, matched.timeline_revision);
+        }
+        let params = json!({"request":request});
+        let dsl = serde_json::to_value(
+            prepared
+                .execute(&t, params.as_object().unwrap(), None)
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            dsl["results"],
+            serde_json::to_value(&result.results).unwrap()
+        );
+        assert_eq!(dsl["knowledge_version"], json!(result.knowledge_version));
+        assert_eq!(
+            prepared
+                .execute(&t, params.as_object().unwrap(), Some("cursor"))
+                .unwrap_err()
+                .code,
+            "INVALID_ARGUMENT"
+        );
+    }
+    let after = serde_json::to_value(
+        prepared
+            .execute(&t, params.as_object().unwrap(), None)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_ne!(before["knowledge_version"], after["knowledge_version"]);
+    let other = store
+        .tenant(store.create_tenant("other").unwrap().id)
+        .unwrap();
+    other
+        .identity_initialize(&context(), IdentityConfig::default())
+        .unwrap();
+    let empty = serde_json::to_value(
+        prepared
+            .execute(&other, params.as_object().unwrap(), None)
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(
+        empty["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|r| r["binding"].is_null())
+    );
+    let pinned = json!({"request":resolve_items(&events, Some(first.knowledge.version))});
+    assert_eq!(
+        prepared
+            .execute(&other, pinned.as_object().unwrap(), None)
+            .unwrap_err()
+            .code,
+        "KNOWLEDGE_UNAVAILABLE"
+    );
+    let single = json!({"request":{"identifier":ident("one"),"valid_at":events[0].1}});
+    let dsl = t
+        .prepare_dsl("resolve with $request")
+        .unwrap()
+        .execute(&t, single.as_object().unwrap(), None)
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(dsl).unwrap()["binding"]["entity_id"],
+        json!(b)
+    );
+}
+
+#[test]
+fn resolve_many_limits_cancellation_and_deadline_apply_to_the_whole_call() {
+    let (_dir, _store, t) = init(
+        Options {
+            max_read_keys: 4,
+            ..Options::default()
+        },
+        IdentityConfig::default(),
+    );
+    let a = entity(&t, "a");
+    for key in ["one", "two", "three"] {
+        execute(
+            &t,
+            change(&t, key, key, bind(a), manual("2026-01-01T00:00:00Z", None)),
+        )
+        .unwrap();
+    }
+    let mut request = resolve_items(
+        &[
+            ("one", "2026-01-01T01:00:00Z"),
+            ("two", "2026-01-01T01:00:00Z"),
+            ("three", "2026-01-01T01:00:00Z"),
+        ],
+        None,
+    );
+    let first = t.identity_resolve_many(&request).unwrap();
+    request.known_at = Some(first.knowledge_version.to_string());
+    let reader = t
+        .read_with(&ReadOptions {
+            max_scan: Some(1),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(
+        reader.identity_resolve_many(&request).unwrap_err().code,
+        "RESOURCE_EXHAUSTED"
+    );
+    let cancellation = ReadCancellation::default();
+    let options = ReadOptions {
+        cancellation: Some(cancellation.clone()),
+        ..Default::default()
+    };
+    let reader = t.read_with(&options).unwrap();
+    cancellation.cancel();
+    assert_eq!(
+        reader.identity_resolve_many(&request).unwrap_err().code,
+        "CANCELLED"
+    );
+    let reader = t
+        .read_with(&ReadOptions {
+            timeout_ms: Some(1),
+            ..Default::default()
+        })
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(5));
+    assert_eq!(
+        reader.identity_resolve_many(&request).unwrap_err().code,
+        "DEADLINE_EXCEEDED"
+    );
+    let mut invalid = request.clone();
+    invalid.items[2].valid_at = "no timezone".into();
+    assert_eq!(
+        t.identity_resolve_many(&invalid).unwrap_err().code,
+        "INVALID_ARGUMENT"
+    );
+    invalid = request.clone();
+    invalid.items.resize(5, invalid.items[0].clone());
+    assert_eq!(
+        t.identity_resolve_many(&invalid).unwrap_err().code,
+        "RESOURCE_EXHAUSTED"
+    );
+    invalid.items.clear();
+    assert_eq!(
+        t.identity_resolve_many(&invalid).unwrap_err().code,
+        "RESOURCE_EXHAUSTED"
+    );
+    assert_eq!(
+        t.identity_resolve_many(&request).unwrap().results,
+        first.results
+    );
+}
+
+#[test]
+fn resolve_many_never_mixes_concurrent_atomic_corrections() {
+    use std::sync::{
+        Barrier,
+        atomic::{AtomicBool, Ordering},
+    };
+    let (_dir, _store, t) = init(Options::default(), IdentityConfig::default());
+    let a = entity(&t, "a");
+    let b = entity(&t, "b");
+    let keys: Vec<_> = (0..12).map(|i| format!("id-{i}")).collect();
+    let update = |op: &str, entity_id| {
+        let changes: Vec<_> = keys.iter().map(|key| json!({"identifier":ident(key),"expected_revision":rev(&t,key),"effective":manual("2026-01-01T00:00:00Z",None),"change":rebind(entity_id)})).collect();
+        execute(
+            &t,
+            json!({"action":"bindings","operation_id":op,"changes":changes}),
+        )
+        .unwrap()
+    };
+    update("initial", a);
+    let request = ResolveManyRequest {
+        known_at: None,
+        items: (0..240)
+            .map(|i| ResolveItem {
+                identifier: serde_json::from_value(ident(&keys[i % keys.len()])).unwrap(),
+                valid_at: "2026-01-02T00:00:00Z".into(),
+            })
+            .collect(),
+    };
+    let barrier = Barrier::new(2);
+    let finished = AtomicBool::new(false);
+    std::thread::scope(|scope| {
+        let writer = scope.spawn(|| {
+            barrier.wait();
+            for n in 0..24 {
+                update(&format!("change-{n}"), if n % 2 == 0 { b } else { a });
+            }
+            finished.store(true, Ordering::Release);
+        });
+        barrier.wait();
+        let mut reads = 0;
+        while !finished.load(Ordering::Acquire) || reads < 24 {
+            let result = t.identity_resolve_many(&request).unwrap();
+            let expected = result.results[0].binding.as_ref().unwrap().entity_id;
+            assert!(
+                result
+                    .results
+                    .iter()
+                    .all(|r| r.binding.as_ref().unwrap().entity_id == expected)
+            );
+            let mut pinned = request.clone();
+            pinned.known_at = Some(result.knowledge_version.to_string());
+            assert_eq!(
+                t.identity_resolve_many(&pinned).unwrap().results,
+                result.results
+            );
+            reads += 1;
+        }
+        writer.join().unwrap();
+    });
+}
+
+#[test]
+fn resolve_many_bounds_retained_output_and_releases_memory_on_failure() {
+    let (dir, store, t) = init(Options::default(), IdentityConfig::default());
+    let id = t.id();
+    let a = entity(&t, "a");
+    execute(
+        &t,
+        change(
+            &t,
+            "first",
+            "one",
+            bind(a),
+            manual("2026-01-01T00:00:00Z", None),
+        ),
+    )
+    .unwrap();
+    t.engine().flush().unwrap();
+    drop(t);
+    drop(store);
+    for (memory_limit, response_limit) in [(32 << 10, 16 << 20), (64 << 20, 1 << 20)] {
+        let store = Store::open(
+            dir.path(),
+            Options {
+                max_query_bytes: memory_limit,
+                max_response_bytes: response_limit,
+                max_read_keys: 4096,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let t = store.tenant(id).unwrap();
+        // Measure this read's reservations without sampling another maintenance job.
+        drop(store);
+        let mut request = resolve_items(&[("one", "2026-01-02T00:00:00Z")], None);
+        let one = t.identity_resolve_many(&request).unwrap();
+        request.items.resize(
+            if memory_limit < 64 << 20 { 32 } else { 4096 },
+            request.items[0].clone(),
+        );
+        let before = t.engine().memory_bytes();
+        for _ in 0..5 {
+            assert_eq!(
+                t.identity_resolve_many(&request).unwrap_err().code,
+                "RESOURCE_EXHAUSTED"
+            );
+            assert_eq!(t.engine().active_snapshots(), 0);
+            assert_eq!(t.engine().memory_bytes(), before);
+        }
+        request.items.truncate(1);
+        assert_eq!(
+            t.identity_resolve_many(&request).unwrap().results,
+            one.results
+        );
+    }
+}
+
+fn subject_ids(
+    t: &TenantHandle,
+    entity: Uuid,
+    at: &str,
+    known: Option<Uuid>,
+) -> Vec<SubjectIdentifier> {
+    let mut request: SubjectIdentifiersRequest = serde_json::from_value(
+        json!({"entity_id":entity,"valid_at":at,"known_at":known,"limit":1}),
+    )
+    .unwrap();
+    let mut items = Vec::new();
+    for _ in 0..100 {
+        let page = t.get_subject_identifiers(&request).unwrap();
+        items.extend(page.identifiers);
+        request.cursor = page.cursor;
+        if request.cursor.is_none() {
+            return items;
+        }
+    }
+    panic!("subject pagination did not terminate");
+}
+fn subject_events(t: &TenantHandle, entity: Uuid) -> Vec<IdentityEvent> {
+    let mut request: SubjectHistoryRequest =
+        serde_json::from_value(json!({"entity_id":entity,"limit":1})).unwrap();
+    let mut events = Vec::new();
+    for _ in 0..100 {
+        let page = t.get_subject_history(&request).unwrap();
+        assert!(!page.coverage.legacy_history_missing);
+        events.extend(page.events);
+        request.cursor = page.cursor;
+        if request.cursor.is_none() {
+            return events;
+        }
+    }
+    panic!("event pagination did not terminate");
+}
+
+#[test]
+fn subject_reverse_matches_resolve_across_corrections_replacement_and_restart() {
+    let (dir, store, t) = init(Options::default(), IdentityConfig::default());
+    let tenant = t.id();
+    let a = entity(&t, "subject-a");
+    let b = entity(&t, "subject-b");
+    let mut versions = Vec::new();
+    for key in ["one", "two", "three"] {
+        versions.push(
+            execute(
+                &t,
+                change(&t, key, key, bind(a), manual("2026-01-01T00:00:00Z", None)),
+            )
+            .unwrap()
+            .knowledge
+            .version,
+        );
+    }
+    versions.push(
+        execute(
+            &t,
+            change(
+                &t,
+                "reassign",
+                "one",
+                rebind(b),
+                manual("2026-01-01T00:00:00Z", None),
+            ),
+        )
+        .unwrap()
+        .knowledge
+        .version,
+    );
+    versions.push(
+        execute(
+            &t,
+            change(
+                &t,
+                "partial",
+                "two",
+                rebind(b),
+                manual("2026-02-01T00:00:00Z", Some("2026-03-01T00:00:00Z")),
+            ),
+        )
+        .unwrap()
+        .knowledge
+        .version,
+    );
+    versions.push(execute(&t, change(&t, "replace", "three", json!({"action":"replace_identifier","entity_id":a,"replacement":ident("four"),"replacement_expected_revision":"absent","reason":"renamed"}), manual("2026-01-01T00:00:00Z", None))).unwrap().knowledge.version);
+    versions.push(
+        execute(
+            &t,
+            change(
+                &t,
+                "remove",
+                "one",
+                json!({"action":"unbind","reason":"closed"}),
+                manual("2026-01-01T00:00:00Z", None),
+            ),
+        )
+        .unwrap()
+        .knowledge
+        .version,
+    );
+    let verify = |t: &TenantHandle| {
+        for version in &versions {
+            for at in [
+                "2025-12-31T00:00:00Z",
+                "2026-01-02T00:00:00Z",
+                "2026-02-02T00:00:00Z",
+                "2026-03-01T00:00:00Z",
+            ] {
+                for entity in [a, b] {
+                    let reverse = subject_ids(t, entity, at, Some(*version));
+                    for key in ["one", "two", "three", "four"] {
+                        let forward = resolve(t, key, at, Some(*version));
+                        let found = reverse.iter().find(|v| v.identifier.value == key);
+                        assert_eq!(
+                            found.is_some(),
+                            forward
+                                .binding
+                                .as_ref()
+                                .is_some_and(|v| v.entity_id == entity),
+                            "{key} {at} {version}"
+                        );
+                        if let Some(found) = found {
+                            assert_eq!(Some(&found.binding), forward.binding.as_ref());
+                            assert_eq!(Some(found.timeline_revision), forward.timeline_revision);
+                        }
+                    }
+                }
+            }
+        }
+    };
+    verify(&t);
+    let events_a = subject_events(&t, a);
+    let events_b = subject_events(&t, b);
+    let reassign = events_a
+        .iter()
+        .find(|e| e.operation_id == "reassign")
+        .unwrap();
+    assert!(events_b.iter().any(|e| e.event_id == reassign.event_id));
+    let replacement = events_a
+        .iter()
+        .find(|e| e.operation_id == "replace")
+        .unwrap();
+    assert_eq!(replacement.kind, IdentityEventKind::IdentifierReplaced);
+    assert_eq!(replacement.changes.len(), 2);
+    drop(t);
+    drop(store);
+    let store = Store::open(dir.path(), Options::default()).unwrap();
+    let t = store.tenant(tenant).unwrap();
+    verify(&t);
+    assert_eq!(
+        subject_events(&t, a)
+            .iter()
+            .map(|e| e.event_id)
+            .collect::<Vec<_>>(),
+        events_a.iter().map(|e| e.event_id).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn subject_history_records_actual_diffs_and_pages_pin_the_knowledge_view() {
+    let (_dir, _store, t) = init(Options::default(), IdentityConfig::default());
+    let a = entity(&t, "a");
+    for key in ["one", "two", "three"] {
+        execute(
+            &t,
+            change(&t, key, key, bind(a), manual("2026-01-01T00:00:00Z", None)),
+        )
+        .unwrap();
+    }
+    let mut request: SubjectIdentifiersRequest =
+        serde_json::from_value(json!({"entity_id":a,"valid_at":"2026-01-02T00:00:00Z","limit":1}))
+            .unwrap();
+    let first = t.get_subject_identifiers(&request).unwrap();
+    let knowledge = first.knowledge_version;
+    let seq = first.snapshot_seq;
+    let mut collected = first.identifiers;
+    request.cursor = first.cursor;
+    execute(
+        &t,
+        change(
+            &t,
+            "new-after-page",
+            "four",
+            bind(a),
+            manual("2026-01-01T00:00:00Z", None),
+        ),
+    )
+    .unwrap();
+    while request.cursor.is_some() {
+        let old = request.clone();
+        let next = t.get_subject_identifiers(&request).unwrap();
+        assert_eq!(next.knowledge_version, knowledge);
+        assert_eq!(next.snapshot_seq, seq);
+        collected.extend(next.identifiers);
+        request.cursor = next.cursor;
+        assert_eq!(
+            t.get_subject_identifiers(&old).unwrap_err().code,
+            "CURSOR_EXPIRED"
+        );
+    }
+    assert_eq!(collected.len(), 3);
+    let old = t.identity_entity(a).unwrap();
+    let update = json!({"action":"update_entity","operation_id":"attrs","entity_id":a,"expected_revision":old.revision,"attributes":{"name":"a","nullable":null,"new":{"nested":"literal"}}});
+    execute(&t, update.clone()).unwrap();
+    execute(&t, update).unwrap();
+    let events = subject_events(&t, a);
+    let updates: Vec<_> = events
+        .iter()
+        .filter(|e| e.operation_id == "attrs")
+        .collect();
+    assert_eq!(updates.len(), 1);
+    assert_eq!(updates[0].attributes.len(), 2);
+    let null = updates[0]
+        .attributes
+        .iter()
+        .find(|d| d.field == "nullable")
+        .unwrap();
+    assert!(!null.before.present);
+    assert!(null.after.present);
+    assert_eq!(null.after.value, Value::Null);
+    assert_eq!(updates[0].knowledge.actor, context().actor);
+    let before = events.len();
+    execute(
+        &t,
+        change(
+            &t,
+            "noop",
+            "missing",
+            json!({"action":"unbind","reason":"nothing"}),
+            manual("2026-01-01T00:00:00Z", None),
+        ),
+    )
+    .unwrap();
+    assert_eq!(subject_events(&t, a).len(), before);
+    assert!(t.identity_operation("noop").is_ok());
+    let query: SubjectHistoryRequest =
+        serde_json::from_value(json!({"entity_id":a,"known_at":knowledge})).unwrap();
+    assert!(
+        t.get_subject_history(&query)
+            .unwrap()
+            .events
+            .iter()
+            .all(|e| e.knowledge.commit_seq <= seq)
+    );
+    let missing: SubjectHistoryRequest =
+        serde_json::from_value(json!({"entity_id":Uuid::new_v4()})).unwrap();
+    assert_eq!(
+        t.get_subject_history(&missing).unwrap_err().code,
+        "NOT_FOUND"
+    );
+}
+
+#[test]
+fn subject_cursor_filters_principal_cancellation_and_atomic_rollback() {
+    let (_dir, _store, t) = init(
+        Options {
+            max_batch_operations: 10,
+            ..Options::default()
+        },
+        IdentityConfig::default(),
+    );
+    let a = entity(&t, "a");
+    for key in ["one", "two"] {
+        execute(
+            &t,
+            change(&t, key, key, bind(a), manual("2026-01-01T00:00:00Z", None)),
+        )
+        .unwrap();
+    }
+    let request = json!({"entity_id":a,"valid_at":"2026-01-02T00:00:00Z","limit":1});
+    let prepared = dsl::Prepared::parse("ids with $q").unwrap();
+    let params = serde_json::from_value(json!({"q":request})).unwrap();
+    let dsl::Output::SubjectIds(first) = prepared
+        .execute_with(&t, &params, None, &WriteOptions::default(), "alice")
+        .unwrap()
+    else {
+        panic!()
+    };
+    let cursor = first.cursor.unwrap();
+    assert_eq!(
+        prepared
+            .execute_with(&t, &params, Some(&cursor), &WriteOptions::default(), "bob")
+            .unwrap_err()
+            .code,
+        "INVALID_ARGUMENT"
+    );
+    let changed = serde_json::from_value(
+        json!({"q":{"entity_id":a,"valid_at":"2026-01-03T00:00:00Z","limit":1}}),
+    )
+    .unwrap();
+    assert!(
+        prepared
+            .execute_with(
+                &t,
+                &changed,
+                Some(&cursor),
+                &WriteOptions::default(),
+                "alice"
+            )
+            .is_err()
+    );
+    prepared
+        .execute_with(
+            &t,
+            &params,
+            Some(&cursor),
+            &WriteOptions::default(),
+            "alice",
+        )
+        .unwrap();
+    let cancel = ReadCancellation::default();
+    cancel.cancel();
+    let error = t
+        .read_with(&ReadOptions {
+            cancellation: Some(cancel),
+            ..Default::default()
+        })
+        .err()
+        .unwrap();
+    assert_eq!(error.code, "CANCELLED");
+    let before = subject_events(&t, a).len();
+    let seq = t.engine().seq();
+    let changes: Vec<_> = ["three", "four"]
+        .iter()
+        .map(|key| {
+            change(
+                &t,
+                "too-many",
+                key,
+                bind(a),
+                manual("2026-01-01T00:00:00Z", None),
+            )["changes"][0]
+                .clone()
+        })
+        .collect();
+    assert_eq!(
+        execute(
+            &t,
+            json!({"action":"bindings","operation_id":"too-many","changes":changes})
+        )
+        .unwrap_err()
+        .code,
+        "RESOURCE_EXHAUSTED"
+    );
+    assert_eq!(t.engine().seq(), seq);
+    assert_eq!(subject_ids(&t, a, "2026-01-02T00:00:00Z", None).len(), 2);
+    assert_eq!(subject_events(&t, a).len(), before);
+}
+
+#[test]
+fn subject_events_preserve_nested_attributes_and_integer_precision() {
+    let (_dir, _store, t) = init(Options::default(), IdentityConfig::default());
+    let value = json!({"nested":{"nullable":null},"说明":"原样","integer":u64::MAX});
+    let receipt = t
+        .identity_write(
+            &context(),
+            IdentityWrite::CreateEntity {
+                operation_id: "literal-attribute".into(),
+                attributes: json!({"value":value}),
+            },
+        )
+        .unwrap();
+    let entity = receipt.entity.unwrap().entity_id;
+    assert_eq!(
+        t.identity_entity(entity).unwrap().attributes["value"],
+        value
+    );
+    let events = subject_events(&t, entity);
+    assert_eq!(events[0].attributes[0].after.value, value);
+    assert_eq!(
+        t.identity_operation("literal-attribute")
+            .unwrap()
+            .entity
+            .unwrap()
+            .attributes["value"],
+        value
     );
 }

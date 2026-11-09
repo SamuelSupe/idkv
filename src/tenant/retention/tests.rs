@@ -22,6 +22,7 @@ fn clean(t: &TenantHandle) {
     for _ in 0..100 {
         t.retention_step().unwrap();
         t.gc_step().unwrap();
+        t.identity_subject_step().unwrap();
     }
 }
 fn pause() {
@@ -47,7 +48,7 @@ fn later_history_sweeps_seek_past_the_previously_reclaimed_identifier_tail() {
     t.set_retention(60).unwrap();
     drop(store);
     let mut state = serde_json::to_value(gc::State::default()).unwrap();
-    state["migration_phase"] = json!(5);
+    state["migration_phase"] = json!(7);
     state["swept_floor"] = json!(200);
     let collection = t
         .engine()
@@ -182,7 +183,7 @@ fn knowledge_and_history_gc_advance_through_tombstones_without_rolling_back_expi
         })
         .unwrap();
     let mut state = serde_json::to_value(gc::State::default()).unwrap();
-    state["migration_phase"] = json!(5);
+    state["migration_phase"] = json!(7);
     t.engine()
         .transact(|tx| {
             put(tx, STATE.to_vec(), &state)?;
@@ -285,7 +286,7 @@ fn retention_migration_pages_physical_records_instead_of_stalling_at_tombstones(
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(state["migration_phase"], 5);
+    assert_eq!(state["migration_phase"], 7);
     assert!(
         snapshot
             .get(&key(DEADLINE, b"Rz-live"), &mut ReadStats::default())
@@ -311,7 +312,7 @@ fn expiry_batches_resume_after_tombstones_and_revisit_backdated_insertions() {
     drop(store);
     tenant.set_retention(1).unwrap();
     let mut state = serde_json::to_value(gc::State::default()).unwrap();
-    state["migration_phase"] = json!(5);
+    state["migration_phase"] = json!(7);
     tenant
         .engine()
         .transact(|tx| {
@@ -740,7 +741,16 @@ fn temporal_gc_keeps_predecessor_baselines_including_empty_timelines_and_latest_
         .unwrap()
         .binding;
     t.set_retention(1).unwrap();
+    let mut continuation: SubjectIdentifiersRequest = serde_json::from_value(json!({"entity_id":entity,"valid_at":"2026-01-01T00:00:00Z","known_at":old.knowledge.version,"limit":1})).unwrap();
+    continuation.cursor = t.get_subject_identifiers(&continuation).unwrap().cursor;
+    assert!(continuation.cursor.is_some());
     pause();
+    assert_eq!(
+        t.get_subject_identifiers(&continuation).unwrap_err().code,
+        "KNOWLEDGE_UNAVAILABLE"
+    );
+    t.release_cursor(continuation.cursor.as_ref().unwrap())
+        .unwrap();
     clean(&t);
     assert_eq!(
         resolve(&t, "unchanged", head.knowledge.version)
@@ -760,6 +770,56 @@ fn temporal_gc_keeps_predecessor_baselines_including_empty_timelines_and_latest_
             .code,
         "KNOWLEDGE_UNAVAILABLE"
     );
+    let batch = |version| {
+        serde_json::from_value::<ResolveManyRequest>(json!({"known_at":version,"items":[{"identifier":id("unchanged"),"valid_at":"2026-01-01T00:00:00Z"},{"identifier":id("empty"),"valid_at":"2026-01-01T00:00:00Z"}]})).unwrap()
+    };
+    let reverse: SubjectIdentifiersRequest = serde_json::from_value(json!({"entity_id":entity,"valid_at":"2026-01-01T00:00:00Z","known_at":head.knowledge.version})).unwrap();
+    let ids = t.get_subject_identifiers(&reverse).unwrap();
+    assert_eq!(ids.identifiers.len(), 1);
+    assert_eq!(
+        ids.identifiers[0].identifier,
+        serde_json::from_value::<Identifier>(id("unchanged")).unwrap()
+    );
+    let history: SubjectHistoryRequest =
+        serde_json::from_value(json!({"entity_id":entity})).unwrap();
+    assert!(t.get_subject_history(&history).unwrap().events.is_empty());
+    assert!(
+        t.get_subject_history(&history)
+            .unwrap()
+            .coverage
+            .retention_enabled
+    );
+    let c = t
+        .collection_id(&t.engine().snapshot().unwrap(), COLLECTION)
+        .unwrap();
+    t.engine()
+        .transact(|tx| {
+            let p = |s: &str| {
+                let mut k = document_key(c, s);
+                k.truncate(k.len() - 2);
+                k
+            };
+            assert!(tx.prefix_first(&p("event:"), 1)?.is_empty());
+            assert!(tx.prefix_first(&p("subject-event:"), 1)?.is_empty());
+            assert_eq!(
+                tx.prefix_first(&p("subject:"), 10)?.len(),
+                2,
+                "one predecessor per identifier, including the absent baseline"
+            );
+            Ok(())
+        })
+        .unwrap();
+    let current = t
+        .identity_resolve_many(&batch(head.knowledge.version))
+        .unwrap();
+    assert_eq!(current.results[0].binding, expected);
+    assert!(current.results[1].binding.is_none());
+    assert_eq!(
+        t.identity_resolve_many(&batch(old.knowledge.version))
+            .unwrap_err()
+            .code,
+        "KNOWLEDGE_UNAVAILABLE"
+    );
     assert!(t.identity_entity(entity).is_ok());
     let token = t.retry_context("worker").unwrap();
     let req: IdentityWrite = serde_json::from_value(
@@ -774,6 +834,12 @@ fn temporal_gc_keeps_predecessor_baselines_including_empty_timelines_and_latest_
     let latest = t.identity_write_with(&actor(), req.clone(), &opts).unwrap();
     assert!(resolve(&t, "unchanged", head.knowledge.version).is_ok());
     pause();
+    assert_eq!(
+        t.identity_resolve_many(&batch(head.knowledge.version))
+            .unwrap_err()
+            .code,
+        "KNOWLEDGE_UNAVAILABLE"
+    );
     clean(&t);
     assert_eq!(
         resolve(&t, "unchanged", head.knowledge.version)
@@ -896,7 +962,7 @@ fn review0732_receipt_alias_gc_does_not_miss_a_new_receipt_behind_its_cursor() {
     let alias = named(b"r", "retired");
     let receipts = prefix(b'R', namespace);
     let mut state = serde_json::to_value(gc::State::default()).unwrap();
-    state["migration_phase"] = json!(5);
+    state["migration_phase"] = json!(7);
     state["alias_active"] = json!(true);
     t.engine()
         .transact_maintenance(|tx| {

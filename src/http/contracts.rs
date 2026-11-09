@@ -125,7 +125,7 @@ pub(super) fn extend(api: &mut Value) {
         &["ready", "draining", "role"],
     );
     schemas["Capabilities"] = object(
-        json!({"version":text,"replication_protocol":{"const":3},"storage_registry":{"const":crate::tenant::STORAGE_REGISTRY_VERSION},"features":{"type":"array","items":text}}),
+        json!({"version":text,"replication_protocol":{"const":crate::replication::PROTOCOL},"storage_registry":{"const":crate::tenant::STORAGE_REGISTRY_VERSION},"features":{"type":"array","items":text}}),
         &[
             "version",
             "replication_protocol",
@@ -167,7 +167,8 @@ pub(super) fn extend(api: &mut Value) {
         "ReplicationLogRequest",
         "ReplicationSnapshotRequest",
     ] {
-        schemas[name]["properties"]["protocol"] = json!({"const":3,"type":"integer"});
+        schemas[name]["properties"]["protocol"] =
+            json!({"const":crate::replication::PROTOCOL,"type":"integer"});
         schemas[name]["required"]
             .as_array_mut()
             .unwrap()

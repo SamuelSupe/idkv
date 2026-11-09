@@ -95,6 +95,9 @@ const ROUTES: &[&str] = &[
     "/v1/tenants/{tenant}/identity/initialize",
     "/v1/tenants/{tenant}/identity/write",
     "/v1/tenants/{tenant}/identity/resolve",
+    "/v1/tenants/{tenant}/identity/resolve_many",
+    "/v1/tenants/{tenant}/identity/ids",
+    "/v1/tenants/{tenant}/identity/history",
     "/v1/tenants/{tenant}/identity/timeline",
     "/v1/tenants/{tenant}/identity/entities/{entity}",
     "/v1/tenants/{tenant}/identity/operations/{operation}",
@@ -726,6 +729,18 @@ async fn dispatch_async(
                 crate::dsl::Output::Lookup(result) => {
                     state.runtime.telemetry.record_read(&result.stats)
                 }
+                crate::dsl::Output::Resolve(result) => {
+                    state.runtime.telemetry.record_read(&result.stats)
+                }
+                crate::dsl::Output::SubjectIds(result) => {
+                    state.runtime.telemetry.record_read(&result.stats)
+                }
+                crate::dsl::Output::SubjectHistory(result) => {
+                    state.runtime.telemetry.record_read(&result.stats)
+                }
+                crate::dsl::Output::ResolveMany(result) => {
+                    state.runtime.telemetry.record_read(&result.stats)
+                }
                 _ => {}
             }
             serde_json::to_value(output)?
@@ -738,6 +753,10 @@ async fn dispatch_async(
                 body,
                 &token,
                 &state.runtime.telemetry,
+                &read_controls::OperationContext {
+                    principal: &token.subject,
+                    budget: read_budget.as_ref(),
+                },
             )?
         } else {
             operations::dispatch(
@@ -821,6 +840,9 @@ fn required_role(route: &str, method: &Method) -> Result<Role> {
         || route.ends_with("/resources/{resource}/read")
         || route.ends_with("/execute")
         || route.ends_with("/identity/resolve")
+        || route.ends_with("/identity/resolve_many")
+        || route.ends_with("/identity/ids")
+        || route.ends_with("/identity/history")
         || route.ends_with("/identity/timeline")
         || route.ends_with("/replication/wait")
     {

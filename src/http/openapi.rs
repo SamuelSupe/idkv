@@ -97,12 +97,20 @@ pub(super) fn openapi_for(options: &Options) -> Value {
         schemas[schema]["properties"]["operations"]["maxItems"] =
             json!(options.max_batch_operations);
     }
+    schemas["IdentityResolveMany"]["properties"]["items"]["maxItems"] =
+        json!(options.max_read_keys);
     schemas["Keys"]["properties"]["keys"]["maxItems"] = json!(options.max_read_keys);
     schemas["LookupInput"]["properties"]["inputs"]["maxItems"] = json!(options.max_read_keys);
     schemas["PublishedInput"]["properties"]["inputs"]["maxItems"] = json!(options.max_read_keys);
-    schemas["Query"]["properties"]["limit"]["maximum"] = json!(options.max_page_size);
+    for name in [
+        "Query",
+        "SubjectIdentifiersRequest",
+        "SubjectHistoryRequest",
+    ] {
+        schemas[name]["properties"]["limit"]["maximum"] = json!(options.max_page_size);
+    }
     schemas["Document"]["x-max-binary-bytes"] = json!(options.max_document_bytes);
-    api["x-resource-limits"] = json!({"document_bytes":options.max_document_bytes,"batch_bytes":options.max_batch_bytes,"response_bytes":options.max_response_bytes,"scan_entries":options.max_scan,"query_ms":options.query_ms,"snapshot_seconds":options.snapshot_seconds,"read_batch_keys_plus_query_limits":options.max_read_keys});
+    api["x-resource-limits"] = json!({"document_bytes":options.max_document_bytes,"batch_bytes":options.max_batch_bytes,"response_bytes":options.max_response_bytes,"scan_entries":options.max_scan,"query_ms":options.query_ms,"snapshot_seconds":options.snapshot_seconds,"read_batch_keys_plus_query_limits":options.max_read_keys,"identity_resolve_many_items":options.max_read_keys});
     api
 }
 fn schema_ref(name: &str) -> Value {
@@ -227,7 +235,7 @@ fn response_schema(route: &str, method: &str) -> Value {
         );
     }
     if route.ends_with("/dsl") {
-        return json!({"description":"Native operation response: query, explain, get/null, multi_get, lookup or write result. Read role for reads; write role for put/delete."});
+        return json!({"description":"Native operation response: query, explain, get/null, multi_get, lookup, resolve, resolvemany, ids, history or write result. Read role for reads; write role for put/delete."});
     }
     if backups::is_backup_route(route) {
         return if route.ends_with("/remote-backups") && method == "GET" {
@@ -322,7 +330,7 @@ fn schemas() -> Value {
             &["error"],
         ),
     );
-    s.insert("DslRequest".into(),object(json!({"statement":{"type":"string","minLength":1,"maxLength":65536,"description":"One DSL statement, at most 64 KiB UTF-8."},"params":{"type":"object","additionalProperties":true,"default":{}},"cursor":{"type":["string","null"],"description":"Only for from queries; bind the same query values."}}),&["statement"]));
+    s.insert("DslRequest".into(),object(json!({"statement":{"type":"string","minLength":1,"maxLength":65536,"description":"One DSL statement, at most 64 KiB UTF-8."},"params":{"type":"object","additionalProperties":true,"default":{}},"cursor":{"type":["string","null"],"description":"For from, ids and history; bind the same filters."}}),&["statement"]));
     s.insert(
         "Name".into(),
         object(

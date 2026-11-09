@@ -51,10 +51,54 @@ fn main() -> Result<()> {
     })?;
     assert_eq!(latest.binding.as_ref().unwrap().entity_id, entities[1]);
     assert_eq!(old.binding.as_ref().unwrap().entity_id, entities[0]);
+    let batch_request = ResolveManyRequest {
+        known_at: None,
+        items: ["2026-11-05T10:30:00Z", "2026-11-05T11:00:00Z"]
+            .into_iter()
+            .map(|valid_at| ResolveItem {
+                identifier: identifier.clone(),
+                valid_at: valid_at.into(),
+            })
+            .collect(),
+    };
+    let batch = tenant
+        .read_with(&ReadOptions::default())?
+        .identity_resolve_many(&batch_request)?;
+    assert_eq!(
+        batch.results[0].binding.as_ref().unwrap().entity_id,
+        entities[1]
+    );
+    assert_eq!(
+        batch.results[1].binding.as_ref().unwrap().entity_id,
+        entities[0]
+    );
+    let prepared = tenant.prepare_dsl("resolvemany with $request")?;
+    let params = json!({"request":batch_request});
+    let dsl =
+        serde_json::to_value(prepared.execute(&tenant, params.as_object().unwrap(), None)?)?;
+    assert_eq!(dsl["results"], serde_json::to_value(&batch.results)?);
+    let ids_request: SubjectIdentifiersRequest = serde_json::from_value(json!({
+        "entity_id":entities[1], "valid_at":"2026-11-05T10:30:00Z", "limit":100
+    }))?;
+    let ids = tenant.get_subject_identifiers(&ids_request)?;
+    assert_eq!(ids.identifiers[0].identifier, identifier);
+    let history_request: SubjectHistoryRequest =
+        serde_json::from_value(json!({"entity_id":entities[1],"limit":100}))?;
+    let history = tenant.get_subject_history(&history_request)?;
+    let ids_params = json!({"request":ids_request});
+    let short_dsl = serde_json::to_value(tenant.prepare_dsl("ids with $request")?.execute(
+        &tenant,
+        ids_params.as_object().unwrap(),
+        None,
+    )?)?;
+    assert_eq!(
+        short_dsl["identifiers"],
+        serde_json::to_value(&ids.identifiers)?
+    );
     println!(
         "{}",
         serde_json::to_string_pretty(
-            &json!({"tenant":tenant.id(),"entities":{"alice":entities[0],"bob":entities[1]},"correction":receipt,"latest":latest,"original_knowledge":old,"timeline":tenant.identity_timeline(&identifier)?})
+            &json!({"tenant":tenant.id(),"entities":{"alice":entities[0],"bob":entities[1]},"correction":receipt,"latest":latest,"original_knowledge":old,"batch":batch,"ids":ids,"subject_history":history,"timeline":tenant.identity_timeline(&identifier)?})
         )?
     );
     Ok(())

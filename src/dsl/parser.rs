@@ -11,8 +11,13 @@ pub(super) fn is_write(source: &str) -> Result<bool> {
     let mut p = Parser::new(source)?;
     Ok(match p.ident()? {
         "put" | "delete" => true,
-        "from" | "explain" | "get" | "mget" | "lookup" => false,
-        _ => return Err(p.error("expected from, explain, get, mget, lookup, put or delete")),
+        "from" | "explain" | "get" | "mget" | "lookup" | "resolve" | "resolvemany" | "ids"
+        | "history" => false,
+        _ => {
+            return Err(p.error(
+                "expected from, explain, get, mget, lookup, resolve, resolvemany, ids, history, put or delete",
+            ));
+        }
     })
 }
 pub(super) fn parse(source: &str) -> Result<Prepared> {
@@ -23,11 +28,25 @@ pub(super) fn parse(source: &str) -> Result<Prepared> {
     }
     if !matches!(
         kind,
-        "from" | "explain" | "get" | "mget" | "lookup" | "put" | "delete"
+        "from"
+            | "explain"
+            | "get"
+            | "mget"
+            | "lookup"
+            | "resolve"
+            | "resolvemany"
+            | "ids"
+            | "history"
+            | "put"
+            | "delete"
     ) {
         return Err(p.error("unknown command"));
     }
-    let collection = p.name()?;
+    let collection = if matches!(kind, "resolve" | "resolvemany" | "ids" | "history") {
+        crate::identity::COLLECTION.to_owned()
+    } else {
+        p.name()?
+    };
     let command = match kind {
         "from" | "explain" => {
             let selection = p.selection()?;
@@ -35,6 +54,19 @@ pub(super) fn parse(source: &str) -> Result<Prepared> {
                 Command::Query(selection)
             } else {
                 Command::Explain(selection)
+            }
+        }
+        "resolve" | "resolvemany" | "ids" | "history" => {
+            p.expect_word("with")?;
+            let request = p.operand()?;
+            if kind == "resolve" {
+                Command::Resolve(request)
+            } else if kind == "ids" {
+                Command::SubjectIds(request)
+            } else if kind == "history" {
+                Command::SubjectHistory(request)
+            } else {
+                Command::ResolveMany(request)
             }
         }
         "get" => Command::Get(p.operand()?),
