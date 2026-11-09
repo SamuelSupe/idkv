@@ -344,9 +344,14 @@ async fn log_negotiation_preserves_wal_frames_and_cursor_across_encodings() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn slow_binary_log_send_keeps_global_charge_without_blocking_tenant_writes() {
+async fn in_flight_binary_log_frame_keeps_global_charge_without_blocking_tenant_writes() {
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
+    use http_body_util::BodyExt;
     use tenant_kv::replication::{LogRequest, PROTOCOL};
-    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use tower::ServiceExt;
 
     const FRAME_BYTES: usize = 8 << 20;
     let pair = Pair::with_options(Options {
@@ -359,7 +364,7 @@ async fn slow_binary_log_send_keeps_global_charge_without_blocking_tenant_writes
     let info = pair.a.create_tenant("slow-binary-log").unwrap();
     let tenant = pair.a.tenant(info.id).unwrap();
     let state = pair.a.replication_state();
-    let request = serde_json::to_string(&LogRequest {
+    let request = serde_json::to_vec(&LogRequest {
         protocol: PROTOCOL,
         cluster: state.cluster,
         epoch: state.epoch,
@@ -379,32 +384,40 @@ async fn slow_binary_log_send_keeps_global_charge_without_blocking_tenant_writes
             .saturating_sub(tenant.engine().memory_bytes())
     };
     let before = non_tenant_memory();
-    let global_before = pair.a.memory_bytes();
-    let addr = pair.ua.strip_prefix("http://").unwrap();
-    let socket = tokio::net::TcpSocket::new_v4().unwrap();
-    socket.set_recv_buffer_size(4096).unwrap();
-    let mut socket = socket.connect(addr.parse().unwrap()).await.unwrap();
-    let http = format!(
-        "POST /v1/replication/log HTTP/1.1\r\nHost: {addr}\r\nAuthorization: Bearer {PEER}\r\nAccept: application/vnd.idkv.wal-page.v1\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{request}",
-        request.len()
-    );
-    socket.write_all(http.as_bytes()).await.unwrap();
-    let mut response = BufReader::new(socket);
-    let mut status = String::new();
-    tokio::time::timeout(Duration::from_secs(5), response.read_line(&mut status))
-        .await
+    let response = http::app_with_replication(pair.a.clone(), auth(), None, Some(pair.sa.clone()))
         .unwrap()
+        .oneshot(
+            Request::post("/v1/replication/log")
+                .header("authorization", format!("Bearer {PEER}"))
+                .header("accept", "application/vnd.idkv.wal-page.v1")
+                .header("content-type", "application/json")
+                .body(Body::from(request))
+                .unwrap(),
+        )
+        .await
         .unwrap();
-    assert!(status.starts_with("HTTP/1.1 200 "), "{status}");
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers()["content-type"],
+        "application/vnd.idkv.wal-page.v1"
+    );
+    let mut body = response.into_body();
+    drop(body.frame().await.unwrap().unwrap()); // Page header.
+    let frame = body.frame().await.unwrap().unwrap().into_data().unwrap();
+    assert!(frame.len() > FRAME_BYTES);
+    drop(body);
+    let in_flight_memory = non_tenant_memory();
 
-    // Leave the frame in flight while a write needs the remaining tenant budget.
-    assert!(pair.a.memory_bytes() >= global_before + FRAME_BYTES);
+    // Hold the transport's frame independently of socket buffers or the body.
+    // The write needs ~16 MiB already in the memtable plus ~12 MiB each for
+    // staging and commit preparation. Charging the frame to the tenant would
+    // raise the peak above the 44 MiB quota.
     tenant
         .engine()
         .transact(|tx| tx.put(b"foreground".to_vec(), vec![2; 6 << 20]))
         .unwrap();
-    assert!(non_tenant_memory() >= before + FRAME_BYTES);
-    drop(response);
+    assert!(in_flight_memory >= before + FRAME_BYTES);
+    drop(frame);
     let deadline = Instant::now() + Duration::from_secs(5);
     while non_tenant_memory() > before + (1 << 20) {
         assert!(
