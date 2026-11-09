@@ -17,8 +17,11 @@ fn options() -> Options {
     }
 }
 fn setup() -> (tempfile::TempDir, Store, TenantHandle) {
+    setup_with(options())
+}
+fn setup_with(options: Options) -> (tempfile::TempDir, Store, TenantHandle) {
     let dir = tempfile::tempdir().unwrap();
-    let store = Store::open(dir.path(), options()).unwrap();
+    let store = Store::open(dir.path(), options).unwrap();
     let info = store.create_tenant("alpha").unwrap();
     let tenant = store.tenant(info.id).unwrap();
     tenant.create_collection("assets").unwrap();
@@ -1296,7 +1299,16 @@ fn failed_unique_build_can_be_repaired_and_nonunique_lookup_is_bounded() {
 
 #[test]
 fn concurrent_group_commits_survive_reopen() {
-    let (dir, store, t) = setup();
+    for wal_group_window_us in [0, Options::default().wal_group_window_us] {
+        concurrent_writes_survive_reopen(Options {
+            wal_group_window_us,
+            ..options()
+        });
+    }
+}
+
+fn concurrent_writes_survive_reopen(options: Options) {
+    let (dir, store, t) = setup_with(options.clone());
     let id = t.id();
     let mut threads = Vec::new();
     for n in 0..8 {
@@ -1317,7 +1329,7 @@ fn concurrent_group_commits_survive_reopen() {
     }
     drop(t);
     drop(store);
-    let store = Store::open(dir.path(), options()).unwrap();
+    let store = Store::open(dir.path(), options).unwrap();
     let t = store.tenant(id).unwrap();
     assert_eq!(
         t.query(
@@ -1710,12 +1722,55 @@ fn edge_review_unique_swaps_validate_final_batch_and_preserve_conflict_atomicity
         "UNIQUE_CONFLICT"
     );
     assert_eq!(t.get("assets", "a").unwrap().unwrap()["ip"], 2);
+    assert_eq!(
+        t.put("assets", json!({"_key":"a","ip":1}), None)
+            .unwrap_err()
+            .code,
+        "UNIQUE_CONFLICT"
+    );
+    assert_eq!(
+        t.get("assets", "a").unwrap().unwrap()["_rev"],
+        swapped[0].rev
+    );
     t.create_lookup("assets", lookup("swapped", "unique-ip"))
         .unwrap();
     let indexed = t
         .lookup_many("assets", "swapped", &[json!({"ip":1}), json!({"ip":2})])
         .unwrap();
     assert_eq!(indexed.matches[0][0]["_key"], "b");
+    assert_eq!(indexed.matches[1][0]["_key"], "a");
+
+    let opts = WriteOptions {
+        expected_history: Some(t.history()),
+        ..Default::default()
+    };
+    let update = |if_rev| {
+        t.write_batch_with(
+            "assets",
+            vec![
+                WriteOp::Put {
+                    document: json!({"_key":"a","ip":3}),
+                    if_rev: None,
+                },
+                WriteOp::Check {
+                    key: "a".into(),
+                    if_rev,
+                },
+            ],
+            &opts,
+            "writer",
+        )
+    };
+    assert_eq!(
+        update(swapped[0].rev - 1).unwrap_err().code,
+        "REVISION_CONFLICT"
+    );
+    assert_eq!(t.get("assets", "a").unwrap().unwrap()["ip"], 2);
+    update(swapped[0].rev).unwrap();
+    let indexed = t
+        .lookup_many("assets", "swapped", &[json!({"ip":2}), json!({"ip":3})])
+        .unwrap();
+    assert!(indexed.matches[0].is_empty());
     assert_eq!(indexed.matches[1][0]["_key"], "a");
     t.engine().flush().unwrap();
     t.engine().verify().unwrap();

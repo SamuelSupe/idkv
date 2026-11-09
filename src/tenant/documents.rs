@@ -87,6 +87,7 @@ impl TenantHandle {
             return Err(Error::limit("write batch exceeds configured byte limit"));
         }
         let mut result_bound = 2;
+        let mut mutation_count = 0;
         for operation in &operations {
             let key = match operation {
                 WriteOp::Check { key, .. } => {
@@ -99,6 +100,7 @@ impl TenantHandle {
                     .unwrap_or("00000000-0000-0000-0000-000000000000"),
                 WriteOp::Delete { key, .. } => key,
             };
+            mutation_count += 1;
             result_bound += crate::json::encoded_len(key)? + 256;
         }
         if result_bound > self.engine().options.max_response_bytes {
@@ -172,16 +174,18 @@ impl TenantHandle {
                     }
                 }
             }
-            let indexes = if operations
-                .iter()
-                .any(|op| !matches!(op, WriteOp::Check { .. }))
-            {
+            let indexes = if mutation_count != 0 {
                 super::datasets::mutable(tx, collection.id)?;
-                indexes_tx(tx, collection.id)?
+                Some(self.indexes_for_write(tx, collection.id)?)
             } else {
-                Vec::new()
+                None
             };
+            let indexes = indexes
+                .as_ref()
+                .map_or(&[][..], |entry| entry.entries.as_slice());
             let mut results = Vec::with_capacity(operations.len());
+            // Checks have already run, so only mutations can swap unique values.
+            let single_mutation = mutation_count == 1;
             let mut index_changes = std::collections::BTreeMap::new();
             let mut index_memory = Vec::new();
             for (ordinal, operation) in operations.into_iter().enumerate() {
@@ -243,7 +247,7 @@ impl TenantHandle {
                         .map(|d| index_entry(collection.id, index, d))
                         .transpose()?
                         .flatten();
-                    if index.state == IndexState::Ready && !index.spec.unique {
+                    if index.state == IndexState::Ready && (single_mutation || !index.spec.unique) {
                         maintain_index(tx, index, old_entry.as_ref(), new_entry.as_ref())?;
                     } else if index.state == IndexState::Ready {
                         let bytes = old_entry

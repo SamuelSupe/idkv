@@ -4,12 +4,14 @@ mod bootstrap;
 mod client;
 mod node;
 mod snapshot;
+pub(crate) mod wire;
 pub use client::Service;
 pub(crate) use node::Node;
 pub use node::{Config, Fence, NodeState, Role, Source, TenantPosition};
 pub(crate) use snapshot::Exports;
 
 pub const PAGE_BYTES: usize = 1 << 20;
+pub(crate) const MAX_LOG_PAGE_FRAMES: usize = 256;
 pub const MAX_WIRE_BYTES: usize = 96 << 20;
 pub const PROTOCOL: u32 = 4;
 pub fn capabilities() -> serde_json::Value {

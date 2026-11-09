@@ -6,13 +6,23 @@ use crate::{
     storage::{Snapshot, Transaction},
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use std::sync::Arc;
 use uuid::Uuid;
+
+const MAX_WRITE_INDEX_CACHE_BYTES: usize = 256 << 10;
 
 pub(crate) struct CachedCollection {
     name: String,
     id: Uuid,
     seq: u64,
     _memory: Reservation,
+}
+
+pub(crate) struct WriteIndexes {
+    catalog_seq: u64,
+    collection: Uuid,
+    pub(super) entries: Vec<IndexDefinition>,
+    _memory: Option<Reservation>,
 }
 
 pub(crate) fn name(name: &str) -> Result<()> {
@@ -115,6 +125,40 @@ pub(crate) fn queue_gc(tx: &mut Transaction<'_>, prefixes: Vec<Vec<u8>>) -> Resu
     )
 }
 impl TenantHandle {
+    pub(super) fn indexes_for_write(
+        &self,
+        tx: &Transaction<'_>,
+        collection: Uuid,
+    ) -> Result<Arc<WriteIndexes>> {
+        // A writer can observe a catalog change before its fsync is published.
+        let seq = tx.catalog_read_seq;
+        let mut cache = self.core.write_indexes.lock();
+        if let Some(entry) = cache.as_ref()
+            && entry.catalog_seq == seq
+            && entry.collection == collection
+        {
+            return Ok(entry.clone());
+        }
+        *cache = None;
+        let entries = indexes_tx(tx, collection)?;
+        let memory = crate::json::encoded_len(&entries)
+            .ok()
+            .map(|len| len.saturating_mul(4).saturating_add(512))
+            .filter(|size| *size <= MAX_WRITE_INDEX_CACHE_BYTES)
+            .and_then(|size| self.engine().budget.reserve(size).ok());
+        let cacheable = memory.is_some();
+        let entry = Arc::new(WriteIndexes {
+            catalog_seq: seq,
+            collection,
+            entries,
+            _memory: memory,
+        });
+        if cacheable {
+            *cache = Some(entry.clone());
+        }
+        Ok(entry)
+    }
+
     pub(crate) fn collection_id(&self, snapshot: &Snapshot, name: &str) -> Result<Uuid> {
         let seq = self.engine().catalog_seq();
         // An older ReadView must resolve its own collection generation. A

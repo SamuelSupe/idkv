@@ -1,5 +1,8 @@
 use super::*;
-use crate::replication::{LogCursor, LogPage, LogRequest, PAGE_BYTES, Source};
+use crate::replication::{
+    LogCursor, LogPage, LogRequest, MAX_LOG_PAGE_FRAMES, PAGE_BYTES, Source,
+    wire::{LogExport, RawFrame},
+};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 impl Engine {
@@ -26,7 +29,7 @@ impl Engine {
             }
         })
     }
-    pub(crate) fn log_page(&self, request: &LogRequest) -> Result<LogPage> {
+    pub(crate) fn log_page(&self, request: &LogRequest, binary: bool) -> Result<LogExport> {
         self.ensure_durable()?;
         if request.tenant != self.info.id || request.generation != self.info.generation {
             return Err(Error::new(
@@ -52,8 +55,9 @@ impl Engine {
             frames: vec![],
             cursor: request.cursor.clone(),
         };
+        let mut raw = Vec::new();
         if request.after == through {
-            return Ok(page);
+            return Ok(LogExport { page, raw });
         }
         let files: Vec<_> = writer
             .manifest
@@ -74,7 +78,9 @@ impl Engine {
         // but these descriptors still refer to the same immutable byte prefixes.
         let mut opened = Vec::new();
         for info in files[start..].iter().take(128) {
-            if info.start_seq > through || info.start_seq > request.after.saturating_add(256) {
+            if info.start_seq > through
+                || info.start_seq > request.after.saturating_add(MAX_LOG_PAGE_FRAMES as u64)
+            {
                 break;
             }
             let file = File::open(self.path.join("wal").join(format!("{}.wal", info.id)))?;
@@ -113,9 +119,12 @@ impl Engine {
                 return Err(Error::invalid("replication cursor offset"));
             }
             let mut frames = wal::FrameReader::new(file, offset, len, &self.budget)?;
-            while let Some((seq, bytes, _memory)) = frames.next()? {
+            // Binary frames stay owned by the HTTP body, including their
+            // ownership and queue entries after the source lock is released.
+            let frame_overhead = if binary { 128 } else { 0 };
+            while let Some((seq, bytes, memory)) = frames.next(frame_overhead)? {
                 if seq > through {
-                    return Ok(page);
+                    return Ok(LogExport { page, raw });
                 }
                 offset += bytes.len() as u64;
                 if seq <= request.after {
@@ -125,31 +134,53 @@ impl Engine {
                     return Err(Error::new("LOG_GONE", "replication sequence gap"));
                 }
                 size += bytes.len();
-                let wire_bytes = bytes.len().div_ceil(3) * 4 + 64;
-                page_memory.push(self.budget.reserve(wire_bytes).or_else(|_| {
-                    frames.unbuffer()?;
-                    self.budget.reserve(wire_bytes)
-                })?);
-                page.frames.push(STANDARD.encode(&bytes));
+                if binary {
+                    raw.push(axum::body::Bytes::from_owner(RawFrame {
+                        bytes,
+                        _memory: memory,
+                    }));
+                } else {
+                    let wire_bytes = bytes.len().div_ceil(3) * 4 + 64;
+                    page_memory.push(self.budget.reserve(wire_bytes).or_else(|_| {
+                        frames.unbuffer()?;
+                        self.budget.reserve(wire_bytes)
+                    })?);
+                    page.frames.push(STANDARD.encode(&bytes));
+                }
                 page.through = seq;
                 page.cursor = Some(LogCursor { file: id, offset });
-                if size >= PAGE_BYTES || page.frames.len() >= 256 || seq == through {
-                    return Ok(page);
+                if size >= PAGE_BYTES
+                    || page.frames.len() + raw.len() >= MAX_LOG_PAGE_FRAMES
+                    || seq == through
+                {
+                    return Ok(LogExport { page, raw });
                 }
             }
         }
         if page.through > request.after {
-            Ok(page)
+            Ok(LogExport { page, raw })
         } else {
             Err(Error::corrupt("replication source history is incomplete"))
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn apply_replica_page(
         self: &Arc<Self>,
         source: &Source,
         after: u64,
         page: &LogPage,
+        wire_memory: usize,
+    ) -> Result<()> {
+        self.apply_log_page(source, after, page, None, wire_memory)
+    }
+
+    pub(crate) fn apply_log_page(
+        self: &Arc<Self>,
+        source: &Source,
+        after: u64,
+        page: &LogPage,
+        raw: Option<&[u8]>,
         wire_memory: usize,
     ) -> Result<()> {
         let authority = self
@@ -159,7 +190,7 @@ impl Engine {
             .ok_or_else(|| Error::invalid("managed replica required"))?;
         let _permission = authority.replica_write(source)?;
         if page.epoch != source.epoch
-            || page.frames.len() > 256
+            || page.frames.len() > MAX_LOG_PAGE_FRAMES
             || page.through > page.source_position
         {
             return Err(Error::new(
@@ -167,19 +198,33 @@ impl Engine {
                 "replication page identity or bounds",
             ));
         }
-        let encoded_bytes = page.frames.iter().try_fold(0usize, |n, s| {
-            n.checked_add(s.len())
-                .ok_or_else(|| Error::limit("replication page size"))
-        })?;
-        if encoded_bytes > (wal::MAX_BATCH + PAGE_BYTES + 24).div_ceil(3) * 4 {
-            return Err(Error::limit("replication page size"));
-        }
-        // The wire response already has a global reservation. Charge this
-        // tenant for its raw decode buffer, not two more copies of base64.
+        let max_page = wal::MAX_BATCH + PAGE_BYTES + 24;
+        let (raw_bytes, frame_count) = if let Some(raw) = raw {
+            if raw.len() > max_page {
+                return Err(Error::limit("replication page size"));
+            }
+            let count = page
+                .through
+                .checked_sub(after)
+                .filter(|count| *count <= MAX_LOG_PAGE_FRAMES as u64)
+                .ok_or_else(|| Error::corrupt("replication page frame count"))?;
+            (raw.len(), count as usize)
+        } else {
+            let encoded_bytes = page.frames.iter().try_fold(0usize, |n, s| {
+                n.checked_add(s.len())
+                    .ok_or_else(|| Error::limit("replication page size"))
+            })?;
+            if encoded_bytes > max_page.div_ceil(3) * 4 {
+                return Err(Error::limit("replication page size"));
+            }
+            (encoded_bytes / 4 * 3, page.frames.len())
+        };
+        // The HTTP buffer has its own global reservation. This buffer belongs
+        // to the tenant and is transferred to the WAL append.
         let decode_memory = self.reserve_replica_decode(
-            encoded_bytes / 4 * 3
+            raw_bytes
                 + 4096
-                + page.frames.len() * std::mem::size_of::<(u64, usize, Vec<Record>, Reservation)>(),
+                + frame_count * std::mem::size_of::<(u64, usize, Vec<Record>, Reservation)>(),
             0,
             wire_memory,
         )?;
@@ -199,18 +244,36 @@ impl Engine {
                 "replication position changed; retry from durable position",
             ));
         }
-        let mut prepared = Vec::with_capacity(page.frames.len());
-        let mut bytes = Vec::with_capacity(encoded_bytes / 4 * 3);
+        let mut prepared = Vec::with_capacity(frame_count);
+        let mut bytes = Vec::with_capacity(raw_bytes);
         let mut expected = after;
         let mut disk_bytes = 0u64;
-        for encoded in &page.frames {
-            if encoded.len() > (wal::MAX_BATCH + 24).div_ceil(3) * 4 {
-                return Err(Error::limit("replication frame size"));
+        let mut raw = raw.unwrap_or_default();
+        let mut encoded = page.frames.iter();
+        while !raw.is_empty() || encoded.len() != 0 {
+            if prepared.len() == frame_count {
+                return Err(Error::corrupt("replication page frame count"));
             }
             let start = bytes.len();
-            STANDARD
-                .decode_vec(encoded, &mut bytes)
-                .map_err(|_| Error::corrupt("replication frame encoding"))?;
+            if let Some(encoded) = encoded.next() {
+                if encoded.len() > (wal::MAX_BATCH + 24).div_ceil(3) * 4 {
+                    return Err(Error::limit("replication frame size"));
+                }
+                STANDARD
+                    .decode_vec(encoded, &mut bytes)
+                    .map_err(|_| Error::corrupt("replication frame encoding"))?;
+            } else {
+                let length = raw
+                    .get(4..8)
+                    .map(|len| u32::from_le_bytes(len.try_into().unwrap()) as usize)
+                    .filter(|length| *length <= wal::MAX_BATCH)
+                    .ok_or_else(|| Error::corrupt("binary log frame length"))?;
+                let (frame, rest) = raw
+                    .split_at_checked(length + 24)
+                    .ok_or_else(|| Error::corrupt("truncated binary log frame"))?;
+                bytes.extend_from_slice(frame);
+                raw = rest;
+            }
             let frame = &bytes[start..];
             let seq = wal::frame(frame)?;
             if Some(seq) != expected.checked_add(1) || seq > page.through {
@@ -364,9 +427,37 @@ mod tests {
         );
         assert_eq!(handle.engine().seq(), after);
         assert!(handle.get("docs", "a").unwrap().is_none());
+        let binary = primary.export_log_page(&request, true).unwrap();
+        let mut raw: Vec<u8> = binary
+            .raw
+            .iter()
+            .flat_map(|frame| frame.iter().copied())
+            .collect();
+        let valid_tail = raw.pop().unwrap();
+        let wal_before = handle.engine().metrics()["wal_bytes"].clone();
+        assert_eq!(
+            handle
+                .engine()
+                .apply_log_page(&source, after, &binary.page, Some(&raw), 0)
+                .unwrap_err()
+                .code,
+            "CORRUPTION"
+        );
+        raw.push(valid_tail ^ 1);
+        assert_eq!(
+            handle
+                .engine()
+                .apply_log_page(&source, after, &binary.page, Some(&raw), 0)
+                .unwrap_err()
+                .code,
+            "CORRUPTION"
+        );
+        assert_eq!(handle.engine().seq(), after);
+        assert_eq!(handle.engine().metrics()["wal_bytes"], wal_before);
+        *raw.last_mut().unwrap() = valid_tail;
         handle
             .engine()
-            .apply_replica_page(&source, after, &page, 0)
+            .apply_log_page(&source, after, &binary.page, Some(&raw), 0)
             .unwrap();
         assert_eq!(handle.engine().catalog_seq(), catalog_seq);
         assert_eq!(handle.engine().metrics()["commits"], 67);

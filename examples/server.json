@@ -5,6 +5,7 @@
   "cache_bytes": 134217728,
   "memtable_bytes": 16777216,
   "io_workers": 4,
+  "wal_group_window_us": 1000,
   "maintenance_reserve_free_bytes": 67108864,
   "max_local_backup_bytes": 1073741824
 }

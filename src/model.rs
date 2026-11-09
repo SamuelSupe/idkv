@@ -12,6 +12,7 @@ pub struct Options {
     pub memtable_bytes: usize,
     pub block_bytes: usize,
     pub io_workers: usize,
+    pub wal_group_window_us: u64,
     pub max_tenant_requests: usize,
     pub max_http_requests: usize,
     pub max_http_body_requests: usize,
@@ -52,6 +53,7 @@ impl Default for Options {
             memtable_bytes: 16 << 20,
             block_bytes: 16 << 10,
             io_workers: 4,
+            wal_group_window_us: 1_000,
             max_tenant_requests: 32,
             max_http_requests: 64,
             max_http_body_requests: 256,
@@ -117,6 +119,7 @@ impl Options {
             || self.max_snapshots > 100_000
             || self.io_workers == 0
             || self.io_workers > 128
+            || self.wal_group_window_us > 10_000
             || self.max_tenant_requests == 0
             || self.block_bytes < 1024
             || self.block_bytes > 1 << 20

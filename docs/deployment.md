@@ -81,12 +81,15 @@ Omitted Options fields use defaults; unknown fields are rejected. Copy [examples
 | Per-tenant disk quota | 100 GiB |
 | Per-tenant cache / memtable threshold | 128 MiB / 16 MiB |
 | I/O workers / maximum maintenance workers | 4 / 4 |
+| Concurrent WAL group collection window | 1000 µs |
 | Input batch / response bytes | 16 MiB / 16 MiB |
 | Expanded atomic records / read keys | 1000 / 1000 |
 | Physical scan / query deadline | 100,000 / 5 seconds |
 | Snapshot lifetime | 60 seconds |
 | HTTP connections / ordinary executing requests | 1024 / 64 |
 | Request-header and keep-alive idle wait | 5 seconds |
+
+Set `wal_group_window_us` to an integer from 0 to 10,000. A value of 0 skips the deliberate collection delay. Writes still wait for WAL fsync before acknowledgement, and pending transactions can share an fsync. A single write after an idle period starts fsync immediately at any setting.
 
 Budgets are not process RSS: allow extra capacity for allocation overhead, networking, TLS/exporters and caller-held responses. Set a cgroup limit above the engine budget and observe both. Use [operations.md](operations.md) for validation bounds and detailed memory/I/O accounting.
 

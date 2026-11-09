@@ -397,27 +397,34 @@ impl Wal {
     }
 }
 pub fn encode(seq: u64, records: &[Record]) -> Result<Vec<u8>> {
-    let mut payload = Vec::new();
-    put_u32(&mut payload, records.len() as u32);
+    let payload_len = records.iter().try_fold(4usize, |len, record| {
+        let len = len
+            .saturating_add(12)
+            .saturating_add(record.key.len())
+            .saturating_add(record.value.as_ref().map_or(0, |value| value.len()));
+        (len <= MAX_BATCH)
+            .then_some(len)
+            .ok_or_else(|| Error::limit("expanded WAL batch exceeds 64 MiB"))
+    })?;
+    let mut out = Vec::with_capacity(24 + payload_len);
+    out.extend_from_slice(b"TXN1");
+    put_u32(&mut out, payload_len as u32);
+    put_u64(&mut out, seq);
+    let header_crc = crc32fast::hash(&out);
+    put_u32(&mut out, header_crc);
+    put_u32(&mut out, 0);
+    put_u32(&mut out, records.len() as u32);
     for r in records {
-        put_bytes(&mut payload, &r.key);
-        put_u32(&mut payload, r.prefix_len as u32);
+        put_bytes(&mut out, &r.key);
+        put_u32(&mut out, r.prefix_len as u32);
         if let Some(value) = &r.value {
-            put_bytes(&mut payload, value);
+            put_bytes(&mut out, value);
         } else {
-            put_u32(&mut payload, u32::MAX);
-        }
-        if payload.len() > MAX_BATCH {
-            return Err(Error::limit("expanded WAL batch exceeds 64 MiB"));
+            put_u32(&mut out, u32::MAX);
         }
     }
-    let mut out = b"TXN1".to_vec();
-    put_u32(&mut out, payload.len() as u32);
-    put_u64(&mut out, seq);
-    let crc = crc32fast::hash(&out);
-    put_u32(&mut out, crc);
-    put_u32(&mut out, crc32fast::hash(&payload));
-    out.extend(payload);
+    let payload_crc = crc32fast::hash(&out[24..]);
+    out[20..24].copy_from_slice(&payload_crc.to_le_bytes());
     Ok(out)
 }
 pub(super) fn decode(payload: &[u8], seq: u64) -> Result<Vec<Record>> {
@@ -521,7 +528,10 @@ impl<'a> FrameReader<'a> {
         }
         Ok(())
     }
-    pub fn next(&mut self) -> Result<Option<(u64, Vec<u8>, crate::resources::Reservation)>> {
+    pub fn next(
+        &mut self,
+        allocation_overhead: usize,
+    ) -> Result<Option<(u64, Vec<u8>, crate::resources::Reservation)>> {
         if self.remaining == 0 {
             return Ok(None);
         }
@@ -540,12 +550,13 @@ impl<'a> FrameReader<'a> {
         if len > MAX_BATCH || len as u64 + 24 > self.remaining {
             return Err(Error::corrupt("replication WAL frame bounds"));
         }
-        let memory = self.budget.reserve(len + 24).or_else(|error| {
+        let charge = len + 24 + allocation_overhead;
+        let memory = self.budget.reserve(charge).or_else(|error| {
             if self.buffer_memory.is_none() {
                 return Err(error);
             }
             self.unbuffer_at(self.offset + 24)?;
-            self.budget.reserve(len + 24)
+            self.budget.reserve(charge)
         })?;
         let mut bytes = vec![0u8; len + 24];
         bytes[..24].copy_from_slice(&header);
@@ -710,11 +721,11 @@ mod tests {
                     FrameReader::new(File::open(&path).unwrap(), 0, bytes.len() as u64, &budget)
                         .unwrap();
                 for (i, expected) in frames.iter().enumerate() {
-                    let (seq, data, _charge) = reader.next().unwrap().unwrap();
+                    let (seq, data, _charge) = reader.next(0).unwrap().unwrap();
                     assert_eq!(seq, i as u64 + 1);
                     assert_eq!(&data, expected);
                 }
-                assert!(reader.next().unwrap().is_none());
+                assert!(reader.next(0).unwrap().is_none());
             }
             assert_eq!(counter.used(), 0);
         }
@@ -732,18 +743,18 @@ mod tests {
             .unwrap()
             .write_all(&frames[3])
             .unwrap();
-        assert_eq!(reader.next().unwrap().unwrap().1, frames[1]);
-        assert!(reader.next().unwrap().is_none());
+        assert_eq!(reader.next(0).unwrap().unwrap().1, frames[1]);
+        assert!(reader.next(0).unwrap().is_none());
         for end in [end - 1, offset + 23] {
             let mut reader =
                 FrameReader::new(File::open(&path).unwrap(), offset, end, &budget).unwrap();
-            assert_eq!(reader.next().unwrap_err().code, "CORRUPTION");
+            assert_eq!(reader.next(0).unwrap_err().code, "CORRUPTION");
         }
         let mut corrupt = bytes.clone();
         corrupt[frames[0].len() + 30] ^= 1;
         std::fs::write(&path, corrupt).unwrap();
         let mut reader =
             FrameReader::new(File::open(&path).unwrap(), offset, end, &budget).unwrap();
-        assert_eq!(reader.next().unwrap_err().code, "CORRUPTION");
+        assert_eq!(reader.next(0).unwrap_err().code, "CORRUPTION");
     }
 }

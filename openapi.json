@@ -4947,6 +4947,13 @@
                 "schema": {
                   "$ref": "#/components/schemas/ReplicationLogPage"
                 }
+              },
+              "application/vnd.idkv.wal-page.v1": {
+                "description": "Opt in with Accept: application/vnd.idkv.wal-page.v1. The 57-byte page header is followed by the original WAL frames.",
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
               }
             },
             "description": "Success"

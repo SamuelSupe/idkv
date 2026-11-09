@@ -1,6 +1,7 @@
 use super::{
     Config, Exports, Fence, LogPage, LogRequest, MAX_WIRE_BYTES, NodeState, Role, Source,
     TenantPosition,
+    wire::{LOG_ACCEPT, LOG_MEDIA_TYPE, LogExport, LogReply, decode_log_reply},
 };
 use crate::{Error, Result, Store};
 use fs2::FileExt;
@@ -328,12 +329,42 @@ impl Service {
         self.request_with_deadlines(path, body, timeout, Duration::from_secs(120))
             .await
     }
+    pub(super) async fn request_log(
+        &self,
+        request: Value,
+        remaining: Duration,
+    ) -> Result<Received<LogReply>> {
+        self.request_decoded(
+            "/v1/replication/log",
+            Some(request),
+            remaining,
+            Duration::from_secs(120),
+            true,
+            decode_log_reply,
+        )
+        .await
+    }
     async fn request_with_deadlines<T: DeserializeOwned>(
         &self,
         path: &str,
         body: Option<Value>,
         remaining: Duration,
         log_timeout: Duration,
+    ) -> Result<Received<T>> {
+        self.request_decoded(path, body, remaining, log_timeout, false, |bytes, _| {
+            Ok(serde_json::from_slice(&bytes)?)
+        })
+        .await
+    }
+
+    async fn request_decoded<T>(
+        &self,
+        path: &str,
+        body: Option<Value>,
+        remaining: Duration,
+        log_timeout: Duration,
+        binary_log: bool,
+        decode: impl FnOnce(Vec<u8>, bool) -> Result<T>,
     ) -> Result<Received<T>> {
         let log = path == "/v1/replication/log";
         let timeout = if log {
@@ -347,7 +378,7 @@ impl Service {
             .flatten();
         let received = tokio::time::timeout(
             timeout,
-            self.receive_response(path, body, &mut received_log_body),
+            self.receive_response(path, body, &mut received_log_body, binary_log, decode),
         )
         .await;
         if (received.is_ok() || !received_log_body)
@@ -390,11 +421,13 @@ impl Service {
             )
         })?
     }
-    async fn receive_response<T: DeserializeOwned>(
+    async fn receive_response<T>(
         &self,
         path: &str,
         body: Option<Value>,
         received_log_body: &mut bool,
+        binary_log: bool,
+        decode: impl FnOnce(Vec<u8>, bool) -> Result<T>,
     ) -> Result<Received<T>> {
         let url = format!(
             "{}{}",
@@ -404,6 +437,11 @@ impl Service {
         let request = match body {
             Some(body) => self.inner.client.post(url).json(&body),
             None => self.inner.client.get(url),
+        };
+        let request = if binary_log {
+            request.header(reqwest::header::ACCEPT, LOG_ACCEPT)
+        } else {
+            request
         };
         let token_path = self.inner.config.token_file.clone();
         let token = tokio::task::spawn_blocking(move || read_token(&token_path))
@@ -477,6 +515,18 @@ impl Service {
             }
             bytes.extend_from_slice(&chunk);
         }
+        if success
+            && binary_log
+            && response
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
+                .is_some_and(|value| value == LOG_MEDIA_TYPE)
+        {
+            return Ok(Received {
+                value: decode(bytes, true)?,
+                _memory: input_memory,
+            });
+        }
         let decoded = crate::json::allocation_bound(&bytes);
         check_memory(input_memory.size().saturating_add(decoded))?;
         let memory = self.inner.store.reserve_http(decoded)?;
@@ -517,7 +567,7 @@ impl Service {
                 ),
             ));
         }
-        let value = serde_json::from_slice(&bytes)?;
+        let value = decode(bytes, false)?;
         Ok(Received {
             value,
             _memory: memory,
@@ -800,12 +850,8 @@ impl Service {
                 "insufficient cycle budget for log request",
             ));
         }
-        let page: Result<Received<LogPage>> = self
-            .request_bounded(
-                "/v1/replication/log",
-                Some(serde_json::to_value(&request)?),
-                remaining,
-            )
+        let page = self
+            .request_log(serde_json::to_value(&request)?, remaining)
             .await;
         match page {
             Err(error)
@@ -826,21 +872,22 @@ impl Service {
                 // A restart probes each durable position once to finish any
                 // source-side handoff. A valid empty head page needs no engine
                 // open or replay on an otherwise cold replica.
-                if page.epoch == source.epoch
-                    && page.frames.is_empty()
-                    && page.through == after
-                    && page.source_position == after
+                if page.page.epoch == source.epoch
+                    && page.page.frames.is_empty()
+                    && page.raw.as_ref().is_none_or(|bytes| bytes.is_empty())
+                    && page.page.through == after
+                    && page.page.source_position == after
                 {
                     self.inner.progress.lock().confirmed.insert(id, after);
                     return Ok(TenantSync::Idle);
                 }
-                let confirmed = (after == page.source_position).then_some(after);
-                let pending = if page.through < page.source_position {
-                    TenantSync::Pending(page.source_position)
+                let confirmed = (after == page.page.source_position).then_some(after);
+                let pending = if page.page.through < page.page.source_position {
+                    TenantSync::Pending(page.page.source_position)
                 } else {
                     TenantSync::Idle
                 };
-                let next_cursor = page.cursor.clone();
+                let next_cursor = page.page.cursor.clone();
                 let store = store.clone();
                 let apply_source = source.clone();
                 let wire_memory = page._memory.size();
@@ -850,9 +897,13 @@ impl Service {
                         handle.engine().flush_if_needed()?;
                     }
                     let apply = || {
-                        handle
-                            .engine()
-                            .apply_replica_page(&apply_source, after, &page, wire_memory)
+                        handle.engine().apply_log_page(
+                            &apply_source,
+                            after,
+                            &page.page,
+                            page.raw.as_deref(),
+                            wire_memory,
+                        )
                     };
                     match apply() {
                         Err(error) if error.code == "REPLICA_MEMORY_PRESSURE" => {
@@ -911,12 +962,15 @@ impl Service {
         );
     }
     pub fn export_log(&self, request: &LogRequest) -> Result<LogPage> {
-        let page = self.inner.store.export_logs(request)?;
+        Ok(self.export_log_page(request, false)?.page)
+    }
+    pub(crate) fn export_log_page(&self, request: &LogRequest, binary: bool) -> Result<LogExport> {
+        let export = self.inner.store.export_log_page(request, binary)?;
         self.inner
             .exports
             .lock()
-            .progress(request, page.source_position);
-        Ok(page)
+            .progress(request, export.page.source_position);
+        Ok(export)
     }
     fn expire_exports(&self) -> Result<()> {
         let paths = {

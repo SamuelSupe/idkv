@@ -42,6 +42,12 @@ pub(super) fn openapi_for(options: &Options) -> Value {
                     "Requires a global admin. An interrupted switch may leave a durable fence; inspect both nodes and retry."
                 });
             }
+            if *route == "/v1/replication/log" {
+                op["responses"]["200"]["content"][crate::replication::wire::LOG_MEDIA_TYPE] = json!({
+                    "schema":{"type":"string","format":"binary"},
+                    "description":"Opt in with Accept: application/vnd.idkv.wal-page.v1. The 57-byte page header is followed by the original WAL frames."
+                });
+            }
             if backups::is_job_post(route, method) {
                 let success = op["responses"]
                     .as_object_mut()

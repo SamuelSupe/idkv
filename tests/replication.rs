@@ -92,10 +92,18 @@ impl Pair {
         replica_role: Role,
         gate: Option<std::sync::Arc<SnapshotGate>>,
     ) -> Self {
+        Self::with_store_options(options.clone(), options, replica_role, gate).await
+    }
+    async fn with_store_options(
+        primary_options: Options,
+        replica_options: Options,
+        replica_role: Role,
+        gate: Option<std::sync::Arc<SnapshotGate>>,
+    ) -> Self {
         let da = tempfile::tempdir().unwrap();
         let db = tempfile::tempdir().unwrap();
-        let a = Store::open(da.path(), options.clone()).unwrap();
-        let b = Store::open(db.path(), options).unwrap();
+        let a = Store::open(da.path(), primary_options).unwrap();
+        let b = Store::open(db.path(), replica_options).unwrap();
         let la = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let lb = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let ua = format!("http://{}", la.local_addr().unwrap());
@@ -203,6 +211,123 @@ impl Pair {
             }
             assert!(Instant::now() < deadline, "replica did not catch up");
         }
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn log_negotiation_preserves_wal_frames_and_cursor_across_encodings() {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    use tenant_kv::replication::{LogCursor, LogPage, LogRequest, PROTOCOL};
+
+    let pair = Pair::with_options(Options::default()).await;
+    let info = pair.a.create_tenant("binary-page").unwrap();
+    let tenant = pair.a.tenant(info.id).unwrap();
+    let after = tenant.engine().seq();
+    for key in ["first", "second"] {
+        tenant
+            .engine()
+            .transact(|tx| tx.put(key.as_bytes().to_vec(), vec![42; 1 << 20]))
+            .unwrap();
+    }
+    let state = pair.a.replication_state();
+    let request = LogRequest {
+        protocol: PROTOCOL,
+        cluster: state.cluster,
+        epoch: state.epoch,
+        tenant: info.id,
+        generation: info.generation,
+        after,
+        cursor: None,
+    };
+    let http = reqwest::Client::new();
+    let fetch = |request: &LogRequest| {
+        http.post(format!("{}/v1/replication/log", pair.ua))
+            .bearer_auth(PEER)
+            .json(request)
+    };
+    let legacy_response = fetch(&request)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(
+        legacy_response.headers()["content-type"],
+        "application/json"
+    );
+    let legacy: LogPage = legacy_response.json().await.unwrap();
+    assert_eq!(legacy.through, after + 1);
+    assert_eq!(legacy.source_position, after + 2);
+    let media = "application/vnd.idkv.wal-page.v1";
+    let response = fetch(&request)
+        .header("accept", format!("{media};q=1, application/json;q=0.5"))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(response.headers()["content-type"], media);
+    assert_eq!(response.headers()["vary"], "Accept");
+    let body = response.bytes().await.unwrap();
+    assert_eq!(&body[..16], state.epoch.as_bytes());
+    assert_eq!(
+        u64::from_le_bytes(body[16..24].try_into().unwrap()),
+        legacy.through
+    );
+    assert_eq!(
+        u64::from_le_bytes(body[24..32].try_into().unwrap()),
+        legacy.source_position
+    );
+    assert_eq!(body[32], 1);
+    assert_eq!(&body[57..], STANDARD.decode(&legacy.frames[0]).unwrap());
+    let cursor = LogCursor {
+        file: Uuid::from_bytes(body[33..49].try_into().unwrap()),
+        offset: u64::from_le_bytes(body[49..57].try_into().unwrap()),
+    };
+    let next: LogPage = fetch(&LogRequest {
+        after: legacy.through,
+        cursor: Some(cursor),
+        ..request
+    })
+    .send()
+    .await
+    .unwrap()
+    .error_for_status()
+    .unwrap()
+    .json()
+    .await
+    .unwrap();
+    assert_eq!(next.through, legacy.source_position);
+    assert_eq!(next.frames.len(), 1);
+
+    let caught_up = LogRequest {
+        after: legacy.source_position,
+        ..request
+    };
+    for (accept, expected) in [
+        (format!("{media};q=0"), "application/json"),
+        (
+            format!("{media};q=0.2, application/json;q=0.8"),
+            "application/json",
+        ),
+        (
+            format!("{media};q=0.5, */*;q=1, application/json;q=0"),
+            media,
+        ),
+        (
+            format!("application/json;note=\"ignored,{media},ignored\", */*"),
+            "application/json",
+        ),
+        ("application/*, */*;q=0.5".to_string(), "application/json"),
+    ] {
+        let response = fetch(&caught_up)
+            .header("accept", &accept)
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+        assert_eq!(response.headers()["content-type"], expected, "{accept}");
     }
 }
 
@@ -2626,19 +2751,25 @@ async fn checkpoint_validation_uses_the_tenant_quota_instead_of_the_node_default
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn indexed_pages_fit_global_budget_or_rebuild_without_infinite_retry() {
-    // 512 KiB used to fit the total budget, but not the foreground capacity
-    // after protecting flush headroom. It must fall back instead of retrying
-    // the same permanently oversized decode; 448 KiB still streams normally.
-    for (tenant_mib, payload_kib, checkpoint) in
-        [(40, 448, false), (40, 512, true), (60, 768, true)]
-    {
-        let pair = Pair::with_options(Options {
+    // Give the primary enough workspace to produce a transaction whose
+    // binary log page exceeds the replica's foreground decode budget.
+    for (tenant_mib, payload_kib, checkpoint) in [(40, 384, false), (64, 896, true)] {
+        let replica_options = Options {
             global_memory_bytes: 64 << 20,
             tenant_memory_bytes: tenant_mib << 20,
             cache_bytes: 64 << 10,
             memtable_bytes: 1 << 20,
             ..options()
-        })
+        };
+        let pair = Pair::with_store_options(
+            Options {
+                global_memory_bytes: 128 << 20,
+                ..replica_options.clone()
+            },
+            replica_options,
+            Role::Replica,
+            None,
+        )
         .await;
         for (store, role) in [(&pair.a, Role::Primary), (&pair.b, Role::Replica)] {
             store
@@ -2673,24 +2804,13 @@ async fn indexed_pages_fit_global_budget_or_rebuild_without_infinite_retry() {
         }
         pair.catch_up(false).await;
         let before = pair.sb.status().unwrap().reinitializations;
-        let response = reqwest::Client::new()
-            .put(format!(
-                "{}/v1/tenants/{id}/collections/docs/documents",
-                pair.ua
-            ))
-            .bearer_auth(ADMIN)
-            .json(&json!({"document":{"_key":"large","n":1,"payload":"x".repeat(payload_kib<<10)}}))
-            .send()
-            .await
+        let ack = source
+            .put(
+                "docs",
+                json!({"_key":"large","n":1,"payload":"x".repeat(payload_kib << 10)}),
+                None,
+            )
             .unwrap();
-        let status = response.status();
-        let body = response.bytes().await.unwrap();
-        assert!(
-            status.is_success(),
-            "source rejected: {}",
-            String::from_utf8_lossy(&body)
-        );
-        let ack: WriteResult = serde_json::from_slice(&body).unwrap();
         source.engine().flush().unwrap();
         pair.catch_up(false).await;
         let replica = pair.b.tenant(id).unwrap();
@@ -2701,7 +2821,8 @@ async fn indexed_pages_fit_global_budget_or_rebuild_without_infinite_retry() {
         );
         assert_eq!(
             pair.sb.status().unwrap().reinitializations > before,
-            checkpoint
+            checkpoint,
+            "{payload_kib} KiB payload, {tenant_mib} MiB tenant budget"
         );
         drop(replica);
         drop(source);

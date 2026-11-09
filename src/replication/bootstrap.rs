@@ -168,11 +168,11 @@ impl Service {
                 let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(90);
                 let mut next_probe = std::time::Instant::now();
                 let probe = || {
-                    self.request::<super::LogPage>(
-                        "/v1/replication/log",
-                        Some(json!({"protocol":super::PROTOCOL,"cluster":state.cluster,
+                    self.request_log(
+                        json!({"protocol":super::PROTOCOL,"cluster":state.cluster,
                     "epoch":source.epoch,"tenant":tenant,"generation":info.tenant.generation,
-                    "after":position})),
+                    "after":position}),
+                        std::time::Duration::from_secs(120),
                     )
                 };
                 let mut installation = None;
@@ -276,12 +276,12 @@ impl Service {
         if result.is_ok() {
             // The source hands off its export slot when it observes our durable
             // position, even if this process later restarts and forgets all IDs.
-            let _: Result<super::client::Received<super::LogPage>> = self
-                .request(
-                    "/v1/replication/log",
-                    Some(json!({"protocol":super::PROTOCOL,
+            let _ = self
+                .request_log(
+                    json!({"protocol":super::PROTOCOL,
                     "cluster":state.cluster,"epoch":source.epoch,"tenant":tenant,
-                    "generation":info.tenant.generation,"after":info.position})),
+                    "generation":info.tenant.generation,"after":info.position}),
+                    std::time::Duration::from_secs(120),
                 )
                 .await;
         } else {

@@ -1,5 +1,18 @@
 use super::*;
-use axum::body::to_bytes;
+use crate::replication::{
+    MAX_LOG_PAGE_FRAMES,
+    wire::{LOG_MEDIA_TYPE, LogExport, log_header},
+};
+use axum::{
+    body::{Body, Bytes, to_bytes},
+    http::header::{ACCEPT, CONTENT_TYPE, VARY},
+};
+use hyper::body::{Frame, SizeHint};
+use std::{
+    convert::Infallible,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 pub(super) fn peer_route(route: &str) -> bool {
     matches!(
@@ -70,6 +83,7 @@ pub(super) async fn dispatch(
         .try_acquire_owned()
         .map_err(|_| Error::limit("replication HTTP concurrency"))?;
     let input_memory = state.store.reserve_http(2 << 20)?;
+    let binary_log = route == "/v1/replication/log" && prefers_binary_log(request.headers());
     let bytes = tokio::time::timeout(
         std::time::Duration::from_secs(5),
         to_bytes(request.into_body(), 16 << 10),
@@ -112,7 +126,16 @@ pub(super) async fn dispatch(
             match route.as_str() {
                 "/v1/replication/status" => response(&state.store, service.status()?),
                 "/v1/replication/log" => {
-                    response(&state.store, service.export_log(&decode(body)?)?)
+                    let export = service.export_log_page(&decode(body)?, binary_log)?;
+                    let mut response = if binary_log {
+                        binary_log_response(export)
+                    } else {
+                        response(&state.store, export.page)?
+                    };
+                    response
+                        .headers_mut()
+                        .insert(VARY, "Accept".parse().unwrap());
+                    Ok(response)
                 }
                 "/v1/replication/snapshot" => {
                     let b: SnapshotRequest = decode(body)?;
@@ -142,6 +165,129 @@ pub(super) async fn dispatch(
         })
         .await
         .map_err(|_| Error::new("INTERNAL", "replication HTTP worker failed"))?,
+    }
+}
+
+fn prefers_binary_log(headers: &HeaderMap) -> bool {
+    let mut binary_quality = 0;
+    let mut json_preference = (0, 0);
+    for header in headers.get_all(ACCEPT) {
+        let Ok(value) = header.to_str() else { continue };
+        let mut quoted = false;
+        let mut escaped = false;
+        let ranges = value.split(|ch| {
+            if escaped {
+                escaped = false;
+                return false;
+            }
+            if quoted && ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                quoted = !quoted;
+            }
+            ch == ',' && !quoted
+        });
+        for range in ranges {
+            let (media, parameters) = range.split_once(';').unwrap_or((range, ""));
+            let media = media.trim();
+            let binary = media.eq_ignore_ascii_case(LOG_MEDIA_TYPE);
+            let specificity = if media.eq_ignore_ascii_case("application/json") {
+                3
+            } else if media.eq_ignore_ascii_case("application/*") {
+                2
+            } else if media == "*/*" {
+                1
+            } else if binary {
+                0
+            } else {
+                continue;
+            };
+            let Some(quality) = accept_quality(parameters) else {
+                continue;
+            };
+            if binary {
+                binary_quality = binary_quality.max(quality);
+            } else {
+                json_preference = json_preference.max((specificity, quality));
+            }
+        }
+    }
+    // Wildcards alone keep the legacy JSON response.
+    binary_quality > 0 && binary_quality >= json_preference.1
+}
+
+fn accept_quality(parameters: &str) -> Option<u16> {
+    let mut parameters = parameters
+        .split(';')
+        .map(str::trim)
+        .filter(|p| !p.is_empty());
+    let Some(parameter) = parameters.next() else {
+        return Some(1000);
+    };
+    let (name, value) = parameter.split_once('=')?;
+    if !name.trim().eq_ignore_ascii_case("q") || parameters.next().is_some() {
+        return None;
+    }
+    let value = value.trim();
+    let (whole, fraction) = value.split_once('.').unwrap_or((value, ""));
+    if fraction.len() > 3 || !fraction.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    match whole {
+        "1" if fraction.bytes().all(|b| b == b'0') => Some(1000),
+        "0" => Some(
+            fraction
+                .bytes()
+                .zip([100, 10, 1])
+                .map(|(b, place)| u16::from(b - b'0') * place)
+                .sum(),
+        ),
+        _ => None,
+    }
+}
+
+fn binary_log_response(export: LogExport) -> Response {
+    let header = Bytes::copy_from_slice(&log_header(&export.page));
+    let remaining = header.len() + export.raw.iter().map(Bytes::len).sum::<usize>();
+    let body = BinaryLogBody {
+        header: Some(header),
+        frames: export.raw.into_iter(),
+        remaining,
+    };
+    Response::builder()
+        .header(CONTENT_TYPE, LOG_MEDIA_TYPE)
+        .body(Body::new(body))
+        .unwrap()
+}
+
+// Each WAL frame owns its memory reservation through the HTTP send.
+struct BinaryLogBody {
+    header: Option<Bytes>,
+    frames: std::vec::IntoIter<Bytes>,
+    remaining: usize,
+}
+
+impl hyper::body::Body for BinaryLogBody {
+    type Data = Bytes;
+    type Error = Infallible;
+
+    fn poll_frame(
+        mut self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+    ) -> Poll<Option<std::result::Result<Frame<Bytes>, Infallible>>> {
+        Poll::Ready(
+            self.header
+                .take()
+                .or_else(|| self.frames.next())
+                .map(|bytes| {
+                    self.remaining -= bytes.len();
+                    Ok(Frame::data(bytes))
+                }),
+        )
+    }
+
+    fn size_hint(&self) -> SizeHint {
+        SizeHint::with_exact(self.remaining as u64)
     }
 }
 
@@ -227,7 +373,7 @@ pub(super) fn schemas() -> serde_json::Map<String, Value> {
     );
     out.insert("ReplicationStatus".into(),object(json!({"node":reference("ReplicationNode"),"tenants":{"type":"array","items":reference("ReplicationPosition")},"unavailable":{"type":"array","items":reference("ReplicationUnavailableTenant")},"last_error":{"type":["string","null"]},"completed_cycles":seq,"initialization_attempts":seq,"initialization_failures":seq,"reinitializations":seq,"initializing":{"type":"array","items":uuid},"waiting_for_readers":{"type":"array","items":uuid},"initialization_errors":{"type":"object","additionalProperties":{"type":"string"}}}),&["node","tenants","unavailable","last_error","completed_cycles","initialization_attempts","initialization_failures","reinitializations","initializing","waiting_for_readers","initialization_errors"]));
     out.insert("ReplicationLogRequest".into(),object(json!({"cluster":uuid,"epoch":uuid,"tenant":uuid,"generation":uuid,"after":seq,"cursor":cursor}),&["cluster","epoch","tenant","generation","after"]));
-    out.insert("ReplicationLogPage".into(),object(json!({"epoch":uuid,"through":seq,"source_position":seq,"frames":{"type":"array","maxItems":256,"items":{"type":"string","contentEncoding":"base64"}},"cursor":cursor}),&["epoch","through","source_position","frames","cursor"]));
+    out.insert("ReplicationLogPage".into(),object(json!({"epoch":uuid,"through":seq,"source_position":seq,"frames":{"type":"array","maxItems":MAX_LOG_PAGE_FRAMES,"items":{"type":"string","contentEncoding":"base64"}},"cursor":cursor}),&["epoch","through","source_position","frames","cursor"]));
     out.insert(
         "ReplicationSnapshotRequest".into(),
         object(

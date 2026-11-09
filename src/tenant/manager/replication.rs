@@ -1,6 +1,6 @@
 use super::*;
 use crate::replication::{
-    Config, Fence, LogPage, LogRequest, NodeState, Role, Source, TenantPosition,
+    Config, Fence, LogPage, LogRequest, NodeState, Role, Source, TenantPosition, wire::LogExport,
 };
 
 impl Store {
@@ -359,7 +359,12 @@ impl Store {
         Ok(state)
     }
 
+    #[cfg(test)]
     pub(crate) fn export_logs(&self, request: &LogRequest) -> Result<LogPage> {
+        Ok(self.export_log_page(request, false)?.page)
+    }
+
+    pub(crate) fn export_log_page(&self, request: &LogRequest, binary: bool) -> Result<LogExport> {
         crate::replication::compatible(request.protocol)?;
         let node = &self.owner.inner.node;
         let _barrier = node.barrier.read();
@@ -396,12 +401,15 @@ impl Store {
             let mut guard = slot.lock();
             guard.check_failure()?;
             if guard.core.is_none() && guard.last_seq == Some(request.after) {
-                return Ok(LogPage {
-                    epoch: request.epoch,
-                    through: request.after,
-                    source_position: request.after,
-                    frames: vec![],
-                    cursor: request.cursor.clone(),
+                return Ok(LogExport {
+                    page: LogPage {
+                        epoch: request.epoch,
+                        through: request.after,
+                        source_position: request.after,
+                        frames: vec![],
+                        cursor: request.cursor.clone(),
+                    },
+                    raw: vec![],
                 });
             }
         }
@@ -412,12 +420,12 @@ impl Store {
         }
         let close = handle.core.exported_cold.load(Ordering::Acquire);
         let touched = *handle.core.last_used.lock();
-        let page = handle.engine().log_page(request);
+        let page = handle.engine().log_page(request, binary);
         drop(handle);
         if close
-            && page
-                .as_ref()
-                .map_or(true, |page| page.through == page.source_position)
+            && page.as_ref().map_or(true, |export| {
+                export.page.through == export.page.source_position
+            })
         {
             let _ = self.close_unmodified_tenant(request.tenant, runtime, touched);
         }

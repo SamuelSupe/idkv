@@ -242,6 +242,7 @@ struct Writer {
     staged: u64,
     catalog_staged: u64,
     syncing: bool,
+    last_contention: Option<Instant>,
     poison: Option<Error>,
 }
 struct DiskInventory {
@@ -262,10 +263,12 @@ pub struct Engine {
     authority: RwLock<Option<Arc<crate::replication::Node>>>,
     view: RwLock<View>,
     transaction: Mutex<()>,
+    active_writes: AtomicUsize,
     writer: Mutex<Writer>,
     committed: AtomicU64,
     catalog_seq: AtomicU64,
     durable: Condvar,
+    group_ready: Condvar,
     progress: Mutex<()>,
     progress_wake: Condvar,
     maintenance: Mutex<()>,
@@ -411,17 +414,20 @@ impl Engine {
                 tables: versions,
             }),
             transaction: Mutex::new(()),
+            active_writes: AtomicUsize::new(0),
             writer: Mutex::new(Writer {
                 wal: active.unwrap(),
                 manifest,
                 staged,
                 catalog_staged: staged,
                 syncing: false,
+                last_contention: None,
                 poison: None,
             }),
             committed: AtomicU64::new(staged),
             catalog_seq: AtomicU64::new(staged),
             durable: Condvar::new(),
+            group_ready: Condvar::new(),
             progress: Mutex::new(()),
             progress_wake: Condvar::new(),
             maintenance: Mutex::new(()),
@@ -490,6 +496,7 @@ impl Engine {
             .store(true, Ordering::Release);
         pins.clear();
         writer.poison = Some(error);
+        self.group_ready.notify_one();
     }
     pub(crate) fn recovery_required(&self) -> bool {
         self.log_retention.recovery_required.load(Ordering::Acquire)

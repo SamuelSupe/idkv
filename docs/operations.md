@@ -17,6 +17,7 @@
 | target_sst_bytes | 16 MiB |
 | level_base_bytes | 64 MiB，后续层每层扩大 10 倍 |
 | io_workers | 4 |
+| wal_group_window_us | 1000，检测到并发写入时的 WAL 组提交收集窗口（微秒，范围 0–10000） |
 | max_tenant_requests | 32 |
 | max_http_requests | 64，普通执行名额；准入和正文完成后取得 |
 | max_http_body_requests | 256，非空正文接收及其预算准备 |
@@ -43,6 +44,8 @@
 | max_response_bytes | 16 MiB |
 | max_query_bytes | 64 MiB |
 | l0_trigger / l0_stop | 4 / 12 |
+
+`wal_group_window_us` 设为 0 可跳过主动等待，已积累的事务仍可共用一次 fsync，写入仍在 WAL 同步后确认。空闲后的单路写入始终立即发起 fsync。
 
 文档格式上限 16 MiB、输入批次格式上限 64 MiB、响应上限可配置为 1–64 MiB、展开后的 WAL 原子记录上限 64 MiB；这些是实现边界，调高配额不会绕过。批次可能因覆盖索引扩张而超过 WAL 上限并被整体拒绝。批次数量、读键数和分页大小可调至最多 100000，但仍受字节、扫描、时间及内存预算约束。JSON 深度最多 32、字段/元素数最多 16384、编码键最多 8 KiB。
 

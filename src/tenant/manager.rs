@@ -562,6 +562,7 @@ impl Store {
                         identity_clock: Default::default(),
                         subject_progress: Default::default(),
                         collection_id: Default::default(),
+                        write_indexes: Default::default(),
                         query_catalog: Default::default(),
                         dsl: crate::dsl::Cache::default(),
                         engine,

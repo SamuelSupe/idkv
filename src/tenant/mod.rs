@@ -26,6 +26,7 @@ pub(crate) struct TenantCore {
     pub identity_clock: std::sync::OnceLock<crate::identity::ClockAnchor>,
     pub subject_progress: Mutex<Option<crate::identity::SubjectMaintenanceProgress>>,
     pub collection_id: parking_lot::RwLock<Option<catalog::CachedCollection>>,
+    pub write_indexes: Mutex<Option<Arc<catalog::WriteIndexes>>>,
     pub query_catalog: parking_lot::RwLock<crate::query::catalog::CatalogCache>,
     pub dsl: crate::dsl::Cache,
     pub engine: Arc<Engine>,

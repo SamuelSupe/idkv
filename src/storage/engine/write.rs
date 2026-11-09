@@ -1,4 +1,16 @@
 use super::*;
+
+const MIN_EARLY_SYNC_BATCH: u64 = 8;
+const GROUP_COMMIT_CONTENTION_TTL: Duration = Duration::from_millis(10);
+
+struct ActiveWrite<'a>(&'a AtomicUsize);
+
+impl Drop for ActiveWrite<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
 impl Engine {
     pub fn transact<T>(
         self: &Arc<Self>,
@@ -49,6 +61,8 @@ impl Engine {
         check: Option<&dyn Fn() -> Result<()>>,
     ) -> Result<(T, Option<Snapshot>)> {
         self.ensure_durable()?;
+        self.active_writes.fetch_add(1, Ordering::Relaxed);
+        let _active = ActiveWrite(&self.active_writes);
         let authority = self.authority.read().clone();
         let (_permission, transaction, writer, view) = loop {
             if let Some(check) = check {
@@ -97,6 +111,7 @@ impl Engine {
             engine: self,
             view: &view,
             read_seq: writer.staged,
+            catalog_read_seq: writer.catalog_staged,
             seq,
             changes: BTreeMap::new(),
             memory: Vec::new(),
@@ -111,12 +126,23 @@ impl Engine {
         let result = f(&mut tx)?;
         let maintenance_disk = tx.maintenance_disk;
         drop(tx.json_cache);
+        // The transaction lock fixes the staged sequence while packing. Leave
+        // the writer lock available to publish a preceding durable prefix.
+        let prepared = (!tx.changes.is_empty()).then(|| {
+            let records: Vec<Record> = tx.changes.into_values().collect();
+            let memory = self.cache.reserve(
+                &self.budget,
+                records.iter().map(Record::size).sum::<usize>() * 2,
+            )?;
+            let bytes = wal::encode(seq, &records)?;
+            Ok::<_, Error>((records, memory, bytes))
+        });
         let mut writer = self.writer.lock();
         if let Some(error) = &writer.poison {
             return Err(error.clone());
         }
         debug_assert_eq!(writer.staged, read_seq);
-        if tx.changes.is_empty() {
+        let Some(prepared) = prepared else {
             // Idempotent retries can observe a preceding staged transaction.
             // Its receipt must not escape before the original WAL is durable.
             let observed = writer.staged;
@@ -137,13 +163,8 @@ impl Engine {
                 return Err(error.clone());
             }
             return Ok((result, snapshot));
-        }
-        let records: Vec<Record> = tx.changes.into_values().collect();
-        let memory = self.cache.reserve(
-            &self.budget,
-            records.iter().map(Record::size).sum::<usize>() * 2,
-        )?;
-        let bytes = wal::encode(seq, &records)?;
+        };
+        let (records, memory, bytes) = prepared?;
         let snapshot = if pin {
             Some(self.pin(
                 self.view.read().clone(),
@@ -168,6 +189,10 @@ impl Engine {
         self.record_staged_commit(&mut writer, seq, &records, wal_bytes);
         self.view.read().mem.apply(records, memory);
         writer.staged = seq;
+        let window_us = self.options.wal_group_window_us;
+        if window_us != 0 && writer.syncing && self.group_has_enough_writes(seq) {
+            self.group_ready.notify_one();
+        }
         drop(transaction);
         while self.seq() < seq && writer.poison.is_none() {
             if writer.syncing {
@@ -175,9 +200,29 @@ impl Engine {
                 continue;
             }
             writer.syncing = true;
-            drop(writer);
-            std::thread::sleep(Duration::from_millis(1));
-            writer = self.writer.lock();
+            if window_us != 0 && self.active_writes.load(Ordering::Relaxed) > 1 {
+                writer.last_contention = Some(Instant::now());
+            }
+            if window_us != 0
+                && writer
+                    .last_contention
+                    .is_some_and(|last| last.elapsed() < GROUP_COMMIT_CONTENTION_TTL)
+            {
+                // Cut the wait when the group covers the active writers. A
+                // minimum batch avoids splitting a burst that's still arriving.
+                self.group_ready.wait_while_for(
+                    &mut writer,
+                    |writer| {
+                        writer.poison.is_none() && !self.group_has_enough_writes(writer.staged)
+                    },
+                    Duration::from_micros(window_us),
+                );
+                if writer.poison.is_some() {
+                    writer.syncing = false;
+                    self.notify_durable();
+                    break;
+                }
+            }
             let through = writer.staged;
             let catalog_through = writer.catalog_staged;
             let file = writer.wal.file.clone();
@@ -201,6 +246,11 @@ impl Engine {
             return Err(error.clone());
         }
         Ok((result, snapshot))
+    }
+
+    fn group_has_enough_writes(&self, staged: u64) -> bool {
+        let active = self.active_writes.load(Ordering::Relaxed) as u64;
+        staged - self.seq() >= active.max(MIN_EARLY_SYNC_BATCH)
     }
     pub(super) fn record_staged_commit(
         &self,
@@ -289,6 +339,7 @@ pub struct Transaction<'a> {
     pub(super) engine: &'a Engine,
     pub(super) view: &'a View,
     pub(super) read_seq: u64,
+    pub(crate) catalog_read_seq: u64,
     pub seq: u64,
     pub(super) changes: BTreeMap<Vec<u8>, Record>,
     pub(super) memory: Vec<Reservation>,
@@ -575,6 +626,62 @@ impl<'view> Transaction<'view> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn document_writes_invalidate_cached_indexes_at_the_staged_catalog_version() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::Store::open(dir.path(), Options::default()).unwrap();
+        let tenant = store
+            .tenant(store.create_tenant("staged-catalog").unwrap().id)
+            .unwrap();
+        tenant.create_collection("docs").unwrap();
+        tenant
+            .create_index(
+                "docs",
+                crate::IndexSpec {
+                    name: "unique-ip".into(),
+                    fields: vec![crate::IndexField {
+                        field: "/ip".into(),
+                        order: crate::Order::Asc,
+                    }],
+                    unique: true,
+                    include: vec![],
+                },
+            )
+            .unwrap();
+        tenant
+            .put("docs", serde_json::json!({"_key":"first","ip":1}), None)
+            .unwrap();
+        let engine = tenant.engine().clone();
+        let _maintenance = engine.maintenance.lock();
+        let committed = engine.seq();
+        engine.writer.lock().syncing = true;
+        let wait_staged = |seq| {
+            let deadline = Instant::now() + Duration::from_secs(2);
+            while engine.writer.lock().staged < seq && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            engine.writer.lock().staged >= seq
+        };
+        let dropping = tenant.clone();
+        let drop_index = std::thread::spawn(move || dropping.drop_index("docs", "unique-ip"));
+        let drop_staged = wait_staged(committed + 1);
+        let putting = tenant.clone();
+        let put = std::thread::spawn(move || {
+            putting.put("docs", serde_json::json!({"_key":"second","ip":1}), None)
+        });
+        let put_staged = wait_staged(committed + 2);
+        assert_eq!(engine.seq(), committed);
+        {
+            let mut writer = engine.writer.lock();
+            writer.syncing = false;
+            engine.sync_writer(&mut writer).unwrap();
+        }
+        drop_index.join().unwrap().unwrap();
+        put.join().unwrap().unwrap();
+        assert!(drop_staged && put_staged);
+        assert!(tenant.get("docs", "second").unwrap().is_some());
+    }
+
     #[test]
     fn replication_lease_operations_do_not_acquire_engine_ownership() {
         let dir = tempfile::tempdir().unwrap();
@@ -1483,7 +1590,7 @@ mod tests {
                 .unwrap();
             let engine = tenant.engine().clone();
             // Reproduce the valid interval after WAL append + staging and before
-            // the group leader wakes to fsync. The reader must not acknowledge it.
+            // the group leader confirms the fsync. The reader must not acknowledge it.
             let mut writer = engine.writer.lock();
             let seq = writer.staged + 1;
             let records = vec![Record {
