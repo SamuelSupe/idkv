@@ -117,7 +117,7 @@ impl Counter {
         };
         self.state
             .used
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |n| {
                 n.checked_add(size).filter(|next| *next <= limit)
             })
             .is_ok()
@@ -148,7 +148,7 @@ impl Counter {
     }
     fn pressure_state(&self, state: &AtomicBool, exit: usize) -> bool {
         let limit = self.foreground_limit();
-        let _ = state.fetch_update(Ordering::AcqRel, Ordering::Acquire, |active| {
+        let _ = state.try_update(Ordering::AcqRel, Ordering::Acquire, |active| {
             let used = self.used();
             let next = self.state.headroom != 0
                 && if active {
@@ -583,7 +583,7 @@ impl RequestGate {
             return Err(Error::new("BUSY", "tenant is draining for recovery"));
         }
         self.active
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |n| {
                 (n < self.limit).then_some(n + 1)
             })
             .map_err(|_| Error::limit("tenant concurrency limit reached"))?;

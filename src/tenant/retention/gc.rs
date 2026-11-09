@@ -21,7 +21,7 @@ pub(super) struct State {
     alias_active: bool,
     history_identifier: Option<String>,
     baseline_kept: bool,
-    sweeping_floor: u64,
+    pub(super) sweeping_floor: u64,
     pub(super) swept_floor: u64,
     pub reclaimed_records: u64,
     pub completed_rounds: u64,
@@ -219,7 +219,7 @@ fn expire(tx: &mut Transaction<'_>, state: &mut State, batch: usize) -> Result<(
                         tx.delete(prefix(b'S', collection))?;
                         queue_gc(
                             tx,
-                            [b'D', b'I', b'J', b'L', b'B']
+                            b"DIJLB"
                                 .iter()
                                 .map(|kind| prefix(*kind, collection))
                                 .collect(),
@@ -238,7 +238,12 @@ fn history(tx: &mut Transaction<'_>, state: &mut State, batch: usize) -> Result<
     let Some(collection) = identity_collection(tx)? else {
         return Ok(());
     };
-    if !crate::identity::subjects_ready(tx, collection)? {
+    let migration_limit = crate::identity::subject_history_gc_limit(tx, collection)?;
+    let prefix = doc_prefix(collection, "history:");
+    if migration_limit
+        .as_ref()
+        .is_some_and(|limit| limit <= &prefix)
+    {
         return Ok(());
     }
     if state.history_after.is_none() {
@@ -266,10 +271,12 @@ fn history(tx: &mut Transaction<'_>, state: &mut State, batch: usize) -> Result<
         state.history_identifier = None;
         state.baseline_kept = false;
     }
-    let prefix = doc_prefix(collection, "history:");
     let (rows, exhausted) = tx.gc_prefix(&prefix, state.history_after.as_deref(), batch)?;
     for record in rows {
         let k = &record.key;
+        if migration_limit.as_ref().is_some_and(|limit| k >= limit) {
+            break;
+        }
         if state.history_after.as_ref().is_some_and(|after| k <= after) {
             continue;
         }
@@ -304,7 +311,7 @@ fn history(tx: &mut Transaction<'_>, state: &mut State, batch: usize) -> Result<
                 codec::prefix_end(&doc_prefix(collection, &format!("history:{identifier}:")));
         }
     }
-    if exhausted {
+    if exhausted && migration_limit.is_none() {
         state.history_after = None;
         state.swept_floor = state.sweeping_floor;
         state.history_identifier = None;

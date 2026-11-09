@@ -54,7 +54,7 @@ v0.2 增加 [OpenDAL S3 备份](docs/backup.md)：本地存储为主、异步检
 
 GitHub 仓库提交源代码、测试、文档和验证记录，使用以下命令从源码构建。Linux 验证二进制动态链接 glibc，构建哈希记录于对应验证报告，不提交到源码仓库。本次不创建 GitHub Release。
 
-需要 Rust 1.90+ 和 Unix 文件系统；Linux 为已验证平台。运行目录必须支持文件锁、原子重命名及文件/目录 `fsync`。
+需要 Rust 1.99.1 和 Unix 文件系统；仓库通过 `rust-toolchain.toml` 固定工具链、rustfmt 和 Clippy，Cargo 的最低版本声明同步为 1.99.1。Linux 为已验证平台。运行目录必须支持文件锁、原子重命名及文件/目录 `fsync`。
 
 ```sh
 cargo build --locked --release --bin tenant-kv --bin tenant-kv-restore --bin tenant-kv-repair

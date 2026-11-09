@@ -264,7 +264,7 @@ impl Engine {
             self.info.disk_bytes - self.info.disk_bytes / 5
         };
         self.disk
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |n| {
                 n.checked_add(bytes).filter(|v| *v <= limit)
             })
             .map_err(|_| Error::limit("tenant disk quota/headroom exhausted"))?;

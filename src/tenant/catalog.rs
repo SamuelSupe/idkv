@@ -183,7 +183,7 @@ impl TenantHandle {
             tx.delete(named(b"C", name))?;
             queue_gc(
                 tx,
-                [b'D', b'I', b'J', b'L', b'B']
+                b"DIJLB"
                     .iter()
                     .map(|kind| prefix(*kind, collection.id))
                     .collect(),

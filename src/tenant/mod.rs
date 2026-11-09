@@ -24,6 +24,7 @@ pub(crate) const STORAGE_REGISTRY_VERSION: u32 = 6;
 
 pub(crate) struct TenantCore {
     pub identity_clock: std::sync::OnceLock<crate::identity::ClockAnchor>,
+    pub subject_progress: Mutex<Option<crate::identity::SubjectMaintenanceProgress>>,
     pub collection_id: parking_lot::RwLock<Option<catalog::CachedCollection>>,
     pub query_catalog: parking_lot::RwLock<crate::query::catalog::CatalogCache>,
     pub dsl: crate::dsl::Cache,

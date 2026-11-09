@@ -87,13 +87,24 @@ pub(super) fn extend(api: &mut Value) {
         &["retention_seconds", "activated_seq", "legacy_expires_at_ms"],
     );
     schemas["RetentionStatus"] = object(
-        json!({"policy":{"oneOf":[reference("RetentionPolicy"),{"type":"null"}]},"gc":{"type":["object","null"],"additionalProperties":true},"physical_reclamation":text,"next_expiration_ms":{"type":["integer","null"],"minimum":0},"expiration_lag_ms":seq}),
+        json!({"policy":{"oneOf":[reference("RetentionPolicy"),{"type":"null"}]},"gc":{"type":["object","null"],"additionalProperties":true},"identity_subjects":{"oneOf":[reference("SubjectMaintenanceProgress"),{"type":"null"}]},"physical_reclamation":text,"next_expiration_ms":{"type":["integer","null"],"minimum":0},"expiration_lag_ms":seq}),
         &[
             "policy",
             "gc",
+            "identity_subjects",
             "physical_reclamation",
             "next_expiration_ms",
             "expiration_lag_ms",
+        ],
+    );
+    schemas["SubjectMaintenanceProgress"] = object(
+        json!({"ready":{"type":"boolean"},"processed_history_rows":seq,"written_links":seq,"gc_scanned_rows":seq,"gc_removed_rows":seq}),
+        &[
+            "ready",
+            "processed_history_rows",
+            "written_links",
+            "gc_scanned_rows",
+            "gc_removed_rows",
         ],
     );
     schemas["RetryContext"] = object(

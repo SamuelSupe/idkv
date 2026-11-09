@@ -34,8 +34,8 @@ impl<'a> Scratch<'a> {
             bytes: 0,
             memory: Vec::new(),
             deadline: None,
-            // Migration visits one source document and at most four links.
-            // Client query limits must not permanently block background repair.
+            // Maintenance has its own row/byte/time limits; client query limits
+            // must not permanently block background repair.
             limit: tenant
                 .engine()
                 .options

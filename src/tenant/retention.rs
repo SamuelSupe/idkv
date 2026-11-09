@@ -345,6 +345,7 @@ impl TenantHandle {
         let now = now_ms()?.max(state.as_ref().map_or(0, |s| s.watermark_ms));
         Ok(
             serde_json::json!({"policy":snapshot_policy(&snapshot)?,"gc":state.map(|s|s.status()),
+            "identity_subjects":self.subject_maintenance_progress(&snapshot)?,
             "next_expiration_ms":next,"expiration_lag_ms":next.map_or(0,|at|now.saturating_sub(at)),
             "physical_reclamation":"as snapshots release and compaction completes"}),
         )
@@ -388,5 +389,5 @@ mod tests;
 pub(crate) fn knowledge_floor(tx: &Transaction<'_>) -> Result<u64> {
     Ok(tx
         .cached_json::<gc::State>(STATE)?
-        .map_or(0, |s| s.swept_floor))
+        .map_or(0, |s| s.swept_floor.max(s.sweeping_floor)))
 }

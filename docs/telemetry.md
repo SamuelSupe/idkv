@@ -1,5 +1,7 @@
 # 指标、OpenTelemetry 链路与日志
 
+主体维护增加 `tkv_open_engines_identity_subjects_ready_tenants`、`tkv_open_engines_identity_subjects_migrating_tenants`、`tkv_open_engines_identity_subjects_processed_history_rows`、`tkv_open_engines_identity_subjects_written_links`、`tkv_open_engines_identity_subjects_gc_scanned_rows` 和 `tkv_open_engines_identity_subjects_gc_removed_rows`。这些是本节点已观测维护进度的打开租户汇总 gauge：租户关闭时会下降，不应视作进程累计 counter；抓取不打开冷租户、不做存储扫描。按租户查看持久 ready/计数（包括从库收到的状态）使用 `GET /v1/tenants/{tenant}/retention` 的 identity_subjects 字段，缓存 status.stats 可能尚未初始化或落后。以进度差值、持续 not-ready 时长及 maintenance_error 组合判断迁移是否停滞，具体批次与保留边界见[身份文档](identity.md#迁移进度)。
+
 v0.7 的三个开关相互独立，服务启动时读取配置。默认开启指标，关闭链路与日志导出；环境中的 OTEL 配置不会自行开启导出。全关配置为 `{"metrics":false,"traces":false,"logs":false}`。配置修改后重启服务生效。
 
 ```sh

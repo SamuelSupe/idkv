@@ -8,11 +8,12 @@ use crate::{
     ReadOptions, ReadStats, TenantReader, codec,
     query::Cursor,
     read::ReadBudget,
-    resources::Reservation,
+    resources::{Bytes, Reservation},
     storage::{ScanRange, Snapshot},
     tenant::{catalog::document_key, retention},
 };
 use serde::{Serialize, de::DeserializeOwned};
+use std::sync::Arc;
 
 struct Page<'a> {
     tenant: &'a TenantHandle,
@@ -44,16 +45,16 @@ impl<'a> Page<'a> {
             codec::field(bytes, "/data")?.ok_or_else(|| Error::corrupt("identity record data"))?;
         serde_json::from_value(value).map_err(|e| Error::corrupt(e.to_string()))
     }
-    fn get<T: DeserializeOwned>(&mut self, key: &str) -> Result<Option<T>> {
+    fn raw(&mut self, key: &str) -> Result<Option<Arc<Bytes>>> {
         self.stats.document_reads += 1;
-        self.snapshot
-            .get_controlled(
-                &document_key(self.collection, key),
-                &mut self.stats,
-                self.budget,
-            )?
-            .map(|b| self.decode(&b))
-            .transpose()
+        self.snapshot.get_controlled(
+            &document_key(self.collection, key),
+            &mut self.stats,
+            self.budget,
+        )
+    }
+    fn get<T: DeserializeOwned>(&mut self, key: &str) -> Result<Option<T>> {
+        self.raw(key)?.map(|b| self.decode(&b)).transpose()
     }
     fn retain<T: Serialize>(&mut self, value: &T) -> Result<()> {
         let size = crate::json::encoded_len(value)?
@@ -534,6 +535,21 @@ impl TenantReader<'_> {
             };
             page.stats.document_reads += 1;
             let key: String = page.decode(&bytes)?;
+            let prefetched = if from.is_some() {
+                page.raw(&key)?
+            } else {
+                None
+            };
+            if let (Some(from), Some(bytes)) = (from, prefetched.as_ref()) {
+                // Expired payloads can still prove that the rest of this ordered
+                // range is too old. Do not decode their user attributes to do so.
+                let recorded: i64 = codec::field_as(bytes, "/data/knowledge/recorded_at_us")?
+                    .ok_or_else(|| Error::corrupt("identity event recorded time missing"))?;
+                if recorded < from {
+                    exhausted = true;
+                    break;
+                }
+            }
             let valid = retention::check_snapshot_controlled(
                 &snapshot,
                 &document_key(page.collection, &key),
@@ -546,20 +562,28 @@ impl TenantReader<'_> {
                 Err(e) if e.code == "HISTORY_EXPIRED" => continue,
                 result => result?,
             }
-            let Some(event) = page.get::<IdentityEvent>(&key)? else {
+            let bytes = match prefetched {
+                Some(bytes) => Some(bytes),
+                None => page.raw(&key)?,
+            };
+            let Some(bytes) = bytes else {
                 if policy {
                     continue;
                 }
                 return Err(Error::corrupt("subject event payload missing"));
             };
+            let event: IdentityEvent = page.decode(&bytes)?;
             if !event.entity_ids.contains(&request.entity_id)
                 || event.knowledge.ordinal > page.knowledge.ordinal
             {
                 return Err(Error::corrupt("subject event index mismatch"));
             }
-            if from.is_some_and(|f| event.knowledge.recorded_at_us < f)
-                || to.is_some_and(|t| event.knowledge.recorded_at_us >= t)
-            {
+            if from.is_some_and(|f| event.knowledge.recorded_at_us < f) {
+                // Identity writes strictly increase recorded time with ordinal.
+                exhausted = true;
+                break;
+            }
+            if to.is_some_and(|t| event.knowledge.recorded_at_us >= t) {
                 continue;
             }
             page.retain(&event)?;

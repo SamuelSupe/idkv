@@ -12,6 +12,16 @@ use std::collections::BTreeSet;
 
 pub(super) const STATE: &str = "head:subjects";
 
+/// Durable work counters. Open-engine metrics cache these after successful commits.
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+pub struct SubjectMaintenanceProgress {
+    pub ready: bool,
+    pub processed_history_rows: u64,
+    pub written_links: u64,
+    pub gc_scanned_rows: u64,
+    pub gc_removed_rows: u64,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub(super) struct SubjectState {
     pub ready: bool,
@@ -25,6 +35,25 @@ pub(super) struct SubjectState {
     pub gc_baseline: bool,
     pub gc_floor: u64,
     pub swept_floor: u64,
+    #[serde(default)]
+    pub processed_history_rows: u64,
+    #[serde(default)]
+    pub written_links: u64,
+    #[serde(default)]
+    pub gc_scanned_rows: u64,
+    #[serde(default)]
+    pub gc_removed_rows: u64,
+}
+impl SubjectState {
+    pub fn progress(&self) -> SubjectMaintenanceProgress {
+        SubjectMaintenanceProgress {
+            ready: self.ready,
+            processed_history_rows: self.processed_history_rows,
+            written_links: self.written_links,
+            gc_scanned_rows: self.gc_scanned_rows,
+            gc_removed_rows: self.gc_removed_rows,
+        }
+    }
 }
 #[derive(Clone, Serialize, Deserialize)]
 pub(super) struct Membership {
@@ -66,6 +95,10 @@ pub(super) fn ensure_state(
         gc_baseline: false,
         gc_floor: 0,
         swept_floor: 0,
+        processed_history_rows: 0,
+        written_links: 0,
+        gc_scanned_rows: 0,
+        gc_removed_rows: 0,
     };
     scratch.write(tx, collection, STATE, "subject_state", &state)?;
     Ok(state)

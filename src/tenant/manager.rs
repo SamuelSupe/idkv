@@ -127,6 +127,18 @@ impl Store {
                         *out.entry(name.clone()).or_default() += value;
                     }
                 }
+                if let Some(progress) = *core.subject_progress.lock() {
+                    for (name, value) in [
+                        ("ready_tenants", u64::from(progress.ready)),
+                        ("migrating_tenants", u64::from(!progress.ready)),
+                        ("processed_history_rows", progress.processed_history_rows),
+                        ("written_links", progress.written_links),
+                        ("gc_scanned_rows", progress.gc_scanned_rows),
+                        ("gc_removed_rows", progress.gc_removed_rows),
+                    ] {
+                        *out.entry(format!("identity_subjects_{name}")).or_default() += value;
+                    }
+                }
             }
         }
         out
@@ -548,6 +560,7 @@ impl Store {
                     engine.attach_manager(inner._lock.clone(), inner.node.clone());
                     slot.core = Some(Arc::new(TenantCore {
                         identity_clock: Default::default(),
+                        subject_progress: Default::default(),
                         collection_id: Default::default(),
                         query_catalog: Default::default(),
                         dsl: crate::dsl::Cache::default(),
@@ -745,7 +758,8 @@ impl Store {
         let slot = slot.lock();
         let stats = slot.core.as_ref().map(|core| serde_json::json!({
             "commit_seq":core.engine.seq(), "io":core.engine.metrics(), "memory_bytes":core.engine.memory_bytes(), "disk_bytes":core.engine.disk_bytes(), "dsl_cache":core.dsl.stats(),
-            "levels":core.engine.table_counts(), "snapshots":core.engine.active_snapshots(), "recovery_read_only":core.engine.recovery_read_only(), "maintenance_error":core.engine.maintenance_error.lock().clone()
+            "levels":core.engine.table_counts(), "snapshots":core.engine.active_snapshots(), "recovery_read_only":core.engine.recovery_read_only(), "maintenance_error":core.engine.maintenance_error.lock().clone(),
+            "identity_subjects":*core.subject_progress.lock()
         }));
         Ok(
             serde_json::json!({"tenant":registration.info,"lifecycle":registration.lifecycle,"open":slot.core.is_some(),"installing":slot.installing.is_some(),"failure":slot.failure,"stats":stats}),

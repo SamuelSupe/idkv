@@ -121,7 +121,7 @@ impl Pair {
                         if request.uri().path() == "/v1/replication/log"
                             && gate
                                 .fail_logs
-                                .fetch_update(
+                                .try_update(
                                     std::sync::atomic::Ordering::AcqRel,
                                     std::sync::atomic::Ordering::Acquire,
                                     |n| n.checked_sub(1),

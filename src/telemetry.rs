@@ -224,10 +224,9 @@ impl Telemetry {
         let mut attributes = Vec::new();
         for (i, (field, count)) in READ_FIELDS.iter().zip(counts).enumerate() {
             if self.metrics_enabled() {
-                let _ =
-                    self.0.reads[i].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |total| {
-                        Some(total.saturating_add(count))
-                    });
+                let _ = self.0.reads[i].try_update(Ordering::Relaxed, Ordering::Relaxed, |total| {
+                    Some(total.saturating_add(count))
+                });
             }
             if self.0.traces.is_some() {
                 attributes.push(KeyValue::new(

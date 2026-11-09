@@ -1,5 +1,7 @@
 # 主体反查和变更历史验证（2026-11-09）
 
+后续批量迁移、历史回收、容量边界及 Rust 1.99.1 的增量验证见[迁移优化验证记录](subject-maintenance-validation-20261109.md)。下文保留本阶段的原始环境和测量。
+
 实现位于当前 b006c00 工作树，接续此前 resolve_many 改动。入口为 `/identity/ids`、`/identity/history`，对应 DSL `ids`、`history` 和 Rust/HTTP Client 的 `get_subject_identifiers`、`get_subject_history`。参数和升级规则见 [identity.md](identity.md#主体反查和变更历史)。
 
 ## 实现与边界
