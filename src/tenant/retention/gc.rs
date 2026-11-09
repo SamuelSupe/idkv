@@ -271,8 +271,18 @@ fn history(tx: &mut Transaction<'_>, state: &mut State, batch: usize) -> Result<
         state.history_identifier = None;
         state.baseline_kept = false;
     }
-    let (rows, exhausted) = tx.gc_prefix(&prefix, state.history_after.as_deref(), batch)?;
-    for record in rows {
+    let started = std::time::Instant::now();
+    let mut stats = crate::ReadStats::default();
+    let mut scan = tx.gc_scan(&prefix, state.history_after.as_deref(), &mut stats)?;
+    let mut exhausted = false;
+    for n in 0..batch {
+        if n > 0 && started.elapsed() >= std::time::Duration::from_millis(10) {
+            break;
+        }
+        let Some(record) = scan.next_for_gc(&mut stats, batch)? else {
+            exhausted = scan.exhausted();
+            break;
+        };
         let k = &record.key;
         if migration_limit.as_ref().is_some_and(|limit| k >= limit) {
             break;
@@ -309,6 +319,7 @@ fn history(tx: &mut Transaction<'_>, state: &mut State, batch: usize) -> Result<
             // The exclusive identifier bound is not itself a history record key.
             state.history_after =
                 codec::prefix_end(&doc_prefix(collection, &format!("history:{identifier}:")));
+            scan = tx.gc_scan(&prefix, state.history_after.as_deref(), &mut stats)?;
         }
     }
     if exhausted && migration_limit.is_none() {
@@ -407,7 +418,7 @@ pub(super) fn step(tenant: &TenantHandle) -> Result<()> {
                     }
                 }
                 if state.migration_phase >= 7 {
-                    history(tx, &mut state, batch)?;
+                    history(tx, &mut state, expiry_batch)?;
                     state.alias_active |= state.reclaimed_records > previous_reclaimed;
                     if state.alias_active {
                         reclaim_receipt_alias(tx, &mut state)?;

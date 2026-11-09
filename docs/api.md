@@ -1,104 +1,137 @@
-# API 与查询契约
+# HTTP API and data contracts — 1.0
 
-v0.10 提供[请求级读取控制](read-controls.md)：读取截止时间、扫描预算、禁止全扫描和取消。现有请求正文与 DSL 语法保持不变。
+Base URL for tenant data: `/v1/tenants/{tenant_uuid}`. All examples assume Bearer authentication and Content-Type: application/json. The [deployment guide](deployment.md) covers installation and credentials.
 
-HTTP 所有数据接口以 `/v1/tenants/{tenant_uuid}` 开头。`GET /openapi.json` 提供 OpenAPI 3.1，`tenant-kv openapi` 可导出同一份定义。HTTP 响应为 JSON，同步成功为 200，远端备份任务提交为 202；错误为 `{"error":{"code":"...","message":"..."}}`。
+`GET /openapi.json` serves OpenAPI 3.1, generated once for the router's configured limits. `tenant-kv openapi` exports the default-limit contract; [openapi.json](../openapi.json) is the release copy. Use the schema for exact request and response shapes.
 
-响应头 `x-tkv-history` 从内部注册表及复制状态读取，不打开租户引擎，也不从用户文档中的同名字段推断；文档可以合法保存任意 JSON `history` 值。读取状态、关闭、修改配额或恢复后的响应编码不会为填充此头重新打开实例。
+Synchronous success returns 200; remote backup submissions return 202. Errors have the form:
 
-## 接口
+```json
+{"error":{"code":"INVALID_ARGUMENT","message":"..."}}
+```
 
-以下 `T` 表示 `/v1/tenants/{tenant}`，`C` 表示 `T/collections/{collection}`。
+The server's X-TKV-History header comes from internal registration/replication state, never from a user's document. Do not infer commit history from application JSON.
 
-| 方法与路径 | 请求 / 行为 |
+<a id="接口"></a>
+## Routes and authorization
+
+Here **T** means /v1/tenants/{tenant} and **C** means T/collections/{collection}.
+
+| Method and path | Behavior |
 |---|---|
-| `POST /v1/tenants` | `{"name":"customer-a"}`，全局管理员创建 |
-| `GET /v1/tenants` | 列出活跃租户，全局管理员 |
-| `PUT / GET T/retention` | 设置/查看唯一参数 retention_seconds 与回收状态，admin；当前状态不失效 |
-| `POST T/retry-context` | 写入主体获取首次提交凭据；必须与原请求一同保存并复用 |
-| `GET T` | 生命周期、配额、打开状态、错误和运行统计 |
-| `POST T/dsl` | `{"statement":"get assets $key","params":{"key":"a"}}`，可选 cursor；按命令校验读/写权限 |
-| `PATCH T` | `{"memory_bytes":536870912,"disk_bytes":107374182400}`；关闭空闲实例后更新 |
-| `DELETE T` | 删除租户，UUID 留作不可复用墓碑 |
-| `POST T/close` | 关闭无活动句柄/快照的租户，否则 BUSY |
-| `POST T/collections` | `{"name":"assets"}` |
-| `GET T/collections` | 列出集合 |
-| `DELETE C` | 原子移除目录与定义，后台分批回收内容 |
-| `PUT C/documents` | `{"document":{"_key":"a","ip":"10.0.0.1"},"if_rev":0}` |
-| `GET C/documents/{key}` | 文档，不存在为 NOT_FOUND |
-| `DELETE C/documents/{key}` | 可选正文 `{"if_rev":123,"write_options":{"expected_history":"原读取标识"}}` |
-| `POST C/batch` | `{"operations":[{"op":"put","document":{}},{"op":"delete","key":"a"}]}` |
-| `POST C/multi_get` | `{"keys":["a","b","a"]}`；同序返回，未命中为 null |
-| `POST T/read_batch` | 同租户跨集合组合 Get/MultiGet/Query；同一快照、整批预算；见 [组合能力](kv-capabilities.md) |
-| `POST C/indexes` | IndexSpec；调用等待构建完成，其他请求可并发写入；每次 L0/内存表背压准入等待最多 5 秒，见运维文档 |
-| `GET C/indexes` | 状态为 BUILDING、READY 或 FAILED |
-| `GET / DELETE C/indexes/{index}` | 查看或删除索引 |
-| `POST C/lookups` | 创建固定 Lookup 定义 |
-| `GET C/lookups` | 列出定义 |
-| `DELETE C/lookups/{lookup}` | 删除定义 |
-| `POST C/lookups/{lookup}/execute` | `{"inputs":[{"ip":"10.0.0.1"}]}` |
-| `POST C/query` | Query，返回文档、游标、快照序号、计划和实际统计 |
-| `POST C/explain` | Query，仅返回计划；实际 I/O 统计在 query 结果中 |
-| `DELETE T/cursors/{cursor}` | 提前释放分页快照，read 角色即可，仍校验租户 |
-| `POST T/checkpoint` | 刷盘并建立持久 checkpoint |
-| `POST T/backup` | 返回 `{"backup":"UUID"}`；本地总额/数量/空闲空间受限 |
-| `DELETE T/backup/{backup}` | 删除本租户本地备份，需要 admin；不删除远端备份 |
-| `POST T/restore` | `{"backup":"UUID"}`，仅允许本租户备份 |
-| `GET / POST T/remote-backups` | 列出远端备份 / 提交异步创建任务 |
-| `POST T/remote-backups/{backup}/verify` | 提交全文件 SHA-256 校验 |
-| `POST T/remote-backups/{backup}/restore` | 提交校验及恢复任务 |
-| `POST T/remote-backups/{backup}/delete` | 显式删除远端备份元数据，含坏清单；返回异步任务 |
-| `POST T/remote-backups/prune` | `{"keep_last":7}`，按引用保留清理 |
-| `GET T/backup-jobs` | 持久任务列表 |
-| `GET / DELETE T/backup-jobs/{job}` | 查询任务 / 忘记终态任务与本地暂存 |
-| `POST T/backup-jobs/{job}/retry` | 重试失败的创建、校验或清理，禁止自动重试恢复 |
-| `POST T/check` | 校验当前 SST 内容、顺序和校验和 |
-| `POST T/compact` | 刷盘并执行完整合并 |
-| `POST T/replication/wait` | `{"epoch":"UUID","seq":123,"timeout_ms":5000}`；需 read，等待本地已应用位置 |
-| `GET /metrics` | Prometheus 文本；全局管理员；metrics=false 时返回 404 |
-| `GET T/context` | 当前 history、已应用序号与可写状态 |
-| `GET / PUT T/resources/{resource}` | 读取 / 原子发布不可变数据集；lookup 可省略，详见中间件契约 |
-| `POST T/resources/{resource}/execute` | 按指定 version 执行批量 Lookup |
-| `POST T/resources/{resource}/read` | 指定 version 的 Get/MultiGet/Query 组合读取，省略版本固定当前指针 |
-| `POST T/resources/{resource}/query` | 按发布版本查询与续页，游标固定原资源和版本 |
-| `GET /ready`、`GET /ready/write` | 无认证的读/写就绪检查，排空或角色不可用时 503 |
-| `GET /v1/capabilities` | 无认证的软件/协议能力 |
-| `GET /v1/metrics` | 全局内存、memory_pressure 回收状态与各租户统计，仅全局管理员；字段见[运维说明](operations.md) |
-| `GET /v1/replication/status` | 全局管理员或复制凭证读取节点角色与租户位置 |
-| `POST /v1/replication/switchover` | `{}`；全局管理员向当前主库发起计划切换 |
-| `POST /v1/replication/fence` | `{"target":"node UUID"}`；全局管理员持久停写 |
-| `POST /v1/replication/promote` | `{"fence":"UUID"}`；验证旧主停写凭据并追平后升主 |
-| `POST /v1/replication/follow` | `{}`；全局管理员将已停写的旧主切为其指定接任者的从库 |
-| `POST /v1/replication/force-promote` | 明确源身份、外部隔离及接受数据损失；见复制文档 |
+| POST /v1/tenants | Global admin: create with {"name":"customer-a"} |
+| GET /v1/tenants | Global admin: list active tenants |
+| GET T | Tenant lifecycle, quota, open state, failures and statistics |
+| PATCH T | Global admin: update memory_bytes/disk_bytes after drain and validation |
+| DELETE T | Global admin: delete; UUID remains permanently non-reusable |
+| POST T/close | Admin: drain and close; active long-lived handles may cause BUSY |
+| GET / PUT T/retention | Admin: status / {"retention_seconds":3600} |
+| POST T/retry-context | Writable principal: obtain a persistent retry token |
+| POST T/dsl | Native operations through the [DSL](dsl.md) |
+| POST / GET T/collections | Create / list collections |
+| DELETE C | Remove catalog atomically, reclaim contents in background |
+| PUT C/documents | {"document":{"_key":"a","owner":"platform"},"if_rev":0} |
+| GET C/documents/{key} | Read document; NOT_FOUND if absent |
+| DELETE C/documents/{key} | Optional if_rev and write_options |
+| POST C/batch | Atomic Put/Delete/Check operations |
+| POST C/multi_get | {"keys":["a","missing","a"]}; ordered results, null on miss |
+| POST T/read_batch | Same-snapshot Get/MultiGet/Query across collections |
+| POST / GET C/indexes | Build an index / list BUILDING, READY or FAILED |
+| GET / DELETE C/indexes/{index} | Inspect / delete an index |
+| POST / GET C/lookups | Define / list named lookups |
+| DELETE C/lookups/{lookup} | Delete a lookup definition |
+| POST C/lookups/{lookup}/execute | {"inputs":[{"ip":"10.0.0.1"}]} |
+| POST C/query | Query, pagination, plan and measured read statistics |
+| POST C/explain | Plan only |
+| DELETE T/cursors/{cursor} | Release a paging snapshot early |
+| GET T/context | Current history, applied sequence and write role |
+| GET / PUT T/resources/{resource} | Inspect / publish an immutable dataset |
+| POST T/resources/{resource}/execute | Run the published lookup at a version |
+| POST T/resources/{resource}/read | Version-bound Get/MultiGet/Query composition |
+| POST T/resources/{resource}/query | Query a published version and continue its cursor |
+| POST T/checkpoint | Flush and produce a durable checkpoint |
+| POST T/backup | Create local backup; returns {"backup":"UUID"} |
+| DELETE T/backup/{backup} | Delete this tenant's local backup |
+| POST T/restore | Restore this tenant's local {"backup":"UUID"} |
+| GET / POST T/remote-backups | List / asynchronously create remote backup |
+| POST T/remote-backups/{backup}/verify | Submit SHA-256 verification |
+| POST T/remote-backups/{backup}/restore | Submit verified restore |
+| POST T/remote-backups/{backup}/delete | Explicitly delete remote metadata, including bad manifests |
+| POST T/remote-backups/prune | {"keep_last":7}; reference-aware pruning |
+| GET T/backup-jobs | List persistent jobs |
+| GET / DELETE T/backup-jobs/{job} | Inspect / forget a terminal job and staging |
+| POST T/backup-jobs/{job}/retry | Retry eligible failed create/verify/prune jobs, not restore |
+| POST T/check | Verify current SST contents, ordering and checksums |
+| POST T/compact | Flush and perform a full compaction |
+| POST T/replication/wait | Wait for {"epoch":"UUID","seq":123,"timeout_ms":5000} |
 
-`read` 可读取、查询、执行 Lookup；`write` 额外可修改文档；租户 `admin` 可管理集合、索引、Lookup 和该租户备份恢复。创建/删除租户和修改租户配额需全局管理员。缩小磁盘配额会先排空并统计当前占用，必须保留前台写入空间，拒绝把租户缩到无法继续删除数据的状态。缩小内存配额会预检新预算下能否重新打开和校验存储（副本配额同步会先用旧预算刷盘）；验证拒绝不会更改原配额。创建或配额发布的 I/O 错误可能表示持久结果不确定，应重开 Store 并检查名称、生命周期和配额后再操作。库 API 的 `Store` 是可信管理入口，`TenantHandle` 是已绑定租户的数据入口。
+Public probes: GET /health, /ready, /ready/write, /v1/capabilities, /openapi.json. Readiness returns 503 while draining or when the role cannot serve the requested class.
 
-`replication` 是绑定全局的专用凭证，只允许复制状态、日志、检查点和经验证的计划升主。它不能调用普通业务 API，也不能停写、发起切换或强制升主。复制内部传输接口见 OpenAPI；配置、切换顺序及重试约束见 [replication.md](replication.md)。启用复制后普通 restore/import 被拒绝；备份仍可使用。
+Global admin telemetry: GET /v1/metrics (JSON), GET /metrics (Prometheus; 404 when disabled). Subject migration progress is available as identity_subjects in T/retention even without a retention policy; its durable counters differ from the locally cached status/Prometheus observations.
 
-租户删除遇到持久状态发布或清理错误时，结果可能不确定，错误响应不代表租户仍然可写。v0.5.2 会将受影响租户隔离为 `UNAVAILABLE`；必须重启 Store 根据持久 journal 恢复，`close` 不能解除隔离。计划切换的首次请求会先检查接任角色和复制来源，不匹配时在停写前拒绝；已经持久停写的中断仍须按复制文档重试。
+Roles:
 
-远端备份接口的 GET 同样需要 admin；202 不代表备份已完成。状态机、权限、恢复和错误处理见 [OpenDAL 备份](backup.md)。新机器导入通过离线 CLI 或可信 Rust API，不通过 HTTP 创建未经注册的租户身份。
+- **read**: document/query/lookup/identity reads and cursor release.
+- **write**: read plus ordinary document writes and retry context.
+- **identity_write / identity_correct**: managed temporal writes; manual corrections require identity_correct or admin.
+- **admin**: tenant management, indexes, datasets and backups. A global admin has tenant:null and can create/delete tenants and change quotas.
+- **replication**: dedicated global credential for peer status/log/checkpoint and validated promotion; no ordinary business API, fence, switchover or emergency promotion.
 
-DSL 的完整语法与 Rust 准备语句示例见 [dsl.md](dsl.md)。它复用下述查询/写入语义；DSL `get` 未命中为 JSON null，区别于原有文档 GET 的 404。语法错误的 error 对象额外包含 `location: {byte_offset, line, column}`，偏移从 0 起，行与字符列从 1 起；其他错误可能没有该字段。
+Tokens have a stable subject. Rotate credentials without changing subject when existing retries must remain attributable to the same principal. The trusted embedded Store is a management interface; do not expose it directly to untrusted plugins.
 
-## 文档与写入
+## Replication management
 
-`put` 为整文档替换。缺省 `_key` 时生成 UUID 字符串；`_key` 在集合内唯一，长度 1–512 UTF-8 字节。输入不能包含 `_rev`，输出 `_rev` 是该文档最后一次修改的提交序号。
+Global admin routes are GET /v1/replication/status and POST /v1/replication/{fence,promote,follow,switchover,force-promote}. Switchover is initiated on the current primary. Forced promotion requires explicit source identity, external fencing, and acceptance of data loss. Internal log/snapshot routes and exact request schemas are in OpenAPI.
 
-- 省略 `if_rev`：无条件写入。
-- `if_rev: 0`：仅文档不存在时允许写入。
-- 正数 `if_rev`：必须提供原读取的 `write_options.expected_history` 且匹配旧文档版本，否则整个批次失败。
-- 删除不存在文档为幂等成功；带条件时仍校验条件。
-- 批次只能操作同租户同集合。Put/Delete 看到前序修改的新状态，包括唯一性及版本；所有修改共同提交一个序号。
-- v0.9 增加 `{"op":"check","key":"rules","if_rev":123}`。所有 Check 在任何修改前检查，0 表示不存在；检查不修改正文/索引/文档版本，结果数组只包含 Put/Delete。详细重试及预算语义见 [组合能力](kv-capabilities.md)。
+Ordinary restore/import is rejected on replication-enabled roots. Use the [replication procedures](replication.md) and rebuild the old primary after emergency promotion. Replication is asynchronous and is not a quorum durability acknowledgement.
 
-写入回执携带 `history`，文档读取响应带 `X-TKV-History`。v0.7 的历史标识包含租户、数据分支和复制 epoch，必须作为不透明字符串使用；普通写入的持久化 operation_id、稳定 subject、最小已应用位置请求头及原子 Lookup 发布见 [中间件契约](middleware.md)。从库业务写入返回 READ_ONLY；异步确认仍仅保证主库本地持久化。
+<a id="文档与写入"></a>
+## Documents, conditional writes and retries
 
-JSON 数值支持 i64、u64 和有限 f64。`1` 与 `1.0` 属于不同类型域，字符串不转数字。整数越界拒绝。缺失与 null 不同。对象/数组可保存、投影，但索引匹配路径必须是标量；写入对象或数组到已有索引路径会失败。
+PUT replaces the whole document. Missing _key generates a UUID string; explicit keys are 1–512 UTF-8 bytes and unique within a collection. Input cannot supply _rev; output _rev is the sequence that last modified the document.
 
-字段路径采用非根 JSON Pointer，`~1` 表示 `/`，`~0` 表示 `~`。`/items/1/name` 支持按数组下标读取；数组不展开为多条索引。投影保留源容器形状，未选择的前置数组元素以 null 占位。选择整个对象/数组会保留其全部内容。
+| if_rev | Meaning |
+|---|---|
+| Omitted | Unconditional replacement or deletion |
+| 0 | Require absence |
+| Positive | Require that revision and the original write_options.expected_history |
 
-## 索引和 Lookup
+Use the history from the original read. A sequence alone is unsafe after restore or failover.
+
+```json
+{
+  "document":{"_key":"gateway","owner":"platform"},
+  "if_rev":123,
+  "write_options":{
+    "expected_history":"original-read-history",
+    "operation_id":"update-gateway-0001"
+  }
+}
+```
+
+Stable operation_id receipts support safe retry of ordinary Put/Delete/Batch and DSL writes. Persist the original request, expected history and operation ID before sending. Once retention is enabled, obtain retry_token before first submission and save/reuse it too; never refresh it to blindly repeat an uncertain operation. Same operation ID with different contents returns OPERATION_CONFLICT.
+
+Deleting an absent key is an idempotent success unless a condition fails. A batch belongs to one tenant and one collection. Its Put/Delete operations see preceding modifications, including index uniqueness; all mutations share one commit. Check operations are evaluated before mutations, do not change document revisions, and do not add Put/Delete results. Cross-collection **reads** use read_batch; cross-collection writes are not provided.
+
+Numeric values preserve i64, u64 and finite f64 semantics: 1 differs from 1.0, and strings are not coerced. Missing differs from null. Objects/arrays may be stored and projected, but index matching fields and comparison operands must be scalars.
+
+## Read controls and consistency
+
+Supported read routes accept:
+
+| Header | Meaning |
+|---|---|
+| X-TKV-Read-Timeout-Ms | Shared deadline, clamped to server query_ms |
+| X-TKV-Max-Scan | Shared physical scan limit, clamped to max_scan |
+| X-TKV-Allow-Full-Scan | false rejects collection-scan execution; explain can still show the plan |
+| X-TKV-Min-History + X-TKV-Min-Seq | Read at least a confirmed position in that history |
+
+Successful supported reads acknowledge X-TKV-Read-Controls: 1. Waiting and execution share the request deadline; version/tombstone visits count against scans. Minimum-position waiting is bounded to five seconds. Without a minimum, a replica may serve lagging local data.
+
+Read controls are rejected for DSL writes. Retry-context is a write, not a read-only consistency endpoint. See [complete read-control semantics](read-controls.md) for cancellation, client routing and deadline behavior.
+
+<a id="索引和-lookup"></a>
+## Indexes and batch lookup
 
 ```json
 {
@@ -109,25 +142,20 @@ JSON 数值支持 i64、u64 和有限 f64。`1` 与 `1.0` 属于不同类型域�
 }
 ```
 
-索引最多 8 个匹配字段、32 个覆盖字段；每集合最多 16 个索引。唯一索引只收录所有匹配字段存在且非 null 的文档。非唯一索引收录缺失和 null，因此可用于完整排序。唯一索引不会用于推断缺失/null 的完整结果。
+An index supports up to 8 matching fields and 32 covering fields; a collection supports up to 16 indexes. Unique indexes are sparse: all matching fields must exist and be non-null. Non-unique indexes include missing/null and can support complete ordering.
+
+Creation waits for READY or failure while concurrent writes continue. Management drain can interrupt a build with BUSY; its durable BUILDING state can resume. Backpressure admission during the build waits at most five seconds per admission attempt. Inspect status before deciding whether to retry creation.
 
 ```json
-{
-  "name":"asset_owner",
-  "index":"ip",
-  "select":["/ip","/owner","/service"],
-  "mode":"all",
-  "max_matches":100
-}
+{"name":"owners","index":"ip","select":["/owner","/service"],"mode":"all","max_matches":100}
 ```
 
-每个 Lookup 输入必须提供全部索引匹配路径，数据结构与文档相同。缺失输入视为未匹配；稀疏唯一索引的 null 输入也未匹配。返回与输入等长的 `matches` 数组，每项为列表，未匹配为 `[]`。重复输入保持重复位置。一次调用固定一个快照。
+Lookup inputs have the same nested structure as documents and must supply all matching paths. Missing input, or null against a sparse unique index, yields no match. Results have an ordered matches array: one list per input, [] for misses; duplicate inputs remain duplicated. Each call uses one snapshot.
 
-非唯一结果按 `_key ASC`；`mode: first` 只取第一项。`all` 超过 `max_matches` 时整次调用返回 MATCH_LIMIT_EXCEEDED，不悄悄截断。默认上限 100，可设置 1–1000。输出只包含 select 字段，调用方自行合并事件。已覆盖字段直接从索引读取，未覆盖字段批量回读正文。
+Non-unique matches are ordered by _key ASC. mode:first returns the first match; mode:all fails the entire call with MATCH_LIMIT_EXCEEDED above max_matches (default 100, range 1–1000), rather than silently truncating. Only selected fields are returned; covering fields avoid document fetches. Multi-range lookups reuse SST cursors and decoded blocks but still charge held memory.
 
-v0.9.1 将去重后的非唯一匹配值按物理键排序，在同一快照内复用文件游标、索引分区和当前已解压数据块；直接跳到下一匹配范围，不扫描范围之间的数据。匹配值靠近且落在相同数据块时收益更明显；分散范围仍可能各自读取不同块。结果继续恢复为原输入顺序。缓存和持有的数据块沿用租户内存计费。
-
-## 条件查询与分页
+<a id="条件查询与分页"></a>
+## Query planning and pagination
 
 ```json
 {
@@ -136,67 +164,63 @@ v0.9.1 将去重后的非唯一匹配值按物理键排序，在同一快照内�
     {"field":"/score","op":"gte","value":80}
   ]},
   "sort":[{"field":"/score","order":"desc"}],
-  "select":["/_key","/owner","/service"],
+  "select":["/_key","/owner"],
   "limit":100
 }
 ```
 
-支持 eq、ne、in、gt、gte、lt、lte、exists 及 and/or/not。exists 的 value 必须为布尔。eq null 仅匹配显式 null；ne 也可匹配缺失字段。范围比较要求相同标量类型。混合类型排序顺序为：缺失、null、bool、i64、u64、f64、string；按对象或数组排序返回参数错误。
+Filters: eq, ne, in, gt, gte, lt, lte, exists, and/or/not. exists takes a boolean; eq null matches explicit null only, while ne can also match missing. Ranges compare the same scalar type. Mixed-type ordering is missing, null, bool, i64, u64, f64, string; sorting objects/arrays is invalid.
 
-默认按 `_key ASC` 排序。指定的排序未包含 `_key` 时，在末尾追加 `_key ASC`，确保稳定唯一顺序。省略 select 或传空列表返回完整文档。无适合索引时执行受预算约束的扫描；不能利用索引排序时使用有界 Top-K。首版不提供深度 offset、磁盘外排或索引交集。根 OR 分支分别规划并去重；嵌套布尔表达式仍正确执行，可能退化为残余过滤或扫描。
+Default ordering is _key ASC; an explicit sort gets _key ASC as a unique tie-breaker if absent. Omitted/empty select returns full documents. Plans can use primary-key string bounds, indexes, residual filters or budgeted scans. Equality/IN index prefixes expand to at most 256 ranges and 1 MiB of encoded prefixes; larger expansions use a shorter prefix or scan, preserving the full predicate. Sparse unique indexes are used only when existence and non-nullness are proven for all fields.
 
-v0.9.1 的查询定位规则：
+Queries without index ordering use bounded Top-K. Multi-range ordering is currently conservative and may need extra_sort. No deep offset, external sort, index intersection, joins or aggregation is provided. explain reports the plan; query.stats reports actual blocks, decompression, cache hits, document reads and physical records.
 
-- `/_key` 的字符串 gt/gte/lt/lte 条件可直接限定正文键范围，包含和排除边界遵循原比较语义。仍优先使用可选的二级索引，主键范围替代原来的全集合扫描；降序请求在范围内做 Top-K。
-- 二级索引连续前缀可组合 eq/in，去重后最多展开 256 段，前缀键总长上限 1 MiB。超出时使用较短前缀或受预算限制的扫描，原过滤条件仍全部执行，不截断结果。完整唯一键集合使用存储 MultiGet；其他多段访问复用范围游标。
-- 稀疏唯一索引仅在 AND 条件能证明每个索引字段均存在且非 null 时用于范围或 IN 查询。未受约束的复合字段、含 null 的 IN、exists 条件不会单独构成这种证明。
-- 多段索引查询当前保守地执行有界 Top-K，分页在原快照内重新读取各段并排除前页结果；没有实现跨段合并排序优化。`explain` 会明确标记 `extra_sort`。
+Continue with the same query, filters, sort, selection and limit plus cursor. Cursors bind tenant, collection, principal, runtime generation, replication history and snapshot. Default lifetime is **60 seconds from the first page**, without renewal. Restart/restore/history changes expire them. Successful continuation consumes the old token; concurrent reuse has at most one success. Failed execution does not consume a valid token.
 
-以上路径共享原扫描、时间、返回字节与临时内存预算；旧版本和删除标记仍计入扫描量。read_batch 中每个 Query 使用这些路径，整个批次保持同一快照和累计预算；不同 Query 尚未融合成一次存储扫描。
+Per tenant, persistent cursors can consume at most half of max_snapshots; one principal can consume at most a quarter (rounded, at least one). Defaults are 128/64. max_snapshots=1 disables persistent paging. This is a shared quota, not a fairness guarantee. Release cursors early when finished.
 
-下一页提交完全相同的 query 并添加返回的 cursor；limit 也必须相同。游标绑定租户、集合、查询、运行代次、复制历史和快照，成功继续后旧 token 被移除。默认租约从第一页起 60 秒，不随翻页续期；到期、重启、恢复或切换复制历史后返回 CURSOR_EXPIRED。可提前 DELETE 游标释放文件和版本引用。持久游标总数不超过 max_snapshots 的一半，每个主体不超过四分之一（取整，至少 1）；默认分别为 128 与 64，为点读及维护留出名额。max_snapshots 为 1 时不保留分页游标。HTTP 游标同时绑定 token 的稳定 subject，其他主体不能续页；嵌入式调用共享默认主体配额。
+## Temporal identity and subjects
 
-游标总额由同一租户的所有主体共享，不按主体预留名额。默认配置下两个主体各保留 64 个游标后，第三个主体的新分页会被拒绝，直至游标释放或过期；点读仍可使用保留的快照名额。这是容量限制，不提供主体之间的分页公平保证。
+| Method and path under T/identity | Purpose |
+|---|---|
+| POST /initialize | Admin: initialize managed identity collection |
+| POST /write | Create/update entities, bind/rebind/unbind/replace identifiers |
+| POST /resolve | One identifier at valid_at and optional known_at |
+| POST /resolve_many | Ordered batch; one snapshot, knowledge version and shared budget |
+| POST /ids | SubjectIdentifiersRequest: reverse subject identifiers, paged |
+| POST /history | SubjectHistoryRequest: identity change events, paged |
+| POST /timeline | Inspect an identifier timeline |
+| GET /entities/{entity} | Inspect an entity |
+| GET /operations/{operation} | Inspect an operation receipt |
 
-同一个 cursor 不可并发消费多次：仅一个续页调用成功，其余返回 CURSOR_EXPIRED。查询执行或输出超预算失败时，不消费原 token（租约仍按原时刻计算）。MultiGet 的响应限制包含全部文档、未命中的 null、逗号和数组括号，原生库接口和 HTTP 均不能依靠未命中项绕过该限制。
+known_at is latest or a durable knowledge UUID; valid_at is business time. resolve_many defaults to at most 1000 items, preserves duplicates, and fails atomically on any error. ids/history return coverage and paging metadata; legacy migration may make ids return INDEX_NOT_READY. Missing legacy audit events are not invented.
 
-`query.plan` 标识索引、覆盖、额外排序及全扫描。`query.stats` 给出候选文件、物理扫描条目、实际读取块、解压字节、缓存命中和正文读取次数。旧版本和墓碑也计入扫描预算。
+The identity_temporal collection is managed: direct CRUD, DSL writes and DDL return MANAGED_COLLECTION. Read permissions still apply. Expanded event/link/pointer/TTL records count toward atomic limits: typical same-subject new bindings fit 199 items without retention or 110 with retention at the default 1000-record limit, with other budgets potentially binding earlier.
 
-## 错误与重试
+Detailed schemas, correction authorization, coverage and history boundaries are in [identity.md](identity.md) and OpenAPI. Identity read commands also exist in the [DSL](dsl.md).
 
-| code | HTTP | 调用方行为 |
-|---|---|---|
-| UNAUTHENTICATED / FORBIDDEN | 401 / 403 | 修正凭证或租户权限 |
-| INVALID_ARGUMENT | 400 | 修正参数 |
-| NOT_FOUND | 404 | 资源不存在 |
-| REVISION_CONFLICT / UNIQUE_CONFLICT | 409 | 读取当前状态后重新决策 |
-| BUSY / INDEX_NOT_READY / CONFLICT | 409 | 等待活动请求或修改定义 |
-| CANCELLED | 409 | 操作已取消；检查点复制因源 WAL 故障取消时，等待恢复后重试备份 |
-| READ_ONLY | 409 | 连接当前可写主库；不能通过重启旧配置解锁 |
-| REPLICATION_CONFLICT / REPLICA_LAG | 409 | 核对历史和来源 / 等待追平；禁止跳过日志 |
-| LOG_GONE / SNAPSHOT_EXPIRED | 410 | 复制服务重新取得检查点 |
-| RESOURCE_EXHAUSTED / MATCH_LIMIT_EXCEEDED | 429 | 降低请求规模、等待背压或调整配额 |
-| CURSOR_EXPIRED | 410 | 从新快照重新查询 |
-| DEADLINE_EXCEEDED | 408 | 缩小查询范围；索引构建准入超时则检查维护积压及索引状态 |
-| CORRUPTION | 500 | 隔离租户并检查/恢复 |
-| COMMIT_UNKNOWN | 500 | 批次可能已提交；重新打开后核对 `_key`/`_rev`，避免盲目重试 |
-| UNAVAILABLE | 503 | 查询租户状态与维护错误 |
-| REPLICATION_UNAVAILABLE | 503 | 核对对端连接及双方持久角色；切换超时后观察并重试 |
+<a id="错误与重试"></a>
+## Errors and recovery
 
-普通 put/delete/batch/DSL 已支持持久化 operation_id。启用租户保留后，新幂等写入需要 retry_token；过期或缺失的旧重试明确拒绝，不视为未执行。见 [保留契约](retention.md)。
+| Code | HTTP | Action |
+|---|---:|---|
+| UNAUTHENTICATED / FORBIDDEN | 401 / 403 | Fix credentials or tenant/role scope |
+| INVALID_ARGUMENT | 400 | Fix input; DSL syntax errors may include location |
+| NOT_FOUND | 404 | Resource absent; DSL get instead returns null |
+| HISTORY_REQUIRED / RETRY_TOKEN_REQUIRED | 428 | Supply original history / obtain first-submission context |
+| REVISION_CONFLICT / UNIQUE_CONFLICT / HISTORY_CONFLICT | 409 | Read current context and make a new decision |
+| BUSY / INDEX_NOT_READY / CONFLICT | 409 | Allow drain/build/initialization to progress |
+| READ_ONLY / REPLICA_LAG / REPLICATION_CONFLICT | 409 | Use the writable node / wait / check source history |
+| CANCELLED | 409 | Check cancellation cause; checkpoint copying can stop for source WAL recovery |
+| CURSOR_EXPIRED / LOG_GONE / SNAPSHOT_EXPIRED | 410 | Restart paging / replica initialization |
+| IDEMPOTENCY_EXPIRED / VERSION_UNAVAILABLE | 410 | Do not refresh credentials to repeat an uncertain operation |
+| RESOURCE_EXHAUSTED / MATCH_LIMIT_EXCEEDED | 429 | Reduce scope, back off or adjust a measured resource limit |
+| DEADLINE_EXCEEDED | 408 | Reduce scope or inspect backlog |
+| SCAN_NOT_ALLOWED | 422 | Add a usable index or explicitly allow a budgeted full scan |
+| CORRUPTION / IO_ERROR / COMMIT_UNKNOWN | 500 | Isolate/diagnose; uncertain writes may already exist |
+| UNAVAILABLE / RECOVERY_REQUIRED / REPLICATION_UNAVAILABLE | 503 | Inspect state, recover or reconnect; no blind overwrite |
+| RESPONSE_UNAVAILABLE | 503 | Operation already ran; use the original safe retry identity |
 
-## v0.6 时态身份 API
+Backup restore may have published data even if cleanup remains pending; inspect job/tenant state before repeating it. Local backup publication can return BACKUP_COMMIT_UNKNOWN with the backup UUID. Unknown lifecycle publication outcomes require reopening Store to resolve the durable journal.
 
-新增 `/v1/tenants/{tenant}/identity/*` 和 Rust `TenantHandle::identity_*`。HTTP 写入允许 admin、identity_write 或 identity_correct；手动纠错要求 admin 或 identity_correct，初始化要求 admin，读取沿用租户 read 权限。完整请求、区间/知识语义、幂等性与示例见 [identity.md](identity.md)。保留集合 `identity_temporal` 拒绝普通 CRUD、DSL 写入及集合/索引/Lookup 管理修改，返回 `MANAGED_COLLECTION`；读取仍授权开放。新错误包括 `INTERVAL_CONFLICT`、`OPERATION_CONFLICT`、`KNOWLEDGE_UNAVAILABLE`（HTTP 409）和 `CLOCK_SKEW`（HTTP 503）。
-
-租户级统一过期时间、最新状态保护、历史查询到期和 v0.8 发布版本兼容性见 [retention.md](retention.md)。IDEMPOTENCY_EXPIRED/VERSION_UNAVAILABLE 返回 410，RETRY_TOKEN_REQUIRED 返回 428；KNOWLEDGE_UNAVAILABLE 保持 409。
-
-`POST T/retry-context` 是会写入 retry token 的操作：read 角色仍被拒绝，响应按写入路径处理，不附加只读响应语义或接受一致性读控制。`GET /openapi.json` 的配置专属文档在创建 HTTP router 时生成并编码一次，各请求复用同一份内容。
-
-恢复未完成的只读诊断实例拒绝普通业务读取，返回 RECOVERY_REQUIRED（503），而非旧视图下的正常 404。本地备份在 rename 后同步结果不确定时返回 BACKUP_COMMIT_UNKNOWN，message 包含可检查/删除的 UUID。
-
-`POST /v1/tenants/{tenant}/identity/resolve_many` 和 DSL `resolvemany with $request` 提供同快照批量时态解析。顶层 known_at 固定整批知识版本，每项 identifier/valid_at 独立；返回有序 results、knowledge_version、history、snapshot_seq 和累计 stats。默认最多 1000 项，任一错误导致整批失败。`resolve with $request` 对应单条解析。两个端点均支持请求级读取控制和最低复制位置，详见 [identity.md](identity.md)。
-
-主体查询（read 权限）：`POST /v1/tenants/{tenant}/identity/ids` 接收 `SubjectIdentifiersRequest`，返回 `SubjectIdentifiersResult`；`POST /v1/tenants/{tenant}/identity/history` 接收 `SubjectHistoryRequest`，返回 `SubjectHistoryResult`。支持相同的读取控制、最低复制位置及节点绑定游标；参数、事件和覆盖范围详见[身份模块](identity.md#主体反查和变更历史)，准确结构见 OpenAPI。
-
-租户 retention 状态中的 `identity_subjects` 返回 `SubjectMaintenanceProgress` 或 null；即使未启用保留策略也可查看身份迁移是否 ready、已处理历史行数/写入 link 数及 link 回收行数。该接口沿用原管理权限，计数随维护事务持久化，详情见[迁移进度](identity.md#迁移进度)。
+A diagnostic read-only engine after failed WAL recovery refuses ordinary business reads with RECOVERY_REQUIRED; it does not turn potentially missing acknowledged values into normal 404 responses. Offline repair requires explicit data-loss acceptance and archives the original database.

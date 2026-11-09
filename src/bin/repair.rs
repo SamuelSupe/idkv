@@ -2,6 +2,16 @@ use tenant_kv::{Options, Store};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<_> = std::env::args().collect();
+    if args.len() == 2 && matches!(args[1].as_str(), "--version" | "-V") {
+        println!("tenant-kv-repair {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+    if args.len() == 2 && matches!(args[1].as_str(), "--help" | "-h") {
+        println!(
+            "usage: tenant-kv-repair ROOT TENANT_UUID WAL_UUID --at BYTES --archive NEW_DIRECTORY --accept-data-loss [--options OPTIONS_JSON]\nOffline WAL prefix repair. Changes history and requires replica rebuild. Archives the complete original database."
+        );
+        return Ok(());
+    }
     if !matches!(args.len(), 9 | 11)
         || args[4] != "--at"
         || args[6] != "--archive"

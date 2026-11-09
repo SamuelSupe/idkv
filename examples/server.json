@@ -1,0 +1,10 @@
+{
+  "global_memory_bytes": 4294967296,
+  "tenant_memory_bytes": 536870912,
+  "tenant_disk_bytes": 107374182400,
+  "cache_bytes": 134217728,
+  "memtable_bytes": 16777216,
+  "io_workers": 4,
+  "maintenance_reserve_free_bytes": 67108864,
+  "max_local_backup_bytes": 1073741824
+}

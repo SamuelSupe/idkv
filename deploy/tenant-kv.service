@@ -1,0 +1,25 @@
+[Unit]
+Description=idkv document and temporal identity engine
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=idkv
+Group=idkv
+StateDirectory=idkv
+WorkingDirectory=/var/lib/idkv
+ExecStart=/opt/idkv/bin/tenant-kv serve --root /var/lib/idkv/data --auth /etc/idkv/auth.json --config /etc/idkv/server.json --listen 127.0.0.1:8080
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=40
+LimitNOFILE=65536
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/idkv
+
+[Install]
+WantedBy=multi-user.target

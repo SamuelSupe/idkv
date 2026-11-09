@@ -1900,7 +1900,7 @@ dependencies = [
 
 [[package]]
 name = "tenant-kv"
-version = "0.10.1"
+version = "1.0.0"
 dependencies = [
  "axum",
  "base64 0.22.1",

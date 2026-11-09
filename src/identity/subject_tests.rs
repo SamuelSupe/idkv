@@ -326,6 +326,9 @@ fn legacy_migration_batches_history_and_retains_reverse_results() {
         })
         .unwrap();
     t.engine().flush().unwrap();
+    let before_io = t.engine().metrics()["scheduler"]["completed_jobs"]
+        .as_u64()
+        .unwrap();
     let started = std::time::Instant::now();
     let mut steps = 0;
     loop {
@@ -347,6 +350,15 @@ fn legacy_migration_batches_history_and_retains_reverse_results() {
     println!(
         "migration: 257 history rows, {steps} commits, {:?}",
         started.elapsed()
+    );
+    let migration_io = t.engine().metrics()["scheduler"]["completed_jobs"]
+        .as_u64()
+        .unwrap()
+        - before_io;
+    println!("migration I/O jobs: {migration_io}");
+    assert!(
+        migration_io < 200,
+        "migration rereads SST blocks per history row: {migration_io} I/O jobs"
     );
     let progress = t.retention_status().unwrap()["identity_subjects"].clone();
     assert_eq!(progress["processed_history_rows"], 257);
@@ -553,7 +565,7 @@ fn migration_releases_completed_identifiers_to_gc_and_link_sweeps_batch() {
         }
     }
     assert!(completed_prefix);
-    for _ in 0..24 {
+    for _ in 0..3 {
         t.retention_step().unwrap();
     }
     assert_eq!(

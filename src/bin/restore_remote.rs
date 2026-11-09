@@ -6,6 +6,16 @@ use tenant_kv::{
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<_> = std::env::args().collect();
+    if args.len() == 2 && matches!(args[1].as_str(), "--version" | "-V") {
+        println!("tenant-kv-restore {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+    if args.len() == 2 && matches!(args[1].as_str(), "--help" | "-h") {
+        println!(
+            "usage: tenant-kv-restore ROOT BACKUP_CONFIG TENANT_UUID BACKUP_UUID\nOffline import into an unregistered tenant UUID."
+        );
+        return Ok(());
+    }
     if args.len() != 5 {
         return Err("usage: tenant-kv-restore ROOT BACKUP_CONFIG TENANT_UUID BACKUP_UUID (offline import into an unregistered tenant UUID)".into());
     }

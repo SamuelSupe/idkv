@@ -1,0 +1,9 @@
+.git
+target
+dist
+data
+bench-results
+auth.json
+token.txt
+.env
+.env.*

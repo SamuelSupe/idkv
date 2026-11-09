@@ -296,7 +296,7 @@ pub struct Transaction<'a> {
     maintenance_disk: bool,
     json_cache: Mutex<BTreeMap<Vec<u8>, DecodedMetadata>>,
 }
-impl Transaction<'_> {
+impl<'view> Transaction<'view> {
     pub(crate) fn require_foreground_disk(&mut self) {
         self.maintenance_disk = false;
     }
@@ -353,12 +353,12 @@ impl Transaction<'_> {
             .transpose()
     }
 
-    fn scan_prefix<'a>(
-        &'a self,
+    fn scan_prefix(
+        &self,
         prefix: &[u8],
         start: Vec<u8>,
         stats: &mut ReadStats,
-    ) -> Result<Scan<'a>> {
+    ) -> Result<Scan<'view>> {
         let budget = self.read_budget()?;
         let end = codec::prefix_end(prefix);
         let mut scan = Scan::unstarted(
@@ -412,6 +412,23 @@ impl Transaction<'_> {
         after: Option<&[u8]>,
         limit: usize,
     ) -> Result<(Vec<Record>, bool)> {
+        let mut stats = ReadStats::default();
+        let mut scan = self.gc_scan(prefix, after, &mut stats)?;
+        let limit = limit.min(self.engine.options.max_scan);
+        let mut rows = Vec::new();
+        while let Some(record) = scan.next_for_gc(&mut stats, limit)? {
+            rows.push(self.changes.get(&record.key).cloned().unwrap_or(record));
+        }
+        Ok((rows, scan.exhausted()))
+    }
+    // Streaming physical view, without the transaction's pending changes.
+    // Callers may mutate only keys they have already visited, or other prefixes.
+    pub(crate) fn gc_scan(
+        &self,
+        prefix: &[u8],
+        after: Option<&[u8]>,
+        stats: &mut ReadStats,
+    ) -> Result<Scan<'view>> {
         let mut start = after.map_or_else(
             || prefix.to_vec(),
             |key| {
@@ -423,14 +440,7 @@ impl Transaction<'_> {
         if start.as_slice() < prefix {
             start = prefix.to_vec();
         }
-        let mut stats = ReadStats::default();
-        let mut scan = self.scan_prefix(prefix, start, &mut stats)?;
-        let limit = limit.min(self.engine.options.max_scan);
-        let mut rows = Vec::new();
-        while let Some(record) = scan.next_for_gc(&mut stats, limit)? {
-            rows.push(self.changes.get(&record.key).cloned().unwrap_or(record));
-        }
-        Ok((rows, scan.exhausted()))
+        self.scan_prefix(prefix, start, stats)
     }
     pub fn prefix_first_after(
         &self,

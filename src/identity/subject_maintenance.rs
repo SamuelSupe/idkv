@@ -60,6 +60,8 @@ fn migrate(
     let mut links = 0;
     let mut bytes = 0usize;
     let mut moved = false;
+    let mut scan = None;
+    let mut stats = crate::ReadStats::default();
     while (state.pending.is_some() || rows < batch)
         && links < batch
         && (!moved || started.elapsed() < STEP_TIME)
@@ -67,9 +69,12 @@ fn migrate(
         if state.pending.is_none() {
             // Read one physical row at a time: a byte limit must not first load
             // 64 maximum-sized timelines or lose progress through tombstones.
-            let (records, exhausted) = tx.gc_prefix(&source, state.after.as_deref(), 1)?;
-            let Some(record) = records.into_iter().next() else {
-                if exhausted {
+            if scan.is_none() {
+                scan = Some(tx.gc_scan(&source, state.after.as_deref(), &mut stats)?);
+            }
+            let current = scan.as_mut().unwrap();
+            let Some(record) = current.next_for_gc(&mut stats, batch)? else {
+                if current.exhausted() {
                     state.ready = true;
                     state.after = None;
                     state.previous = None;
@@ -157,6 +162,7 @@ fn migrate(
                 collection,
                 &format!("history:{}:", digest(&completed.row.identifier)?),
             ));
+            scan = None;
         }
         state.previous = Some(completed.row);
     }
@@ -180,13 +186,18 @@ fn reclaim(
     let started = Instant::now();
     let source = prefix(collection, "subject:");
     let mut bytes = 0usize;
+    let mut scan = None;
+    let mut stats = crate::ReadStats::default();
     for n in 0..batch {
         if n > 0 && (started.elapsed() >= STEP_TIME || bytes >= STEP_BYTES) {
             break;
         }
-        let (records, exhausted) = tx.gc_prefix(&source, state.gc_after.as_deref(), 1)?;
-        let Some(row) = records.into_iter().next() else {
-            if exhausted {
+        if scan.is_none() {
+            scan = Some(tx.gc_scan(&source, state.gc_after.as_deref(), &mut stats)?);
+        }
+        let current = scan.as_mut().unwrap();
+        let Some(row) = current.next_for_gc(&mut stats, batch)? else {
+            if current.exhausted() {
                 state.swept_floor = state.gc_floor;
                 state.gc_after = None;
                 state.gc_pair.clear();
@@ -220,6 +231,7 @@ fn reclaim(
         if ordinal < state.swept_floor {
             state.gc_after =
                 codec::prefix_end(&prefix(collection, &format!("subject:{}:", state.gc_pair)));
+            scan = None;
         }
     }
     Ok(true)

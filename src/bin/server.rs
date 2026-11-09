@@ -15,6 +15,8 @@ async fn main() {
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
     match args.next().as_deref() {
+        Some("--version" | "-V" | "version") => println!("tenant-kv {}", env!("CARGO_PKG_VERSION")),
+        Some("--help" | "-h") => println!("tenant-kv {}\nusage: tenant-kv serve --root DIR --auth FILE [--config FILE] [--backup-config FILE] [--replication-config FILE] [--telemetry-config FILE] [--listen ADDRESS]\n       tenant-kv token-hash | openapi | --version", env!("CARGO_PKG_VERSION")),
         Some("token-hash") => {
             let mut token = String::new();
             std::io::stdin().read_to_string(&mut token)?;

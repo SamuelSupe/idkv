@@ -8,6 +8,8 @@ mod subject_maintenance;
 mod subject_model;
 mod subject_read;
 #[cfg(test)]
+mod subject_stress;
+#[cfg(test)]
 mod subject_tests;
 mod subjects;
 mod time;

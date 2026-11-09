@@ -1,6 +1,6 @@
 # OpenDAL 远端备份
 
-本地 WAL、SST 和索引仍是在线读写的数据源。文档提交只等待本地 WAL 持久化；S3 不进入 Get、MultiGet、Lookup 或提交确认路径。备份由 OpenDAL 0.55.0 访问 S3，也提供 fs 后端用于开发与故障测试。该版本支持项目的 Rust 1.90 工具链，依赖锁定在 Cargo.lock。
+本地 WAL、SST 和索引仍是在线读写的数据源。文档提交只等待本地 WAL 持久化；S3 不进入 Get、MultiGet、Lookup 或提交确认路径。备份由 OpenDAL 0.55.0 访问 S3，也提供 fs 后端用于开发与故障测试。1.0 使用固定的 Rust 1.99.1 工具链，依赖锁定在 Cargo.lock；英文部署流程见[部署指南](deployment.md)。
 
 v0.5 的 [主从复制](replication.md) 与此备份能力独立。启用复制的节点可以创建/验证备份，但普通 restore/import 会拒绝，需在新的 Store 恢复后重新建立复制关系。共享同一 S3 前缀时只配置一个创建/清理执行者；主从切换不会自动交接备份任务、权限配置或 S3 凭证。
 
