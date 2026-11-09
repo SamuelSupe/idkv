@@ -408,14 +408,16 @@ async fn in_flight_binary_log_frame_keeps_global_charge_without_blocking_tenant_
     drop(body);
     let in_flight_memory = non_tenant_memory();
 
-    // Hold the transport's frame independently of socket buffers or the body.
-    // The write needs ~16 MiB already in the memtable plus ~12 MiB each for
-    // staging and commit preparation. Charging the frame to the tenant would
-    // raise the peak above the 44 MiB quota.
-    tenant
-        .engine()
-        .transact(|tx| tx.put(b"foreground".to_vec(), vec![2; 6 << 20]))
-        .unwrap();
+    let engine = tenant.engine();
+    let write = || engine.transact(|tx| tx.put(b"foreground".to_vec(), vec![2; 6 << 20]));
+    {
+        // Recreate the old tenant charge to verify that this write exercises
+        // the quota boundary even if the engine's reservation sizes change.
+        let _old_charge = engine.budget.reserve(frame.len()).unwrap();
+        let error = write().expect_err("charging the frame to the tenant must exhaust its budget");
+        assert_eq!(error.code, "RESOURCE_EXHAUSTED");
+    }
+    write().unwrap();
     assert!(in_flight_memory >= before + FRAME_BYTES);
     drop(frame);
     let deadline = Instant::now() + Duration::from_secs(5);

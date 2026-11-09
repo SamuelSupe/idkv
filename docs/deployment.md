@@ -4,10 +4,10 @@ This guide covers the Linux ARM64 and x86_64 binary releases. For Rust embedding
 
 ## Install and verify
 
-Download from [v1.0.0](https://github.com/SamuelSupe/idkv/releases/tag/v1.0.0). Archives use static musl linking and include:
+Download from [v1.0.1](https://github.com/SamuelSupe/idkv/releases/tag/v1.0.1). Archives use static musl linking and include:
 
 ```text
-idkv-v1.0.0-TARGET/
+idkv-v1.0.1-TARGET/
   bin/tenant-kv
   bin/tenant-kv-restore
   bin/tenant-kv-repair
@@ -25,7 +25,7 @@ idkv-v1.0.0-TARGET/
 Choose aarch64-unknown-linux-musl for ARM64 or x86_64-unknown-linux-musl for amd64. These are Linux binaries, not macOS executables. Inspect BUILD-INFO.json for the exact source commit and target.
 
 ```sh
-VERSION=1.0.0
+VERSION=1.0.1
 case "$(uname -m)" in
   aarch64|arm64) TARGET=aarch64-unknown-linux-musl ;;
   x86_64|amd64) TARGET=x86_64-unknown-linux-musl ;;
@@ -165,14 +165,18 @@ Monitor resource rejection/backpressure, tenant maintenance_error, disk headroom
 
 Quotas and task-level fairness do not provide a hard disk latency SLA. The [million-row qualification](subject-maintenance-scale-validation-20261109.md) still observed light-tenant p99 growth during GC.
 
+## Upgrade from 1.0.0
+
+Verify a backup and install the 1.0.1 server and offline tools together on each node. Protocol 4 and registry 6 allow 1.0.0 and 1.0.1 peers to exchange JSON log pages during the rollout. Add `wal_group_window_us` only to nodes running 1.0.1, since 1.0.0 rejects unknown configuration fields. Check replication lag and tenant failures after each restart.
+
 ## Upgrade to 1.0
 
 1. Take and verify a backup; keep the previous binaries and a recoverable pre-upgrade root.
 2. Stop new writes, drain clients and stop both peers.
-3. Install the 1.0 server and both offline tools on each node.
+3. Install the current server and both offline tools on each node.
 4. Ensure writable metadata space, additional reverse-index/GC capacity, and compatible limits on both nodes.
 5. Start primary then replica; check capabilities, role, tenant failures, migration progress and replication catch-up before reopening writes.
 
-Formats remain registry **6**, replication **4**, WAL/SST **1**. Older registries upgrade before serving; old writers refuse the upgraded root. Binary rollback alone is not supported: restore the pre-upgrade root and matching binaries/configuration. Native directory layout and the DSL syntax version do not become 1.0 just because the application does.
+The 1.0 series uses registry **6**, replication **4**, and WAL/SST **1**. Older registries upgrade before serving. To roll back an upgraded pre-1.0 root, restore the pre-upgrade root and its matching binaries and configuration. The DSL grammar has its own version.
 
 Identity audit/link/TTL expansion can reduce effective batch capacity to 199 or 110 typical bindings under the default 1000-record limit. Test actual requests and coordinate any limit increase across peers. During backfill ids returns INDEX_NOT_READY; completed identifiers may already be reclaimed safely by history GC. Earlier audit events that did not exist cannot be reconstructed.

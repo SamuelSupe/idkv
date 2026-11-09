@@ -1,6 +1,6 @@
 [package]
 name = "tenant-kv"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2024"
 rust-version = "1.99.1"
 description = "Tenant-isolated Rust document and lookup engine with a native LSM"

@@ -4,12 +4,12 @@
 
 **Documents, batch lookups, and temporal identity. On your own storage.**
 
-[![Release](https://img.shields.io/badge/release-v1.0.0-2563eb)](https://github.com/SamuelSupe/idkv/releases/tag/v1.0.0)
+[![Release](https://img.shields.io/badge/release-v1.0.1-2563eb)](https://github.com/SamuelSupe/idkv/releases/tag/v1.0.1)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![Rust](https://img.shields.io/badge/Rust-1.99.1-orange)](rust-toolchain.toml)
-[![Platforms](https://img.shields.io/badge/Linux-ARM64%20%7C%20x86__64-334155)](https://github.com/SamuelSupe/idkv/releases/tag/v1.0.0)
+[![Platforms](https://img.shields.io/badge/Linux-ARM64%20%7C%20x86__64-334155)](https://github.com/SamuelSupe/idkv/releases/tag/v1.0.1)
 
-[Quick start](#quick-start) · [API](docs/api.md) · [DSL](docs/dsl.md) · [Deployment](docs/deployment.md) · [Release notes](docs/releases/v1.0.0.md)
+[Quick start](#quick-start) · [API](docs/api.md) · [DSL](docs/dsl.md) · [Deployment](docs/deployment.md) · [Release notes](docs/releases/v1.0.1.md)
 
 </div>
 
@@ -17,7 +17,7 @@ idkv is a Rust storage engine for tenant-scoped JSON documents, indexed batch en
 
 There is no external database dependency. Each tenant has its own database directory, lock, WAL, sequence, indexes, and cache. Global memory and I/O budgets bound shared work.
 
-> **1.0.0 is the first stable release.** Linux ARM64 and x86_64 archives include three production executables, configuration examples, the OpenAPI contract, and documentation. Existing package and command names remain `tenant-kv`; Rust imports remain `tenant_kv`.
+> **1.0.1 is the current stable release.** Linux ARM64 and x86_64 archives include three production executables, configuration examples, the OpenAPI contract, and documentation. Existing package and command names remain `tenant-kv`; Rust imports remain `tenant_kv`.
 
 ## What you can build
 
@@ -49,20 +49,20 @@ On Linux, choose the archive for your CPU:
 
 | Architecture | Release archive |
 |---|---|
-| ARM64 / aarch64 | [idkv-v1.0.0-aarch64-unknown-linux-musl.tar.gz](https://github.com/SamuelSupe/idkv/releases/download/v1.0.0/idkv-v1.0.0-aarch64-unknown-linux-musl.tar.gz) |
-| x86_64 / amd64 | [idkv-v1.0.0-x86_64-unknown-linux-musl.tar.gz](https://github.com/SamuelSupe/idkv/releases/download/v1.0.0/idkv-v1.0.0-x86_64-unknown-linux-musl.tar.gz) |
+| ARM64 / aarch64 | [idkv-v1.0.1-aarch64-unknown-linux-musl.tar.gz](https://github.com/SamuelSupe/idkv/releases/download/v1.0.1/idkv-v1.0.1-aarch64-unknown-linux-musl.tar.gz) |
+| x86_64 / amd64 | [idkv-v1.0.1-x86_64-unknown-linux-musl.tar.gz](https://github.com/SamuelSupe/idkv/releases/download/v1.0.1/idkv-v1.0.1-x86_64-unknown-linux-musl.tar.gz) |
 
 Both use static musl linking, so they do not require a particular glibc version. Outbound HTTPS integrations still need the host's CA certificates.
 
 ```sh
 # Linux ARM64. Use x86_64-unknown-linux-musl on x86_64.
 TARGET=aarch64-unknown-linux-musl
-BASE=https://github.com/SamuelSupe/idkv/releases/download/v1.0.0
-curl -fLO "$BASE/idkv-v1.0.0-$TARGET.tar.gz"
+BASE=https://github.com/SamuelSupe/idkv/releases/download/v1.0.1
+curl -fLO "$BASE/idkv-v1.0.1-$TARGET.tar.gz"
 curl -fLO "$BASE/SHA256SUMS"
-grep "  idkv-v1.0.0-$TARGET.tar.gz$" SHA256SUMS | sha256sum -c -
-tar -xzf "idkv-v1.0.0-$TARGET.tar.gz"
-cd "idkv-v1.0.0-$TARGET"
+grep "  idkv-v1.0.1-$TARGET.tar.gz$" SHA256SUMS | sha256sum -c -
+tar -xzf "idkv-v1.0.1-$TARGET.tar.gz"
+cd "idkv-v1.0.1-$TARGET"
 ./bin/tenant-kv --version
 ```
 
@@ -109,7 +109,7 @@ Use [the deployment guide](docs/deployment.md) for systemd, TLS termination, per
 
 ```toml
 [dependencies]
-tenant-kv = { git = "https://github.com/SamuelSupe/idkv", tag = "v1.0.0" }
+tenant-kv = { git = "https://github.com/SamuelSupe/idkv", tag = "v1.0.1" }
 serde_json = "1"
 ```
 
@@ -146,7 +146,7 @@ This example needs a new root; tenant and collection creation are not an idempot
 | [Deployment](docs/deployment.md) | Install, authenticate, configure, run, observe, upgrade |
 | [HTTP API](docs/api.md) / [OpenAPI 3.1](openapi.json) | Routes, authorization, data types, reads, writes, errors |
 | [DSL](docs/dsl.md) | All 11 commands, parameters, prepared statements, pagination |
-| [1.0 release notes](docs/releases/v1.0.0.md) | Compatibility, assets, validation, known limits |
+| [1.0.1 release notes](docs/releases/v1.0.1.md) | Compatibility, assets, validation, known limits |
 | [KV composition](docs/kv-capabilities.md) | Cross-collection reads, conditional batches, published datasets |
 | [Temporal identity](docs/identity.md) | Valid time, knowledge time, batch resolve, subjects, history |
 | [Replication](docs/replication.md) | Pair deployment, fencing, promotion, rebuilding |
@@ -157,7 +157,7 @@ Detailed operational references and historical reports currently include Chinese
 
 ## Build and validate
 
-Rust **1.99.1** is pinned in [rust-toolchain.toml](rust-toolchain.toml). Unix filesystem semantics are required; Linux is the release platform. Run source commands in a checkout of v1.0.0; binary archives are not complete Rust source checkouts.
+Rust **1.99.1** is pinned in [rust-toolchain.toml](rust-toolchain.toml). Unix filesystem semantics are required; Linux is the release platform. Run source commands in a checkout of v1.0.1; binary archives are not complete Rust source checkouts.
 
 ```sh
 cargo build --locked --release --bin tenant-kv --bin tenant-kv-restore --bin tenant-kv-repair

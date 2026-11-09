@@ -42,7 +42,8 @@ def main():
         for token, role in [(admin, "admin"), (peer, "replication")]
     ]}
     (root / "auth.json").write_text(json.dumps(auth))
-    (root / "options.json").write_text(json.dumps({"memtable_bytes": 262144, "cache_bytes": 8388608, "idle_seconds": 1}))
+    # Give the tight loop of indexed batches room to run between background flushes.
+    (root / "options.json").write_text(json.dumps({"memtable_bytes": 4 << 20, "cache_bytes": 8 << 20, "idle_seconds": 1}))
     urls = [f"http://127.0.0.1:{port()}" for _ in range(2)]
     assert urls[0] != urls[1]
     cluster = str(uuid.uuid4())

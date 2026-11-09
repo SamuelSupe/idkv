@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.1 — 2026-11-09
+
+- Configurable WAL group commit with immediate sync after idle periods and early wakeup under contention. Set `wal_group_window_us` to `0` to skip deliberate collection time.
+- Encode WAL frames outside the publication lock and streamline unique index maintenance for a single mutation with revision checks.
+- Negotiate binary WAL pages with weighted `Accept` and keep JSON fallback for 1.0.0 peers. Verify cursor padding and enforce the shared response size limit.
+- Keep in-flight binary frames charged to global memory after handing them to HTTP. Release tenant charges at handoff so a slow peer consumes less of the tenant's write budget.
+- Add a quota-boundary regression with a negative control and document the WAL window benchmarks.
+
+See the [1.0.1 release notes](docs/releases/v1.0.1.md) for distribution, compatibility and validation.
+
 ## 1.0.0 — 2026-11-09
 
 First stable release of the document, lookup, published-dataset, and temporal identity APIs.

@@ -1,6 +1,6 @@
 # 指标、OpenTelemetry 链路与日志
 
-1.0.0 使用本文的指标与配置契约；英文服务部署见[部署指南](deployment.md)。历史 v0.x 标记表示功能引入版本。
+1.0.1 使用本文的指标与配置契约；英文服务部署见[部署指南](deployment.md)。历史 v0.x 标记表示功能引入版本。
 
 主体维护增加 `tkv_open_engines_identity_subjects_ready_tenants`、`tkv_open_engines_identity_subjects_migrating_tenants`、`tkv_open_engines_identity_subjects_processed_history_rows`、`tkv_open_engines_identity_subjects_written_links`、`tkv_open_engines_identity_subjects_gc_scanned_rows` 和 `tkv_open_engines_identity_subjects_gc_removed_rows`。这些是本节点已观测维护进度的打开租户汇总 gauge：租户关闭时会下降，不应视作进程累计 counter；抓取不打开冷租户、不做存储扫描。按租户查看持久 ready/计数（包括从库收到的状态）使用 `GET /v1/tenants/{tenant}/retention` 的 identity_subjects 字段，缓存 status.stats 可能尚未初始化或落后。以进度差值、持续 not-ready 时长及 maintenance_error 组合判断迁移是否停滞，具体批次与保留边界见[身份文档](identity.md#迁移进度)。
 

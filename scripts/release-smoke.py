@@ -121,9 +121,11 @@ def main():
     root = args.root.resolve()
     root.mkdir(parents=True, exist_ok=False)
     binaries = args.binary_dir.resolve()
+    contract = json.loads((SOURCE / "openapi.json").read_text())
+    expected_version = contract["info"]["version"]
     for name in ["tenant-kv", "tenant-kv-restore", "tenant-kv-repair"]:
         version = subprocess.check_output([str(binaries / name), "--version"], text=True).strip()
-        assert version == name + " 1.0.0", version
+        assert version == f"{name} {expected_version}", version
         subprocess.run([str(binaries / name), "--help"], check=True, stdout=subprocess.DEVNULL)
     token = secrets.token_hex(32)
     token_file, auth, backup = root / "token.txt", root / "auth.json", root / "backup.json"
@@ -146,10 +148,10 @@ def main():
     checks = {}
     with serving(binaries / "tenant-kv", root / "data", auth, root / "server.log", backup) as base:
         capabilities = request(base, token, "GET", "/v1/capabilities")
-        assert capabilities["version"] == "1.0.0"
+        assert capabilities["version"] == expected_version
         assert capabilities["storage_registry"] == 6 and capabilities["replication_protocol"] == 4
         schema = request(base, token, "GET", "/openapi.json")
-        assert schema == json.loads((SOURCE / "openapi.json").read_text())
+        assert schema == contract
         for script in ["http_smoke.py", "dsl_smoke.py", "identity_smoke.py", "retention_smoke.py"]:
             command = ["python3", str(SOURCE / "scripts" / script), base, str(token_file)]
             if script == "http_smoke.py":
@@ -193,7 +195,7 @@ def main():
     with serving(binaries / "tenant-kv", imported_root, auth, root / "repaired.log") as base:
         assert request(base, token, "GET", path)["owner"] == "platform"
     report = {
-        "version": "1.0.0", "binary_dir": str(binaries), "passed": True,
+        "version": expected_version, "binary_dir": str(binaries), "passed": True,
         "checks": checks, "offline_import": True, "archived_wal_repair": True,
     }
     (root / "result.json").write_text(json.dumps(report, indent=2) + "\n")

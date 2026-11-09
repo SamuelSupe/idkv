@@ -1,6 +1,6 @@
 # Release engineering
 
-The 1.0 binary distribution targets Linux aarch64 and x86_64 with static musl linking. Production archives contain tenant-kv, tenant-kv-restore and tenant-kv-repair; crash-probe and the failpoints feature are excluded.
+The binary distribution targets Linux aarch64 and x86_64 with static musl linking. Production archives contain tenant-kv, tenant-kv-restore and tenant-kv-repair. Source regression tests use crash-probe and the failpoints feature.
 
 ## Build
 
@@ -30,7 +30,7 @@ Execute each architecture in a matching Linux environment. x86_64 emulation on A
 5. DSL, temporal identity and retention smoke.
 6. A primary/replica pair, catch-up, switchover, restart and acknowledged-data checks.
 
-The source regression suite additionally uses failpoints. Those test executables must not be substituted for the production artifacts. Exact v1.0 results and scope are recorded in [release notes](releases/v1.0.0.md).
+Run the source regression suite separately with failpoints enabled. The [release notes index](README.md#english-guides) lists the validation results and scope for each published version.
 
 Regenerate the default contract from the release executable:
 
