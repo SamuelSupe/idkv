@@ -119,8 +119,7 @@ impl Engine {
                 return Err(Error::invalid("replication cursor offset"));
             }
             let mut frames = wal::FrameReader::new(file, offset, len, &self.budget)?;
-            // Binary frames stay owned by the HTTP body, including their
-            // ownership and queue entries after the source lock is released.
+            // Include ownership and queue overhead for frames handed to HTTP.
             let frame_overhead = if binary { 128 } else { 0 };
             while let Some((seq, bytes, memory)) = frames.next(frame_overhead)? {
                 if seq > through {
@@ -135,10 +134,7 @@ impl Engine {
                 }
                 size += bytes.len();
                 if binary {
-                    raw.push(axum::body::Bytes::from_owner(RawFrame {
-                        bytes,
-                        _memory: memory,
-                    }));
+                    raw.push(RawFrame { bytes, memory });
                 } else {
                     let wire_bytes = bytes.len().div_ceil(3) * 4 + 64;
                     page_memory.push(self.budget.reserve(wire_bytes).or_else(|_| {
@@ -431,7 +427,7 @@ mod tests {
         let mut raw: Vec<u8> = binary
             .raw
             .iter()
-            .flat_map(|frame| frame.iter().copied())
+            .flat_map(|frame| frame.bytes.iter().copied())
             .collect();
         let valid_tail = raw.pop().unwrap();
         let wal_before = handle.engine().metrics()["wal_bytes"].clone();

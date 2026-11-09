@@ -311,6 +311,18 @@ async fn log_negotiation_preserves_wal_frames_and_cursor_across_encodings() {
             "application/json",
         ),
         (
+            format!("application/json;charset=utf-8, {media};q=0.5"),
+            "application/json",
+        ),
+        (
+            format!("application/json;q=0.2;charset=\"UTF-8\", {media};q=0.5"),
+            media,
+        ),
+        (
+            format!("application/json;note=\"x;q=0\", {media};q=0.5"),
+            "application/json",
+        ),
+        (
             format!("{media};q=0.5, */*;q=1, application/json;q=0"),
             media,
         ),
@@ -328,6 +340,78 @@ async fn log_negotiation_preserves_wal_frames_and_cursor_across_encodings() {
             .error_for_status()
             .unwrap();
         assert_eq!(response.headers()["content-type"], expected, "{accept}");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn slow_binary_log_send_keeps_global_charge_without_blocking_tenant_writes() {
+    use tenant_kv::replication::{LogRequest, PROTOCOL};
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+    const FRAME_BYTES: usize = 8 << 20;
+    let pair = Pair::with_options(Options {
+        tenant_memory_bytes: 44 << 20,
+        memtable_bytes: 20 << 20,
+        cache_bytes: 1 << 20,
+        ..Options::default()
+    })
+    .await;
+    let info = pair.a.create_tenant("slow-binary-log").unwrap();
+    let tenant = pair.a.tenant(info.id).unwrap();
+    let state = pair.a.replication_state();
+    let request = serde_json::to_string(&LogRequest {
+        protocol: PROTOCOL,
+        cluster: state.cluster,
+        epoch: state.epoch,
+        tenant: info.id,
+        generation: info.generation,
+        after: tenant.engine().seq(),
+        cursor: None,
+    })
+    .unwrap();
+    tenant
+        .engine()
+        .transact(|tx| tx.put(b"large".to_vec(), vec![1; FRAME_BYTES]))
+        .unwrap();
+    let non_tenant_memory = || {
+        pair.a
+            .memory_bytes()
+            .saturating_sub(tenant.engine().memory_bytes())
+    };
+    let before = non_tenant_memory();
+    let global_before = pair.a.memory_bytes();
+    let addr = pair.ua.strip_prefix("http://").unwrap();
+    let socket = tokio::net::TcpSocket::new_v4().unwrap();
+    socket.set_recv_buffer_size(4096).unwrap();
+    let mut socket = socket.connect(addr.parse().unwrap()).await.unwrap();
+    let http = format!(
+        "POST /v1/replication/log HTTP/1.1\r\nHost: {addr}\r\nAuthorization: Bearer {PEER}\r\nAccept: application/vnd.idkv.wal-page.v1\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{request}",
+        request.len()
+    );
+    socket.write_all(http.as_bytes()).await.unwrap();
+    let mut response = BufReader::new(socket);
+    let mut status = String::new();
+    tokio::time::timeout(Duration::from_secs(5), response.read_line(&mut status))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(status.starts_with("HTTP/1.1 200 "), "{status}");
+
+    // Leave the frame in flight while a write needs the remaining tenant budget.
+    assert!(pair.a.memory_bytes() >= global_before + FRAME_BYTES);
+    tenant
+        .engine()
+        .transact(|tx| tx.put(b"foreground".to_vec(), vec![2; 6 << 20]))
+        .unwrap();
+    assert!(non_tenant_memory() >= before + FRAME_BYTES);
+    drop(response);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while non_tenant_memory() > before + (1 << 20) {
+        assert!(
+            Instant::now() < deadline,
+            "dropped send still owns the frame"
+        );
+        tokio::time::sleep(Duration::from_millis(10)).await;
     }
 }
 

@@ -250,7 +250,7 @@ impl Engine {
 
     fn group_has_enough_writes(&self, staged: u64) -> bool {
         let active = self.active_writes.load(Ordering::Relaxed) as u64;
-        staged - self.seq() >= active.max(MIN_EARLY_SYNC_BATCH)
+        staged.saturating_sub(self.seq()) >= active.max(MIN_EARLY_SYNC_BATCH)
     }
     pub(super) fn record_staged_commit(
         &self,

@@ -262,14 +262,16 @@ impl Budget {
             return Err(Error::limit("tenant memory budget exhausted"));
         }
         Ok(Reservation {
-            budget: self.clone(),
+            global: self.global.clone(),
+            tenant: Some(self.tenant.clone()),
             size,
         })
     }
 }
 #[derive(Debug)]
 pub struct Reservation {
-    budget: Budget,
+    global: Arc<Counter>,
+    tenant: Option<Arc<Counter>>,
     size: usize,
 }
 impl Reservation {
@@ -279,16 +281,23 @@ impl Reservation {
     pub fn shrink(&mut self, size: usize) {
         if size < self.size {
             let released = self.size - size;
-            self.budget.global.give(released);
-            self.budget.tenant.give(released);
+            self.global.give(released);
+            if let Some(tenant) = &self.tenant {
+                tenant.give(released);
+            }
             self.size = size;
+        }
+    }
+
+    pub(crate) fn release_tenant(&mut self) {
+        if let Some(tenant) = self.tenant.take() {
+            tenant.give(self.size);
         }
     }
 }
 impl Drop for Reservation {
     fn drop(&mut self) {
-        self.budget.global.give(self.size);
-        self.budget.tenant.give(self.size);
+        self.shrink(0);
     }
 }
 

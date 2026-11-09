@@ -1,7 +1,7 @@
 use super::*;
 use crate::replication::{
-    MAX_LOG_PAGE_FRAMES,
-    wire::{LOG_MEDIA_TYPE, LogExport, log_header},
+    MAX_LOG_PAGE_FRAMES, MAX_WIRE_BYTES,
+    wire::{LOG_MEDIA_TYPE, LogExport, RawFrame, log_header},
 };
 use axum::{
     body::{Body, Bytes, to_bytes},
@@ -128,7 +128,7 @@ pub(super) async fn dispatch(
                 "/v1/replication/log" => {
                     let export = service.export_log_page(&decode(body)?, binary_log)?;
                     let mut response = if binary_log {
-                        binary_log_response(export)
+                        binary_log_response(export)?
                     } else {
                         response(&state.store, export.page)?
                     };
@@ -173,21 +173,7 @@ fn prefers_binary_log(headers: &HeaderMap) -> bool {
     let mut json_preference = (0, 0);
     for header in headers.get_all(ACCEPT) {
         let Ok(value) = header.to_str() else { continue };
-        let mut quoted = false;
-        let mut escaped = false;
-        let ranges = value.split(|ch| {
-            if escaped {
-                escaped = false;
-                return false;
-            }
-            if quoted && ch == '\\' {
-                escaped = true;
-            } else if ch == '"' {
-                quoted = !quoted;
-            }
-            ch == ',' && !quoted
-        });
-        for range in ranges {
+        for range in split_unquoted(value, ',') {
             let (media, parameters) = range.split_once(';').unwrap_or((range, ""));
             let media = media.trim();
             let binary = media.eq_ignore_ascii_case(LOG_MEDIA_TYPE);
@@ -216,19 +202,34 @@ fn prefers_binary_log(headers: &HeaderMap) -> bool {
     binary_quality > 0 && binary_quality >= json_preference.1
 }
 
+fn split_unquoted(value: &str, delimiter: char) -> impl Iterator<Item = &str> {
+    let mut quoted = false;
+    let mut escaped = false;
+    value.split(move |ch| {
+        if escaped {
+            escaped = false;
+            return false;
+        }
+        if quoted && ch == '\\' {
+            escaped = true;
+        } else if ch == '"' {
+            quoted = !quoted;
+        }
+        ch == delimiter && !quoted
+    })
+}
+
 fn accept_quality(parameters: &str) -> Option<u16> {
-    let mut parameters = parameters
-        .split(';')
-        .map(str::trim)
-        .filter(|p| !p.is_empty());
-    let Some(parameter) = parameters.next() else {
+    let mut weight = None;
+    for parameter in split_unquoted(parameters, ';') {
+        let (name, value) = parameter.split_once('=').unwrap_or((parameter, ""));
+        if name.trim().eq_ignore_ascii_case("q") && weight.replace(value.trim()).is_some() {
+            return None;
+        }
+    }
+    let Some(value) = weight else {
         return Some(1000);
     };
-    let (name, value) = parameter.split_once('=')?;
-    if !name.trim().eq_ignore_ascii_case("q") || parameters.next().is_some() {
-        return None;
-    }
-    let value = value.trim();
     let (whole, fraction) = value.split_once('.').unwrap_or((value, ""));
     if fraction.len() > 3 || !fraction.bytes().all(|b| b.is_ascii_digit()) {
         return None;
@@ -246,24 +247,37 @@ fn accept_quality(parameters: &str) -> Option<u16> {
     }
 }
 
-fn binary_log_response(export: LogExport) -> Response {
-    let header = Bytes::copy_from_slice(&log_header(&export.page));
-    let remaining = header.len() + export.raw.iter().map(Bytes::len).sum::<usize>();
+fn binary_log_response(mut export: LogExport) -> Result<Response> {
+    let header = log_header(&export.page);
+    let remaining = header.len()
+        + export
+            .raw
+            .iter()
+            .map(|frame| frame.bytes.len())
+            .sum::<usize>();
+    if remaining > MAX_WIRE_BYTES {
+        return Err(Error::limit("replication response size"));
+    }
+    // The tenant's work is complete. Keep the existing global reservation
+    // with the allocation through socket backpressure, without reserving twice.
+    for frame in &mut export.raw {
+        frame.memory.release_tenant();
+    }
     let body = BinaryLogBody {
-        header: Some(header),
+        header: Some(Bytes::copy_from_slice(&header)),
         frames: export.raw.into_iter(),
         remaining,
     };
-    Response::builder()
+    Ok(Response::builder()
         .header(CONTENT_TYPE, LOG_MEDIA_TYPE)
         .body(Body::new(body))
-        .unwrap()
+        .unwrap())
 }
 
 // Each WAL frame owns its memory reservation through the HTTP send.
 struct BinaryLogBody {
     header: Option<Bytes>,
-    frames: std::vec::IntoIter<Bytes>,
+    frames: std::vec::IntoIter<RawFrame>,
     remaining: usize,
 }
 
@@ -278,7 +292,7 @@ impl hyper::body::Body for BinaryLogBody {
         Poll::Ready(
             self.header
                 .take()
-                .or_else(|| self.frames.next())
+                .or_else(|| self.frames.next().map(Bytes::from_owner))
                 .map(|bytes| {
                     self.remaining -= bytes.len();
                     Ok(Frame::data(bytes))
@@ -293,7 +307,7 @@ impl hyper::body::Body for BinaryLogBody {
 
 fn response<T: serde::Serialize>(store: &Store, result: T) -> Result<Response> {
     let size = crate::json::encoded_len(&result)?;
-    if size > crate::replication::MAX_WIRE_BYTES {
+    if size > MAX_WIRE_BYTES {
         return Err(Error::limit("replication response size"));
     }
     let mut memory = store.reserve_http(size.saturating_mul(3) + 4096)?;
