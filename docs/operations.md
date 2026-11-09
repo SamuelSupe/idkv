@@ -75,6 +75,8 @@ DSL 语句最多 64 KiB，参数编码量受 `max_batch_bytes` 限制，展开�
 
 v0.10.1 校准磁盘用量时持有维护锁固定文件发布和 WAL 轮转，但不在遍历目录期间持有写锁；最后用短写锁读取当前 WAL 实际长度并发布总量，包含扫描期间完成的提交。空闲检查使用不可变版本预先计算的层大小和 L0 压力；目录全面核对每 5 秒进行一次，刷盘/合并发布后立即核对。每个维护 tick 仍核对活跃 WAL 长度，及时释放每次提交的保守磁盘预留；占用达到配额 60% 时每 tick 全面核对，以免旧快照释放后的空间回收等待 5 秒。低占用时，外部文件变化或旧 SST 释放最多到下一次全面核对才反映在统计中。维护调度 tick 仍为 100 ms；队列拥堵或长任务会延后实际执行，此频率不是完成期限。持久化顺序和写入配额门槛保持不变。
 
+复制日志和检查点文件分块的在途发送缓冲共用节点前台内存预算的四分之一。发送期间仍计入全局上限，额度随响应缓冲释放。发送预算饱和时复制端点可返回 RESOURCE_EXHAUSTED，业务请求仍可使用其余全局空间。
+
 ## WAL 组提交基准
 
 提前唤醒要求待同步事务达到当前活跃写入数且至少有 8 笔。固定 2–7 个客户端且每个客户端只有一笔在途写入时，触发收集后会等到窗口结束。活跃写入数也包括正在进入、求值或等待的事务，因此高并发时仍可能等到窗口结束。
@@ -144,7 +146,7 @@ COMMIT_UNKNOWN 后不能继续写入该引擎。新请求不再复用它，旧�
 
 重建临时需要最多约一个未刷盘 WAL 文件大小的额外空间。ENOSPC 会打开不允许发布位置的诊断实例，context.writable 为 false、stats.recovery_read_only 为 true；普通快照/文档/查询读取返回 RECOVERY_REQUIRED（503），写入、后台修改、日志导出、复制位置确认和计划切换拒绝，避免返回缺少已确认数据的正常 404。原始字节保持不变，不每秒重试复制。释放空间和句柄后 close/reopen 完成恢复。注册表无变化的启动不重写 control/tenants.json；其他打开 IO_ERROR 缓存一秒，close 可提前清除。
 
-最后一个 WAL 仅长度不完整且位于 WAL-SYNC 水位之外时可自动截尾；坏魔数和 CRC 失败一律隔离。错误日志及 tkv_wal_corrupt_recoveries_total、tkv_wal_torn_tail_recoveries_total 记录拒绝/成功截尾次数（进程累计）。CRC/魔数错误拒绝恢复时保留 wal/*.corrupt 原 inode，不自动删除；正常长度残缺尾部只保留一份 wal/TORN-TAIL（偏移元数据与丢弃后缀，最多约 64 MiB+元数据），后续长度残缺覆盖它，不反复复制已确认 WAL 前缀；恢复或人工修复前先归档现场，修复时用新 inode 替换，不能原地覆盖诊断硬链接。已刷盘保留 WAL 被外部删除时仍使旧导出租约失效，落后副本通过 LOG_GONE 重建。
+WAL 帧长度不完整、坏魔数和 CRC 失败均隔离租户。错误日志给出 WAL UUID、偏移与证据位置，`tkv_wal_corrupt_recoveries_total` 计入拒绝次数。原 WAL 保持原样，尽力用 `wal/*.corrupt` 保留原 inode。旧版本生成的 `wal/TORN-TAIL` 仍保留供排查。恢复或人工修复前先归档现场，修复时用新 inode 替换。已刷盘保留 WAL 被外部删除仍会使旧导出租约失效，落后副本通过 LOG_GONE 重建。
 
 installing 在检查点安装、管理操作排空及配额离线预检期间为 true。状态接口包含 commit_seq、memory_bytes、disk_bytes、各层文件数、活动快照数、维护错误，以及进程内累计的 document_bytes、wal_bytes、flush_bytes、compaction_read_bytes、compaction_write_bytes、commits、WAL fsyncs、write_lock_wait_ns，以及 scheduler.completed_jobs、cancelled_jobs、queue_wait_ns、queued_jobs。调度计数在 Store 生命周期内按租户累计；其余引擎指标在重开后清零。读取统计的 blocks_read 表示引擎文件读取，不保证绕过操作系统页缓存；decompressed_bytes 是解压后的字节数。写放大可用 `(wal_bytes + flush_bytes + compaction_write_bytes) / document_bytes` 估算，必须注明区间、索引数和合并是否追平。
 
@@ -189,7 +191,7 @@ HTTP 先用 try_lock/try_read 非阻塞取得已缓存预算。全局 registry/s
 
 ### 离线 WAL 前缀修复
 
-不能仅凭 CRC 和健康关闭水位区分未确认撕裂写与已确认字节的介质损坏。自动恢复继续拒绝 CRC/魔数错误；诊断日志给出 WAL UUID 与第一个坏帧偏移。确认应保留的前缀后，可停机执行：
+不能仅凭 CRC 和健康关闭水位区分未确认撕裂写与已确认字节的介质损坏。自动恢复拒绝不完整的 WAL 帧、CRC 和魔数错误。诊断日志给出 WAL UUID 与第一个坏帧偏移。确认应保留的前缀后，可停机执行：
 
 ```sh
 tenant-kv-repair /var/lib/idkv TENANT_UUID WAL_UUID \

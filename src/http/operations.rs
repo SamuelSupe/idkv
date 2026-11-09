@@ -116,6 +116,12 @@ pub(super) fn dispatch(
     }
     let id = tenant_id.ok_or_else(|| Error::invalid("tenant required"))?;
     if backups::is_backup_route(route) {
+        if state.runtime.backup_startup_degraded {
+            return Err(Error::new(
+                "UNAVAILABLE",
+                "remote backups failed to start; inspect server logs and restart",
+            ));
+        }
         return backups::dispatch(backup_service, route, params, method, id, body);
     }
     match route {

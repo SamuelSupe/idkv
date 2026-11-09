@@ -420,16 +420,160 @@ async fn local_backup_deletion_requires_admin_and_preserves_tenant_scope() {
     );
 }
 
+struct ServerProcess(std::process::Child);
+impl Drop for ServerProcess {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+#[tokio::test]
+async fn corrupt_backup_job_degrades_remote_backups_but_keeps_data_available() {
+    use std::{
+        fs,
+        process::{Command, Stdio},
+        time::{Duration, Instant},
+    };
+    use uuid::Uuid;
+
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("data");
+    let store = Store::open(&root, Options::default()).unwrap();
+    let info = store.create_tenant("backup-degraded").unwrap();
+    let tenant = store.tenant(info.id).unwrap();
+    tenant.create_collection("docs").unwrap();
+    tenant
+        .put("docs", json!({"_key":"existing","value":42}), None)
+        .unwrap();
+    drop(tenant);
+    drop(store);
+
+    let jobs = root.join("control/backup-jobs");
+    fs::create_dir(&jobs).unwrap();
+    let bad_job = jobs.join(format!("{}.json", Uuid::new_v4()));
+    let damaged = b"TKJ1 incomplete backup job";
+    fs::write(&bad_job, damaged).unwrap();
+    let secret = "backup-degraded-admin-token";
+    let auth = dir.path().join("auth.json");
+    fs::write(
+        &auth,
+        serde_json::to_vec(&AuthConfig {
+            tokens: vec![Token {
+                subject: "admin".into(),
+                sha256: http::token_hash(secret),
+                tenant: None,
+                role: Role::Admin,
+            }],
+        })
+        .unwrap(),
+    )
+    .unwrap();
+    let backup = dir.path().join("backup.json");
+    fs::write(
+        &backup,
+        json!({
+            "service": "fs", "options": {"root":dir.path().join("remote")}
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap().to_string();
+    drop(listener);
+    let mut child = ServerProcess(
+        Command::new(env!("CARGO_BIN_EXE_tenant-kv"))
+            .args(["serve", "--root"])
+            .arg(&root)
+            .arg("--auth")
+            .arg(&auth)
+            .arg("--backup-config")
+            .arg(&backup)
+            .args(["--listen", &address])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(2))
+        .build()
+        .unwrap();
+    let base = format!("http://{address}");
+    let deadline = Instant::now() + Duration::from_secs(8);
+    loop {
+        if client
+            .get(format!("{base}/ready/write"))
+            .send()
+            .await
+            .is_ok_and(|r| r.status().is_success())
+        {
+            break;
+        }
+        assert!(
+            child.0.try_wait().unwrap().is_none(),
+            "backup failure stopped data server"
+        );
+        assert!(
+            Instant::now() < deadline,
+            "data server did not become writable"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let tenant = format!("{base}/v1/tenants/{}", info.id);
+    let docs = format!("{tenant}/collections/docs/documents");
+    let row: Value = client
+        .get(format!("{docs}/existing"))
+        .bearer_auth(secret)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(row["value"], 42);
+    client
+        .put(docs)
+        .bearer_auth(secret)
+        .json(&json!({"document":{"_key":"new","value":43}}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let backup_job = client
+        .post(format!("{tenant}/remote-backups"))
+        .bearer_auth(secret)
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(backup_job.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let metrics = client
+        .get(format!("{base}/metrics"))
+        .bearer_auth(secret)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    assert!(
+        metrics
+            .lines()
+            .any(|line| line == "tkv_backup_startup_degraded 1")
+    );
+    assert_eq!(fs::read(&bad_job).unwrap(), damaged);
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn server_exposes_not_ready_before_closing_its_listener_on_sigterm() {
-    struct Child(std::process::Child);
-    impl Drop for Child {
-        fn drop(&mut self) {
-            let _ = self.0.kill();
-            let _ = self.0.wait();
-        }
-    }
     let dir = tempfile::tempdir().unwrap();
     let auth_path = dir.path().join("auth.json");
     std::fs::write(
@@ -448,7 +592,7 @@ async fn server_exposes_not_ready_before_closing_its_listener_on_sigterm() {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
     drop(listener);
-    let mut child = Child(
+    let mut child = ServerProcess(
         std::process::Command::new(env!("CARGO_BIN_EXE_tenant-kv"))
             .arg("serve")
             .arg("--root")

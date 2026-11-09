@@ -208,10 +208,20 @@ def main():
                     write_round(0, tenant, round_id)
             start(1, "wal_torn_payload", crash_expected=True)
             start(1)
+            deadline = time.monotonic() + 20
+            while not state(1)["unavailable"]:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("replica did not report the truncated WAL")
+                time.sleep(0.05)
+            call(0, "/v1/replication/switchover", {}, expected=409)
+            assert state(0)["node"]["role"] == "primary"
+            stop(1)
+            (root / "node-1").rename(root / "node-1-torn-wal")
+            start(1)
             catch_up(0, 1)
             for tenant in tenants:
                 verify(1, tenant, 21)
-            phases.append("torn multi-frame replica WAL append; complete prefix recovered and final batch fetched again")
+            phases.append("torn replica WAL isolated, switchover refused, replica rebuilt from primary")
 
         started = time.perf_counter()
         call(0, "/v1/replication/switchover", {})

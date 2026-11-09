@@ -240,28 +240,32 @@ fn review0732_tail_garbage_requires_explicit_repair_before_future_writes() {
 }
 
 #[test]
-fn incomplete_tail_is_discarded_but_synced_corruption_is_rejected() {
+fn unsealed_tail_and_synced_corruption_are_rejected() {
     let dir = tempfile::tempdir().unwrap();
     let id = seed(dir.path());
+    {
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        store
+            .tenant(id)
+            .unwrap()
+            .put("assets", json!({"_key":"new","ip":"two"}), None)
+            .unwrap();
+    }
     let wal = fs::read_dir(dir.path().join("tenants").join(id.to_string()).join("wal"))
         .unwrap()
         .next()
         .unwrap()
         .unwrap()
         .path();
-    let mut file = OpenOptions::new().append(true).open(&wal).unwrap();
-    file.write_all(b"TXN").unwrap();
-    file.sync_all().unwrap();
-    drop(file);
-    {
-        let store = Store::open(dir.path(), Options::default()).unwrap();
-        let t = store.tenant(id).unwrap();
-        assert!(t.get("assets", "old").unwrap().is_some());
-        t.put("assets", json!({"_key":"new","ip":"two"}), None)
-            .unwrap();
-    }
     let synced = fs::read(&wal).unwrap();
     assert!(synced.len() > 100);
+    let unsealed = [&synced[..], b"TXN"].concat();
+    fs::write(&wal, &unsealed).unwrap();
+    {
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        assert_eq!(store.tenant(id).err().unwrap().code, "CORRUPTION");
+        assert_eq!(fs::read(&wal).unwrap(), unsealed);
+    }
     for damage in [
         "header_crc",
         "payload_crc",
@@ -378,10 +382,7 @@ fn process_crashes_preserve_atomic_documents_and_indexes() {
             .unwrap();
         assert!(!status.success(), "failpoint {point} did not trigger");
         let store = Store::open(dir.path(), Options::default()).unwrap();
-        if matches!(
-            point,
-            "wal_torn_zero_header" | "wal_torn_header_crc" | "wal_torn_payload_crc"
-        ) {
+        if point.starts_with("wal_torn") {
             assert_eq!(store.tenant(id).err().unwrap().code, "CORRUPTION");
             let wal = dir.path().join("tenants").join(id.to_string()).join("wal");
             assert!(fs::read_dir(wal).unwrap().any(|entry| {
@@ -415,9 +416,6 @@ fn process_crashes_preserve_atomic_documents_and_indexes() {
         .contains(&point)
         {
             assert!(row.is_some(), "durability at {point}");
-        }
-        if point.starts_with("wal_torn") {
-            assert!(row.is_none());
         }
         if point == "index_ready" {
             assert!(
@@ -578,10 +576,7 @@ fn temporal_corrections_history_heads_and_receipts_recover_atomically() {
             .unwrap();
         assert!(!status.success(), "{point} did not trigger");
         let store = Store::open(dir.path(), Options::default()).unwrap();
-        if matches!(
-            point,
-            "wal_torn_zero_header" | "wal_torn_header_crc" | "wal_torn_payload_crc"
-        ) {
+        if point.starts_with("wal_torn") {
             assert_eq!(store.tenant(id).err().unwrap().code, "CORRUPTION");
             let wal = dir.path().join("tenants").join(id.to_string()).join("wal");
             assert!(fs::read_dir(wal).unwrap().any(|entry| {
@@ -601,9 +596,7 @@ fn temporal_corrections_history_heads_and_receipts_recover_atomically() {
         };
         let result = t.identity_resolve(&query).unwrap();
         let receipt = t.identity_operation("correction");
-        if point.starts_with("wal_torn") {
-            assert!(receipt.is_err());
-        } else if point != "wal_appended" {
+        if point != "wal_appended" {
             assert!(receipt.is_ok(), "durability at {point}");
         }
         assert_eq!(
@@ -1274,46 +1267,48 @@ fn reviewf647_offline_wal_repair_preserves_confirmed_prefix_and_rejects_old_repl
 }
 
 #[test]
-fn reviewf647_repeated_incomplete_appends_keep_bounded_tail_evidence() {
+fn repeated_reopens_keep_one_evidence_link_for_a_truncated_wal() {
+    use std::os::unix::fs::MetadataExt;
     let dir = tempfile::tempdir().unwrap();
     let id = seed(dir.path());
     let root = dir.path().join("tenants").join(id.to_string());
-    for n in 0..4 {
+    let wal_dir = root.join("wal");
+    {
         let store = Store::open(dir.path(), Options::default()).unwrap();
-        let tenant = store.tenant(id).unwrap();
-        tenant.put("assets", json!({"_key":"large-prefix","ip":"large-prefix","value":"x".repeat(128 << 10),"n":n}), None).unwrap();
-        let confirmed = tenant.get("assets", "large-prefix").unwrap();
-        drop(tenant);
-        drop(store);
-        let current = fs::read_to_string(root.join("CURRENT")).unwrap();
-        let manifest: serde_json::Value = storage::read_json(&root.join(current)).unwrap();
-        let wal = manifest["wals"].as_array().unwrap().last().unwrap()["id"]
-            .as_str()
-            .unwrap();
-        let path = root.join("wal").join(format!("{wal}.wal"));
-        let mut file = OpenOptions::new().append(true).open(path).unwrap();
-        file.write_all(b"TXN1-short").unwrap();
-        file.sync_all().unwrap();
-        drop(file);
-        let store = Store::open(dir.path(), Options::default()).unwrap();
-        assert_eq!(
-            store
-                .tenant(id)
-                .unwrap()
-                .get("assets", "large-prefix")
-                .unwrap(),
-            confirmed
-        );
-        let evidence: Vec<_> = fs::read_dir(root.join("wal"))
+        store
+            .tenant(id)
             .unwrap()
-            .map(|e| e.unwrap().path())
-            .filter(|p| {
-                p.extension().is_some_and(|e| e == "corrupt")
-                    || p.file_name().unwrap() == "TORN-TAIL"
-            })
+            .put(
+                "assets",
+                json!({"_key":"large-prefix","ip":"large-prefix","value":"x".repeat(128 << 10)}),
+                None,
+            )
+            .unwrap();
+    }
+    let current = fs::read_to_string(root.join("CURRENT")).unwrap();
+    let manifest: serde_json::Value = storage::read_json(&root.join(current)).unwrap();
+    let wal = manifest["wals"].as_array().unwrap().last().unwrap()["id"]
+        .as_str()
+        .unwrap();
+    let path = wal_dir.join(format!("{wal}.wal"));
+    let mut bytes = fs::read(&path).unwrap();
+    bytes.extend_from_slice(b"TXN1-short");
+    fs::write(&path, &bytes).unwrap();
+
+    for _ in 0..4 {
+        let store = Store::open(dir.path(), Options::default()).unwrap();
+        assert_eq!(store.tenant(id).err().unwrap().code, "CORRUPTION");
+        assert_eq!(fs::read(&path).unwrap(), bytes);
+        let evidence: Vec<_> = fs::read_dir(&wal_dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|p| p.extension().is_some_and(|ext| ext == "corrupt"))
             .collect();
         assert_eq!(evidence.len(), 1);
-        assert!(fs::metadata(&evidence[0]).unwrap().len() < 1024);
+        assert_eq!(
+            fs::metadata(&evidence[0]).unwrap().ino(),
+            fs::metadata(&path).unwrap().ino()
+        );
     }
 }
 

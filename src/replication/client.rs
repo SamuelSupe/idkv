@@ -9,12 +9,12 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     fs::{self, File, OpenOptions},
     sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::{sync::Mutex as AsyncMutex, task::JoinSet};
 use uuid::Uuid;
 
 #[cfg(test)]
@@ -279,8 +279,7 @@ impl Service {
                     }
                     error_delay = Duration::from_millis(service.inner.config.poll_ms);
                     if pending {
-                        // Each round gives every pending tenant a page before revisiting
-                        // a hot tenant. Sleep only at the head or after an error.
+                        // Sleep only at the head or after an error.
                         tokio::task::yield_now().await;
                         continue;
                     }
@@ -705,7 +704,6 @@ impl Service {
                 progress.retry_at.remove(&id);
             }
         }
-        let started = Instant::now();
         let mut positions = upstream.tenants.clone();
         if let Some(last) = self.inner.progress.lock().last_tenant
             && !positions.is_empty()
@@ -713,14 +711,21 @@ impl Service {
             let start = positions.partition_point(|p| p.info.id <= last) % positions.len();
             positions.rotate_left(start);
         }
-        for round in 0..8 {
-            let mut next = Vec::new();
-            for mut position in positions {
+        let mut ready: VecDeque<_> = positions.into_iter().map(|p| (p, 1)).collect();
+        let mut in_flight = JoinSet::new();
+        let mut pending = false;
+        let mut expired = false;
+        let cluster = upstream.node.cluster;
+        loop {
+            // Keep a second slot available so a slow page does not stall the
+            // queue. A tenant rejoins the tail only after its page is applied.
+            while !expired && in_flight.len() < 2 {
+                let Some((position, pages)) = ready.pop_front() else {
+                    break;
+                };
                 if deadline.saturating_duration_since(Instant::now()) < Duration::from_millis(100) {
-                    let error =
-                        Error::new("DEADLINE_EXCEEDED", "replication cycle network deadline");
-                    self.inner.progress.lock().error = Some(error.to_string());
-                    return if report_error { Err(error) } else { Ok(true) };
+                    expired = true;
+                    break;
                 }
                 if blocked.contains_key(&position.info.id) {
                     continue;
@@ -741,64 +746,75 @@ impl Service {
                     }
                 }
                 self.inner.progress.lock().last_tenant = Some(position.info.id);
-                match self
-                    .sync_tenant_until(&source, upstream.node.cluster, &position, deadline)
-                    .await
-                {
-                    Ok(TenantSync::Idle) => {
-                        let mut progress = self.inner.progress.lock();
-                        progress.log_backoff.remove(&position.info.id);
-                    }
-                    Ok(TenantSync::Pending(head)) => {
-                        self.inner
-                            .progress
-                            .lock()
-                            .log_backoff
-                            .remove(&position.info.id);
-                        // The source may advance beyond the catalog snapshot.
-                        // Compare the next page with the latest authenticated head.
-                        position.seq = head;
-                        next.push(position);
-                    }
-                    Err(error) => {
-                        let mut progress = self.inner.progress.lock();
-                        let cap = if matches!(
-                            error.code.as_str(),
-                            "BUSY" | "RESOURCE_EXHAUSTED" | "DEADLINE_EXCEEDED"
-                        ) {
-                            Duration::from_secs(1)
-                        } else {
-                            Duration::from_secs(30)
-                        };
-                        let delay = progress
-                            .log_backoff
-                            .get(&position.info.id)
-                            .map_or(Duration::from_millis(100), |(_, next)| *next)
-                            .min(cap);
-                        progress.log_backoff.insert(
-                            position.info.id,
-                            (Instant::now() + delay, (delay * 2).min(cap)),
-                        );
-                        failure.get_or_insert(error);
+                let service = self.clone();
+                let source = source.clone();
+                in_flight.spawn(async move {
+                    let result = service
+                        .sync_tenant_until(&source, cluster, &position, deadline)
+                        .await;
+                    (position, pages, result)
+                });
+            }
+            let Some(result) = in_flight.join_next().await else {
+                break;
+            };
+            let (mut position, pages, result) =
+                result.map_err(|_| Error::new("INTERNAL", "replication log worker failed"))?;
+            match result {
+                Ok(TenantSync::Idle) => {
+                    let mut progress = self.inner.progress.lock();
+                    progress.log_backoff.remove(&position.info.id);
+                }
+                Ok(TenantSync::Pending(head)) => {
+                    self.inner
+                        .progress
+                        .lock()
+                        .log_backoff
+                        .remove(&position.info.id);
+                    // The source may advance beyond the catalog snapshot.
+                    // Compare the next page with the latest authenticated head.
+                    position.seq = head;
+                    if pages < 8 {
+                        ready.push_back((position, pages + 1));
+                    } else {
+                        pending = true;
                     }
                 }
-            }
-            if next.is_empty() || round == 7 || started.elapsed() >= Duration::from_millis(10) {
-                let mut progress = self.inner.progress.lock();
-                progress.cycles += 1;
-                progress.error = failure.as_ref().map(ToString::to_string);
-                if report_error && let Some(error) = failure {
-                    return Err(error);
+                Err(error) => {
+                    let mut progress = self.inner.progress.lock();
+                    let cap = if matches!(
+                        error.code.as_str(),
+                        "BUSY" | "RESOURCE_EXHAUSTED" | "DEADLINE_EXCEEDED"
+                    ) {
+                        Duration::from_secs(1)
+                    } else {
+                        Duration::from_secs(30)
+                    };
+                    let delay = progress
+                        .log_backoff
+                        .get(&position.info.id)
+                        .map_or(Duration::from_millis(100), |(_, next)| *next)
+                        .min(cap);
+                    progress.log_backoff.insert(
+                        position.info.id,
+                        (Instant::now() + delay, (delay * 2).min(cap)),
+                    );
+                    failure.get_or_insert(error);
                 }
-                return Ok(!next.is_empty());
             }
-            // Every pending tenant receives one page per round. Refresh lifecycle
-            // and role information after at most eight rounds or 10 ms of work;
-            // each log request still checks epoch and storage generation itself.
-            positions = next;
-            tokio::task::yield_now().await;
         }
-        unreachable!("bounded replication rounds return at the limit")
+        let mut progress = self.inner.progress.lock();
+        if expired {
+            let error = Error::new("DEADLINE_EXCEEDED", "replication cycle network deadline");
+            progress.error = Some(error.to_string());
+            return if report_error { Err(error) } else { Ok(true) };
+        }
+        progress.cycles += 1;
+        progress.error = failure.as_ref().map(ToString::to_string);
+        if report_error && let Some(error) = failure {
+            return Err(error);
+        }
+        Ok(pending)
     }
     async fn sync_tenant_until(
         &self,

@@ -44,11 +44,27 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             let options = if let Some(path) = config { serde_json::from_slice(&std::fs::read(path)?)? } else { Options::default() };
             let store = Store::open(&root, options)?;
             let transport_options = store.options().clone();
-            let backups = if let Some(path) = backup_config { Some(tenant_kv::backup::BackupService::open(store.clone(), serde_json::from_slice(&std::fs::read(path)?)?)?) } else { None };
+            let mut backup_startup_degraded = false;
+            let backups = if let Some(path) = backup_config {
+                let config = serde_json::from_slice(&std::fs::read(path)?)?;
+                match tenant_kv::backup::BackupService::open(store.clone(), config) {
+                    Ok(service) => Some(service),
+                    Err(error) => {
+                        eprintln!("remote backup startup degraded: {error}; inspect backup state and restart");
+                        backup_startup_degraded = true;
+                        None
+                    }
+                }
+            } else {
+                None
+            };
             let replication = if let Some(path) = replication_config { Some(tenant_kv::replication::Service::open(store.clone(), serde_json::from_slice(&std::fs::read(path)?)?)?) } else { None };
             let telemetry_config: telemetry::Config = if let Some(path) = telemetry_config { serde_json::from_slice(&std::fs::read(path)?)? } else { Default::default() };
             let telemetry = tokio::task::spawn_blocking(move || Telemetry::new(telemetry_config)).await??;
-            let runtime = HttpRuntime::new(telemetry.clone());
+            let mut runtime = HttpRuntime::new(telemetry.clone());
+            if backup_startup_degraded {
+                runtime.mark_backup_startup_degraded();
+            }
             let router = http::app_with_runtime(store, auth, backups, replication.clone(), runtime.clone())?;
             let listener = tokio::net::TcpListener::bind(&listen).await?;
             let replication_worker = replication.as_ref().map(|service| service.start());

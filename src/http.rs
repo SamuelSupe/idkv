@@ -57,6 +57,7 @@ pub struct HttpRuntime {
     pub telemetry: crate::telemetry::Telemetry,
     draining: Arc<std::sync::atomic::AtomicBool>,
     not_ready: Arc<std::sync::atomic::AtomicBool>,
+    backup_startup_degraded: bool,
 }
 impl HttpRuntime {
     pub fn new(telemetry: crate::telemetry::Telemetry) -> Self {
@@ -64,6 +65,10 @@ impl HttpRuntime {
             telemetry,
             ..Self::default()
         }
+    }
+    /// Expose a startup failure of the optional remote backup service.
+    pub fn mark_backup_startup_degraded(&mut self) {
+        self.backup_startup_degraded = true;
     }
     /// Withdraw readiness while continuing to serve traffic during LB propagation.
     pub fn withdraw_readiness(&self) {
@@ -254,7 +259,9 @@ impl IntoResponse for Error {
             | "IMMUTABLE_DATASET"
             | "INCOMPATIBLE_VERSION" => StatusCode::CONFLICT,
             "CLOCK_SKEW" => StatusCode::SERVICE_UNAVAILABLE,
-            "READ_ONLY" | "REPLICATION_CONFLICT" | "REPLICA_LAG" => StatusCode::CONFLICT,
+            "READ_ONLY" | "REPLICATION_CONFLICT" | "REPLICA_LAG" | "REPLICA_SNAPSHOT_REQUIRED" => {
+                StatusCode::CONFLICT
+            }
             "LOG_GONE" | "SNAPSHOT_EXPIRED" => StatusCode::GONE,
             "REPLICATION_UNAVAILABLE" => StatusCode::SERVICE_UNAVAILABLE,
             "UNAVAILABLE" | "RESPONSE_UNAVAILABLE" | "RECOVERY_REQUIRED" => {
@@ -410,6 +417,10 @@ async fn dispatch_async(
             if let Some(backups) = &state.backups {
                 rendered.push_str(&backups.render_metrics());
             }
+            rendered.push_str(&format!(
+                "# HELP tkv_backup_startup_degraded Whether remote backups failed to start.\n# TYPE tkv_backup_startup_degraded gauge\ntkv_backup_startup_degraded {}\n",
+                u8::from(state.runtime.backup_startup_degraded)
+            ));
             let bytes = rendered.into_bytes();
             memory.shrink(bytes.capacity());
             Ok(Response::builder()

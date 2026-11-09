@@ -62,6 +62,7 @@ struct Pair {
 }
 #[derive(Default)]
 struct SnapshotGate {
+    blocked_log_tenant: parking_lot::Mutex<Option<Uuid>>,
     fail_logs: std::sync::atomic::AtomicUsize,
     failed_logs: std::sync::atomic::AtomicUsize,
     contexts: std::sync::atomic::AtomicUsize,
@@ -143,6 +144,22 @@ impl Pair {
                                 "<html>temporary gateway failure</html>",
                             ));
                         }
+                        let blocked_log = *gate.blocked_log_tenant.lock();
+                        let request = if request.uri().path() == "/v1/replication/log"
+                            && let Some(blocked) = blocked_log
+                        {
+                            let (parts, body) = request.into_parts();
+                            let bytes = axum::body::to_bytes(body, 16 << 10).await.unwrap();
+                            let log: tenant_kv::replication::LogRequest =
+                                serde_json::from_slice(&bytes).unwrap();
+                            if log.tenant == blocked {
+                                gate.entered.notify_one();
+                                gate.release.notified().await;
+                            }
+                            axum::extract::Request::from_parts(parts, axum::body::Body::from(bytes))
+                        } else {
+                            request
+                        };
                         if request.uri().path().ends_with("/context") {
                             gate.contexts
                                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -428,6 +445,119 @@ async fn in_flight_binary_log_frame_keeps_global_charge_without_blocking_tenant_
         );
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn binary_and_json_sends_share_a_cap_and_leave_room_for_unrelated_writes() {
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
+    use http_body_util::BodyExt;
+    use tenant_kv::replication::{LogRequest, PROTOCOL};
+    use tower::ServiceExt;
+
+    let pair = Pair::with_options(Options {
+        global_memory_bytes: 96 << 20,
+        tenant_memory_bytes: 80 << 20,
+        memtable_bytes: 24 << 20,
+        cache_bytes: 1 << 20,
+        ..Options::default()
+    })
+    .await;
+    let source = pair
+        .a
+        .tenant(pair.a.create_tenant("large-log").unwrap().id)
+        .unwrap();
+    let healthy = pair
+        .a
+        .tenant(pair.a.create_tenant("healthy-writer").unwrap().id)
+        .unwrap();
+    let state = pair.a.replication_state();
+    pair.a
+        .configure_replication(&Config {
+            log_retention_bytes: 64 << 20,
+            ..config(pair.a.root(), state.cluster, Role::Primary, pair.ub.clone())
+        })
+        .unwrap();
+    let mut request = LogRequest {
+        protocol: PROTOCOL,
+        cluster: state.cluster,
+        epoch: state.epoch,
+        tenant: source.id(),
+        generation: source.info().generation,
+        after: source.engine().seq(),
+        cursor: None,
+    };
+    source
+        .engine()
+        .transact(|tx| tx.put(b"large".to_vec(), vec![1; 8 << 20]))
+        .unwrap();
+    let app =
+        http::app_with_replication(pair.a.clone(), auth(), None, Some(pair.sa.clone())).unwrap();
+    let send = |accept, request: &LogRequest| {
+        app.clone().oneshot(
+            Request::post("/v1/replication/log")
+                .header("authorization", format!("Bearer {PEER}"))
+                .header("accept", accept)
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_vec(request).unwrap()))
+                .unwrap(),
+        )
+    };
+    let binary = "application/vnd.idkv.wal-page.v1";
+    let first = send(binary, &request).await.unwrap();
+    assert_eq!(first.status(), StatusCode::OK);
+    let mut body = first.into_body();
+    drop(body.frame().await.unwrap().unwrap());
+    let frame = body.frame().await.unwrap().unwrap().into_data().unwrap();
+    drop(body);
+    let json = send("application/json", &request).await.unwrap();
+    assert_eq!(json.status(), StatusCode::OK);
+    for accept in [binary, "application/json"] {
+        let rejected = send(accept, &request).await.unwrap();
+        assert_eq!(rejected.status(), StatusCode::TOO_MANY_REQUESTS);
+    }
+    healthy
+        .engine()
+        .transact(|tx| tx.put(b"ack".to_vec(), vec![2; 6 << 20]))
+        .unwrap();
+    drop(frame);
+    let retried = send(binary, &request).await.unwrap();
+    assert_eq!(retried.status(), StatusCode::OK);
+    drop(retried);
+    drop(json);
+    healthy.engine().flush().unwrap();
+    drop(healthy);
+
+    source.engine().flush().unwrap();
+    request.after = source.engine().seq();
+    source
+        .engine()
+        .transact(|tx| {
+            for key in [b"first".as_slice(), b"second", b"third"] {
+                tx.put(key.to_vec(), vec![3; 6 << 20])?;
+            }
+            Ok(())
+        })
+        .unwrap();
+    let oversized = send("application/json", &request).await.unwrap();
+    let status = oversized.status();
+    let error: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(oversized.into_body(), 4096)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(status, StatusCode::CONFLICT, "{error}");
+    assert_eq!(error["error"]["code"], "REPLICA_SNAPSHOT_REQUIRED");
+    assert_eq!(
+        send(binary, &request).await.unwrap().status(),
+        StatusCode::OK
+    );
+
+    drop(source);
+    stop_test_pair(pair).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -842,6 +972,79 @@ async fn slow_checkpoint_initialization_does_not_hold_healthy_replication_cycles
     assert!(healthy.unwrap().is_ok());
     assert_eq!(observed.unwrap()["value"], 42);
     pair.catch_up(false).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn healthy_replica_applies_multiple_pages_while_another_log_response_waits() {
+    let gate = std::sync::Arc::new(SnapshotGate::default());
+    let pair = Pair::with_snapshot_gate(
+        Options {
+            memtable_bytes: 8 << 20,
+            ..Options::default()
+        },
+        Role::Replica,
+        Some(gate.clone()),
+    )
+    .await;
+    let good = pair.a.create_tenant("healthy-log").unwrap().id;
+    let slow = pair.a.create_tenant("slow-log").unwrap().id;
+    for id in [good, slow] {
+        pair.a
+            .tenant(id)
+            .unwrap()
+            .create_collection("docs")
+            .unwrap();
+    }
+    pair.catch_up(false).await;
+    pair.a
+        .tenant(slow)
+        .unwrap()
+        .put("docs", json!({"_key":"blocked"}), None)
+        .unwrap();
+    let healthy = pair.a.tenant(good).unwrap();
+    for key in ["one", "two", "three"] {
+        healthy
+            .put(
+                "docs",
+                json!({"_key":key,"payload":"x".repeat(600 << 10)}),
+                None,
+            )
+            .unwrap();
+    }
+    let head = healthy.engine().seq();
+    *gate.blocked_log_tenant.lock() = Some(slow);
+    let service = pair.sb.clone();
+    let cycle = tokio::spawn(async move { service.sync_once().await });
+    tokio::time::timeout(Duration::from_secs(5), gate.entered.notified())
+        .await
+        .unwrap();
+    let local = pair.b.tenant(good).unwrap();
+    let caught_up = tokio::time::timeout(Duration::from_secs(5), async {
+        while local.engine().seq() < head {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await;
+    let blocked = pair.b.tenant(slow).unwrap().get("docs", "blocked").unwrap();
+    *gate.blocked_log_tenant.lock() = None;
+    gate.release.notify_one();
+    tokio::time::timeout(Duration::from_secs(5), cycle)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert!(
+        caught_up.is_ok(),
+        "healthy log pages waited for another tenant"
+    );
+    assert!(blocked.is_none(), "slow page was applied before release");
+    assert_eq!(
+        local.get("docs", "three").unwrap().unwrap()["payload"]
+            .as_str()
+            .unwrap()
+            .len(),
+        600 << 10
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -1406,6 +1609,63 @@ async fn one_corrupt_source_tenant_does_not_delete_its_replica_or_stop_healthy_t
         1
     );
     assert_eq!(pair.sa.status().unwrap().unavailable.len(), 1);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn unsealed_truncation_of_a_replicated_commit_blocks_writes_and_switchover() {
+    let pair = Pair::new().await;
+    let id = pair.a.create_tenant("truncated-source").unwrap().id;
+    let tenant = pair.a.tenant(id).unwrap();
+    tenant.create_collection("docs").unwrap();
+    tenant
+        .put("docs", json!({"_key":"a","value":1}), None)
+        .unwrap();
+    drop(tenant);
+    pair.catch_up(false).await;
+
+    let tenant = pair.a.tenant(id).unwrap();
+    let last = tenant
+        .put("docs", json!({"_key":"a","value":2}), None)
+        .unwrap();
+    drop(tenant);
+    pair.catch_up(false).await;
+    close(&pair.a, id).await;
+
+    let path = pair.a.root().join("tenants").join(id.to_string());
+    // Simulate an unclean shutdown with no watermark for the acknowledged tail.
+    std::fs::remove_file(path.join("WAL-SYNC")).unwrap();
+    let wal = std::fs::read_dir(path.join("wal"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "wal"))
+        .max_by_key(|path| {
+            let bytes = std::fs::read(path).unwrap();
+            u64::from_le_bytes(bytes[56..64].try_into().unwrap())
+        })
+        .unwrap();
+    let mut bytes = std::fs::read(&wal).unwrap();
+    bytes.pop().unwrap();
+    std::fs::write(&wal, &bytes).unwrap();
+
+    let error = pair
+        .a
+        .tenant(id)
+        .err()
+        .expect("opening would allow revision reuse");
+    assert_eq!(error.code, "CORRUPTION");
+    assert_eq!(pair.sa.switchover().await.err().unwrap().code, "CORRUPTION");
+    assert_eq!(pair.a.replication_state().role, Role::Primary);
+    assert_eq!(pair.b.replication_state().role, Role::Replica);
+    assert_eq!(std::fs::read(wal).unwrap(), bytes);
+    let replica = pair
+        .b
+        .tenant(id)
+        .unwrap()
+        .get("docs", "a")
+        .unwrap()
+        .unwrap();
+    assert_eq!(replica["_rev"], last.rev);
+    assert_eq!(replica["value"], 2);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

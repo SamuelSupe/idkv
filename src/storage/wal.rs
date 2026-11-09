@@ -18,7 +18,6 @@ use std::{
 use uuid::Uuid;
 
 static CORRUPT_RECOVERIES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-static TORN_TAIL_RECOVERIES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 pub(crate) fn recovery_metrics() -> [(&'static str, u64); 2] {
     use std::sync::atomic::Ordering;
@@ -27,10 +26,7 @@ pub(crate) fn recovery_metrics() -> [(&'static str, u64); 2] {
             "wal_corrupt_recoveries_total",
             CORRUPT_RECOVERIES.load(Ordering::Relaxed),
         ),
-        (
-            "wal_torn_tail_recoveries_total",
-            TORN_TAIL_RECOVERIES.load(Ordering::Relaxed),
-        ),
+        ("wal_torn_tail_recoveries_total", 0),
     ]
 }
 
@@ -63,47 +59,6 @@ fn preserve_wal(dir: &Path, info: &WalInfo) -> Result<std::path::PathBuf> {
     Ok(evidence)
 }
 
-fn preserve_torn_tail(
-    dir: &Path,
-    info: &WalInfo,
-    file: &mut File,
-    offset: u64,
-    length: u64,
-) -> Result<()> {
-    // Only the discarded suffix is evidence for a length-truncated append. Keep
-    // one bounded entry per tenant rather than another copy of every valid WAL.
-    use std::os::unix::fs::OpenOptionsExt;
-    let temp = dir.join("TORN-TAIL.tmp");
-    match fs::symlink_metadata(&temp) {
-        Ok(_) => reject_symlink(&temp)?,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => return Err(error.into()),
-    }
-    let mut output = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .mode(0o600)
-        .open(&temp)?;
-    writeln!(
-        output,
-        "{}",
-        serde_json::json!({"wal": info.id, "offset": offset, "length": length})
-    )?;
-    file.seek(SeekFrom::Start(offset))?;
-    let mut buffer = [0; 8192];
-    let mut remaining = length - offset;
-    while remaining != 0 {
-        let size = remaining.min(buffer.len() as u64) as usize;
-        file.read_exact(&mut buffer[..size])?;
-        output.write_all(&buffer[..size])?;
-        remaining -= size as u64;
-    }
-    output.sync_all()?;
-    fs::rename(temp, dir.join("TORN-TAIL"))?;
-    sync_dir(dir)
-}
-
 fn corrupt_wal(dir: &Path, info: &WalInfo, offset: u64, reason: &str) -> Error {
     CORRUPT_RECOVERIES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let evidence = match preserve_wal(dir, info) {
@@ -115,7 +70,7 @@ fn corrupt_wal(dir: &Path, info: &WalInfo, offset: u64, reason: &str) -> Error {
         info.id
     );
     Error::corrupt(format!(
-        "{reason} at byte {offset}; original WAL retained; restore or rebuild this tenant"
+        "{reason} at byte {offset}; original WAL retained; restore, rebuild, or repair this tenant offline"
     ))
 }
 
@@ -162,7 +117,6 @@ impl Wal {
         dir: &Path,
         info: &WalInfo,
         tenant: &crate::TenantInfo,
-        tail: bool,
         synced_len: Option<u64>,
         budget: &crate::resources::Budget,
         mut apply: impl FnMut(u64, Vec<Record>) -> Result<()>,
@@ -188,15 +142,10 @@ impl Wal {
         let fully_synced = synced_len == Some(length);
         let mut offset = HEADER as u64;
         while offset < length {
-            // The clean-close watermark does not identify all acknowledged
-            // commits. Only incomplete frames are eligible for tail recovery;
-            // checksum failures can be corruption of acknowledged data.
-            let unsealed_tail = tail && offset >= synced_len.unwrap_or(HEADER as u64);
+            // The clean-close watermark cannot prove an incomplete frame was
+            // unacknowledged. Only explicit repair may discard it and fork history.
             if length - offset < 24 {
-                if unsealed_tail {
-                    break;
-                }
-                return Err(Error::corrupt("truncated WAL batch header"));
+                return Err(corrupt_wal(dir, info, offset, "truncated WAL batch header"));
             }
             let mut frame = [0; 24];
             file.read_exact(&mut frame)?;
@@ -212,10 +161,12 @@ impl Wal {
                 return Err(Error::corrupt("WAL batch bounds"));
             }
             if length - offset - 24 < len as u64 {
-                if unsealed_tail {
-                    break;
-                }
-                return Err(Error::corrupt("truncated WAL batch payload"));
+                return Err(corrupt_wal(
+                    dir,
+                    info,
+                    offset,
+                    "truncated WAL batch payload",
+                ));
             }
             let _payload_memory = budget.reserve(len)?;
             let mut payload = vec![0; len];
@@ -235,20 +186,12 @@ impl Wal {
             }
             offset += 24 + len as u64;
         }
-        if offset < length {
-            preserve_torn_tail(dir, info, &mut file, offset, length)?;
-            eprintln!(
-                "ERROR incomplete WAL tail: {} offset {offset}, suffix bytes {}; saved in wal/TORN-TAIL",
-                info.id,
-                length - offset,
-            );
-        }
         let temp = dir.join(format!("{}.recover", info.id));
         if temp.exists() {
             reject_symlink(&temp)?;
             fs::remove_file(&temp)?;
         }
-        if synced_len == Some(length) && offset == length {
+        if fully_synced {
             return Ok(Self {
                 info: info.clone(),
                 file: Arc::new(file),
@@ -298,9 +241,6 @@ impl Wal {
         }
         let recovery_read_only = match rewritten {
             Ok(output) => {
-                if offset < length {
-                    TORN_TAIL_RECOVERIES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                }
                 file = output;
                 false
             }
@@ -581,7 +521,7 @@ mod tests {
     use super::*;
     use crate::resources::{Budget, Counter};
     #[test]
-    fn review0732_recovery_never_discards_checksum_corruption() {
+    fn recovery_never_discards_damaged_frames() {
         let info = crate::TenantInfo {
             id: Uuid::new_v4(),
             generation: Uuid::new_v4(),
@@ -634,54 +574,31 @@ mod tests {
             if !damage.starts_with("short") {
                 broken.extend_from_slice(&frames[2]);
             }
-            for tail in [false, true] {
-                for synced_len in [
-                    None,
-                    Some(prefix_len),
-                    Some(prefix_len + frames[1].len() as u64),
-                ] {
-                    let dir = tempfile::tempdir().unwrap();
-                    let wal = Wal::create(dir.path(), info.id, info.generation, 1).unwrap();
-                    let mut file = wal.file.as_ref();
-                    file.write_all(&frames[0]).unwrap();
-                    file.write_all(&broken).unwrap();
-                    wal.file.sync_all().unwrap();
-                    let wal_info = wal.info.clone();
-                    drop(wal);
-                    let path = dir.path().join(format!("{}.wal", wal_info.id));
-                    let original = fs::read(&path).unwrap();
-                    let mut applied = Vec::new();
-                    let result = Wal::recover(
-                        dir.path(),
-                        &wal_info,
-                        &info,
-                        tail,
-                        synced_len,
-                        &budget,
-                        |seq, records| {
-                            applied.push((seq, records[0].value.as_ref().unwrap()[0]));
-                            Ok(())
-                        },
-                    );
-                    let recoverable = damage.starts_with("short")
-                        && tail
-                        && synced_len.is_none_or(|length| length <= prefix_len);
-                    if recoverable {
-                        let recovered =
-                            result.unwrap_or_else(|e| panic!("{damage}, {synced_len:?}: {e}"));
-                        assert_eq!(applied, [(1, 1)]);
-                        assert_eq!(recovered.len, prefix_len);
-                        assert!(!recovered.recovery_read_only);
-                        assert_eq!(fs::read(&path).unwrap(), original[..prefix_len as usize]);
-                    } else {
-                        assert_eq!(
-                            result.err().unwrap().code,
-                            "CORRUPTION",
-                            "{damage}, {tail}, {synced_len:?}"
-                        );
-                        assert_eq!(fs::read(&path).unwrap(), original);
-                    }
-                }
+            for synced_len in [
+                None,
+                Some(prefix_len),
+                Some(prefix_len + frames[1].len() as u64),
+            ] {
+                let dir = tempfile::tempdir().unwrap();
+                let wal = Wal::create(dir.path(), info.id, info.generation, 1).unwrap();
+                let mut file = wal.file.as_ref();
+                file.write_all(&frames[0]).unwrap();
+                file.write_all(&broken).unwrap();
+                wal.file.sync_all().unwrap();
+                let wal_info = wal.info.clone();
+                drop(wal);
+                let path = dir.path().join(format!("{}.wal", wal_info.id));
+                let original = fs::read(&path).unwrap();
+                let result =
+                    Wal::recover(dir.path(), &wal_info, &info, synced_len, &budget, |_, _| {
+                        panic!("damaged WAL must not replay records")
+                    });
+                assert_eq!(
+                    result.err().unwrap().code,
+                    "CORRUPTION",
+                    "{damage}, {synced_len:?}"
+                );
+                assert_eq!(fs::read(&path).unwrap(), original);
             }
         }
     }

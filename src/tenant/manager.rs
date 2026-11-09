@@ -50,6 +50,7 @@ struct Inner {
     lifecycle_errors: Mutex<HashMap<Uuid, String>>,
     slots: Mutex<HashMap<Uuid, Arc<Mutex<Slot>>>>,
     memory: Arc<Counter>,
+    replication_send_memory: Arc<Counter>,
     io: Arc<IoScheduler>,
     node: Arc<crate::replication::Node>,
 }
@@ -204,6 +205,10 @@ impl Store {
             // and role publication. Only configure_replication may complete it.
             node.state.write().role = crate::replication::Role::Fenced;
         }
+        let memory = Counter::with_headroom(
+            options.global_memory_bytes,
+            (options.max_document_bytes + options.block_bytes) * 4 + (2 << 20),
+        );
         let inner = Arc::new(Inner {
             node,
             root,
@@ -212,10 +217,8 @@ impl Store {
             registry: RwLock::new(registry),
             lifecycle_errors: Mutex::new(lifecycle_errors),
             slots: Mutex::new(HashMap::new()),
-            memory: Counter::with_headroom(
-                options.global_memory_bytes,
-                (options.max_document_bytes + options.block_bytes) * 4 + (2 << 20),
-            ),
+            replication_send_memory: Counter::new(memory.foreground_limit() / 4),
+            memory,
             io: IoScheduler::new(options.io_workers),
         });
         let stop = Arc::new(AtomicBool::new(false));
@@ -310,6 +313,9 @@ impl Store {
     }
     pub(crate) fn foreground_memory_limit(&self) -> usize {
         self.owner.inner.memory.foreground_limit()
+    }
+    pub(crate) fn replication_send_memory(&self) -> &Arc<Counter> {
+        &self.owner.inner.replication_send_memory
     }
     pub(crate) fn reserve_http(&self, bytes: usize) -> Result<crate::resources::Reservation> {
         Budget {

@@ -3,6 +3,7 @@ use crate::replication::{
     MAX_LOG_PAGE_FRAMES, MAX_WIRE_BYTES,
     wire::{LOG_MEDIA_TYPE, LogExport, RawFrame, log_header},
 };
+use crate::resources::{Counter, Reservation};
 use axum::{
     body::{Body, Bytes, to_bytes},
     http::header::{ACCEPT, CONTENT_TYPE, VARY},
@@ -99,15 +100,16 @@ pub(super) async fn dispatch(
     match route.as_str() {
         "/v1/replication/switchover" => {
             decode::<Empty>(body)?;
-            response(&state.store, service.switchover().await?)
+            response(&state.store, service.switchover().await?, None)
         }
         "/v1/replication/promote" => response(
             &state.store,
             service.promote(decode::<Promote>(body)?.fence).await?,
+            None,
         ),
         "/v1/replication/follow" => {
             decode::<Empty>(body)?;
-            response(&state.store, service.follow().await?)
+            response(&state.store, service.follow().await?, None)
         }
         "/v1/replication/force-promote" => {
             let b: Force = decode(body)?;
@@ -116,6 +118,7 @@ pub(super) async fn dispatch(
                 service
                     .force_promote(b.source, b.old_primary_fenced, b.accept_data_loss)
                     .await?,
+                None,
             )
         }
         _ => tokio::task::spawn_blocking(move || -> Result<Response> {
@@ -124,13 +127,13 @@ pub(super) async fn dispatch(
             let _permit = permit;
             let _input_memory = input_memory;
             match route.as_str() {
-                "/v1/replication/status" => response(&state.store, service.status()?),
+                "/v1/replication/status" => response(&state.store, service.status()?, None),
                 "/v1/replication/log" => {
                     let export = service.export_log_page(&decode(body)?, binary_log)?;
                     let mut response = if binary_log {
-                        binary_log_response(export)?
+                        binary_log_response(&state.store, export)?
                     } else {
-                        response(&state.store, export.page)?
+                        response(&state.store, export.page, Some("REPLICA_SNAPSHOT_REQUIRED"))?
                     };
                     response
                         .headers_mut()
@@ -143,6 +146,7 @@ pub(super) async fn dispatch(
                     response(
                         &state.store,
                         service.snapshot(b.cluster, b.epoch, b.tenant)?,
+                        None,
                     )
                 }
                 "/v1/replication/snapshot/chunk" => {
@@ -150,15 +154,17 @@ pub(super) async fn dispatch(
                     response(
                         &state.store,
                         json!({"data":service.snapshot_chunk(b.id,b.file,b.offset)?}),
+                        Some("RESOURCE_EXHAUSTED"),
                     )
                 }
                 "/v1/replication/snapshot/release" => {
                     service.release_snapshot(decode::<Id>(body)?.id)?;
-                    response(&state.store, json!({"ok":true}))
+                    response(&state.store, json!({"ok":true}), None)
                 }
                 "/v1/replication/fence" => response(
                     &state.store,
                     service.fence(decode::<FenceRequest>(body)?.target)?,
+                    None,
                 ),
                 _ => Err(Error::missing("replication route")),
             }
@@ -247,7 +253,7 @@ fn accept_quality(parameters: &str) -> Option<u16> {
     }
 }
 
-fn binary_log_response(mut export: LogExport) -> Result<Response> {
+fn binary_log_response(store: &Store, mut export: LogExport) -> Result<Response> {
     let header = log_header(&export.page);
     let remaining = header.len()
         + export
@@ -258,13 +264,26 @@ fn binary_log_response(mut export: LogExport) -> Result<Response> {
     if remaining > MAX_WIRE_BYTES {
         return Err(Error::limit("replication response size"));
     }
-    // The tenant's work is complete. Keep the existing global reservation
-    // with the allocation through socket backpressure, without reserving twice.
+    let send_budget = store.replication_send_memory();
+    let charge = header.len()
+        + export
+            .raw
+            .iter()
+            .map(|frame| frame.memory.size())
+            .sum::<usize>();
+    check_send_size(send_budget, charge, "REPLICA_SNAPSHOT_REQUIRED")?;
+    let mut header_memory = store.reserve_http(header.len())?;
+    charge_send(send_budget, &mut header_memory)?;
+    // Move the tenant charge to the shared send budget. The global charge
+    // stays with the original allocation until Hyper releases the frame.
     for frame in &mut export.raw {
-        frame.memory.release_tenant();
+        charge_send(send_budget, &mut frame.memory)?;
     }
     let body = BinaryLogBody {
-        header: Some(Bytes::copy_from_slice(&header)),
+        header: Some(Bytes::from_owner(ResponseBytes {
+            bytes: header.to_vec(),
+            _memory: vec![header_memory],
+        })),
         frames: export.raw.into_iter(),
         remaining,
     };
@@ -305,16 +324,44 @@ impl hyper::body::Body for BinaryLogBody {
     }
 }
 
-fn response<T: serde::Serialize>(store: &Store, result: T) -> Result<Response> {
+fn check_send_size(budget: &Counter, size: usize, oversized: &str) -> Result<()> {
+    if size > budget.limit() {
+        return Err(Error::new(
+            oversized,
+            "response exceeds replication send memory limit",
+        ));
+    }
+    Ok(())
+}
+
+fn charge_send(budget: &Arc<Counter>, memory: &mut Reservation) -> Result<()> {
+    if !memory.transfer_tenant(budget) {
+        return Err(Error::limit("replication send memory budget exhausted"));
+    }
+    Ok(())
+}
+
+fn response<T: serde::Serialize>(
+    store: &Store,
+    result: T,
+    oversized: Option<&str>,
+) -> Result<Response> {
     let size = crate::json::encoded_len(&result)?;
     if size > MAX_WIRE_BYTES {
         return Err(Error::limit("replication response size"));
+    }
+    let send_budget = store.replication_send_memory();
+    if let Some(code) = oversized {
+        check_send_size(send_budget, size, code)?;
     }
     let mut memory = store.reserve_http(size.saturating_mul(3) + 4096)?;
     let mut bytes = Vec::with_capacity(size);
     serde_json::to_writer(&mut bytes, &result)?;
     drop(result);
     memory.shrink(bytes.capacity());
+    if oversized.is_some() {
+        charge_send(send_budget, &mut memory)?;
+    }
     let body = axum::body::Body::from(axum::body::Bytes::from_owner(ResponseBytes {
         bytes,
         _memory: vec![memory],

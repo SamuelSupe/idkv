@@ -263,7 +263,7 @@ impl Budget {
         }
         Ok(Reservation {
             global: self.global.clone(),
-            tenant: Some(self.tenant.clone()),
+            tenant: self.tenant.clone(),
             size,
         })
     }
@@ -271,7 +271,7 @@ impl Budget {
 #[derive(Debug)]
 pub struct Reservation {
     global: Arc<Counter>,
-    tenant: Option<Arc<Counter>>,
+    tenant: Arc<Counter>,
     size: usize,
 }
 impl Reservation {
@@ -282,17 +282,18 @@ impl Reservation {
         if size < self.size {
             let released = self.size - size;
             self.global.give(released);
-            if let Some(tenant) = &self.tenant {
-                tenant.give(released);
-            }
+            self.tenant.give(released);
             self.size = size;
         }
     }
 
-    pub(crate) fn release_tenant(&mut self) {
-        if let Some(tenant) = self.tenant.take() {
-            tenant.give(self.size);
+    pub(crate) fn transfer_tenant(&mut self, next: &Arc<Counter>) -> bool {
+        if !next.take(self.size) {
+            return false;
         }
+        self.tenant.give(self.size);
+        self.tenant = next.clone();
+        true
     }
 }
 impl Drop for Reservation {

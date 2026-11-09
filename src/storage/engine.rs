@@ -367,12 +367,11 @@ impl Engine {
         let mut active = None;
         let synced = recovery::SyncedWals::load(&path, &info)?;
         let mut recovery_read_only = false;
-        for (i, wal_info) in manifest.wals.iter().enumerate() {
+        for wal_info in &manifest.wals {
             let wal = Wal::recover(
                 &path.join("wal"),
                 wal_info,
                 &info,
-                i + 1 == manifest.wals.len(),
                 synced.as_ref().and_then(|mark| mark.length(wal_info.id)),
                 &budget,
                 |seq, records| {

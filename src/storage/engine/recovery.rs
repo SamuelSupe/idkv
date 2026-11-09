@@ -49,17 +49,9 @@ impl Engine {
         }
         file.set_len(offset)?;
         file.sync_all()?;
-        // A non-tail replay rejects a partial frame: never silently round the
+        // Validation rejects a partial frame: never silently round the
         // operator's chosen boundary down. The serving file is untouched here.
-        Wal::recover(
-            &path.join("wal"),
-            tail,
-            info,
-            false,
-            None,
-            budget,
-            |_, _| Ok(()),
-        )?;
+        Wal::recover(&path.join("wal"), tail, info, None, budget, |_, _| Ok(()))?;
         match fs::remove_file(path.join("WAL-SYNC")) {
             Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(error.into()),
             _ => {}
