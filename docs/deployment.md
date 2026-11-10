@@ -4,10 +4,10 @@ This guide covers the Linux ARM64 and x86_64 binary releases. For Rust embedding
 
 ## Install and verify
 
-Download from [v1.0.1](https://github.com/SamuelSupe/idkv/releases/tag/v1.0.1). Archives use static musl linking and include:
+Download from [v1.0.2](https://github.com/SamuelSupe/idkv/releases/tag/v1.0.2). Archives use static musl linking and include:
 
 ```text
-idkv-v1.0.1-TARGET/
+idkv-v1.0.2-TARGET/
   bin/tenant-kv
   bin/tenant-kv-restore
   bin/tenant-kv-repair
@@ -25,7 +25,7 @@ idkv-v1.0.1-TARGET/
 Choose aarch64-unknown-linux-musl for ARM64 or x86_64-unknown-linux-musl for amd64. These are Linux binaries, not macOS executables. Inspect BUILD-INFO.json for the exact source commit and target.
 
 ```sh
-VERSION=1.0.1
+VERSION=1.0.2
 case "$(uname -m)" in
   aarch64|arm64) TARGET=aarch64-unknown-linux-musl ;;
   x86_64|amd64) TARGET=x86_64-unknown-linux-musl ;;
@@ -134,6 +134,8 @@ On SIGTERM/SIGINT, readiness withdraws for two seconds before admission drains a
 
 Local backups use POST T/backup and DELETE T/backup/{backup}. For remote fs/S3 backups add --backup-config, using [fs](../examples/backup-fs.json) or [S3](../examples/backup-s3.json). Edit storage paths, credentials, staging and byte limits first. For the supplied systemd unit, choose a writable path under /var/lib/idkv or explicitly allow the destination.
 
+If the configured remote backup manager fails to start, data service can still become ready. Remote backup routes return HTTP 503 and `tkv_backup_startup_degraded` reports the failure. Repair the backup state or configuration and restart.
+
 Remote submissions return 202 jobs; poll until completed. Failure is not permission to blindly repeat a restore: publication and cleanup have distinct outcomes. Test restores into a separate root.
 
 ```sh
@@ -141,7 +143,7 @@ Remote submissions return 202 jobs; poll until completed. Failure is not permiss
 ./bin/tenant-kv-restore NEW_ROOT BACKUP_CONFIG TENANT_UUID BACKUP_UUID
 ```
 
-For corrupt WALs, preserve the original data and determine a valid repair offset before using:
+Recovery reports `CORRUPTION` and preserves the original WAL when a frame header or payload is incomplete. Rebuild a damaged replica from the authoritative primary. For offline repair, preserve the original data and determine a valid repair offset before using:
 
 ```sh
 ./bin/tenant-kv-repair ROOT TENANT_UUID WAL_UUID \
@@ -165,9 +167,11 @@ Monitor resource rejection/backpressure, tenant maintenance_error, disk headroom
 
 Quotas and task-level fairness do not provide a hard disk latency SLA. The [million-row qualification](subject-maintenance-scale-validation-20261109.md) still observed light-tenant p99 growth during GC.
 
-## Upgrade from 1.0.0
+## Upgrade from 1.0.0 or 1.0.1
 
-Verify a backup and install the 1.0.1 server and offline tools together on each node. Protocol 4 and registry 6 allow 1.0.0 and 1.0.1 peers to exchange JSON log pages during the rollout. Add `wal_group_window_us` only to nodes running 1.0.1, since 1.0.0 rejects unknown configuration fields. Check replication lag and tenant failures after each restart.
+Verify a backup and install the 1.0.2 server and offline tools together on each node. Registry 6, replication protocol 4 and WAL/SST format 1 support a rolling upgrade within 1.0. Peers on 1.0.0 exchange JSON log pages. The `wal_group_window_us` option is supported from 1.0.1. Check replication lag, tenant errors and backup readiness after each restart.
+
+An incomplete WAL frame now requires intervention before the affected tenant can participate in a planned switchover. Preserve the original files and follow the [replication runbook](replication.md) for replica rebuild or the [offline repair procedure](operations.md#离线-wal-前缀修复) for primary recovery.
 
 ## Upgrade to 1.0
 

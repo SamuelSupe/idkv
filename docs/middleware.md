@@ -2,7 +2,7 @@
 
 # 中间件集成契约（1.0）
 
-当前正式版为 1.0.1，注册表 6、复制协议 4、WAL/SST 1，使用 Rust 1.99.1。英文 [API](api.md)、[DSL](dsl.md)、[部署](deployment.md) 及 [1.0.1 发布说明](releases/v1.0.1.md) 为当前入口；下文的 v0.x 标记保留功能引入历史。
+当前正式版为 1.0.2，注册表 6、复制协议 4、WAL/SST 1，使用 Rust 1.99.1。英文 [API](api.md)、[DSL](dsl.md)、[部署](deployment.md) 及 [1.0.2 发布说明](releases/v1.0.2.md) 为当前入口；下文的 v0.x 标记保留功能引入历史。
 
 v0.10 增加[请求级读取控制和主从客户端读取 API](read-controls.md)。新读取客户端要求 X-TKV-Read-Controls: 1，旧节点会明确失败，先完成主从升级。存储及复制格式不变。
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.2 — 2026-11-10
+
+- Reject incomplete WAL frames during recovery and preserve the original WAL. Affected tenants cannot reuse sequence numbers or participate in a planned switchover.
+- Schedule replica catch-up across two tenants while keeping each tenant's log pages in order.
+- Keep the data service available when remote backup initialization fails. Report the degraded backup state in HTTP and Prometheus.
+- Limit replication log and checkpoint response buffers to one quarter of the foreground memory budget. Use checkpoint fallback for an oversized log page.
+
+See the [1.0.2 release notes](docs/releases/v1.0.2.md) for upgrade guidance and validation.
+
 ## 1.0.1 — 2026-11-09
 
 - Configurable WAL group commit with immediate sync after idle periods and early wakeup under contention. Set `wal_group_window_us` to `0` to skip deliberate collection time.

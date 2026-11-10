@@ -215,4 +215,4 @@ Prepared syntax retains no parameter values, results, principal, knowledge head,
 
 Document validation still uses native limits, including depth 32. Bound parameter bytes are limited by max_batch_bytes. Repeated large values are accounted before cloning and remain subject to max_query_bytes and tenant/global budgets.
 
-The syntax cache does not eliminate physical planning or cache results. Oversized syntax executes without cache admission; externally held prepared statements remain charged until their last reference is dropped. See [operations](operations.md) for all limits and [release notes](releases/v1.0.1.md) for compatibility.
+The syntax cache does not eliminate physical planning or cache results. Oversized syntax executes without cache admission; externally held prepared statements remain charged until their last reference is dropped. See [operations](operations.md) for all limits and [release notes](releases/v1.0.2.md) for compatibility.
